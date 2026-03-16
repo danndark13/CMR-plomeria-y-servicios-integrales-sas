@@ -54,8 +54,8 @@ export function CRMSidebar() {
   const criticalCount = MOCK_REMINDERS.filter(r => r.type === 'critical' || r.type === 'warning').length
 
   const mainItems = [
-    { title: "Dashboard", icon: LayoutDashboard, href: "/", badge: criticalCount > 0 ? criticalCount : null, badgeColor: "bg-destructive text-destructive-foreground" },
-    { title: "Servicios", icon: ClipboardList, href: "/requests" },
+    { title: "Panel Principal", icon: LayoutDashboard, href: "/", badge: criticalCount > 0 ? criticalCount : null, badgeColor: "bg-destructive text-destructive-foreground" },
+    { title: "Bitácora", icon: ClipboardList, href: "/requests" },
     { title: "Calendario", icon: CalendarDays, href: "/calendar", badge: todayCount > 0 ? todayCount : null, badgeColor: "bg-accent text-accent-foreground" },
     { title: "Empresas", icon: Briefcase, href: "/companies" },
     { title: "Técnicos", icon: Users, href: "/technicians" },
@@ -63,7 +63,7 @@ export function CRMSidebar() {
 
   const adminItems = [
     { title: "Contabilidad", icon: Calculator, href: "/accounting" },
-    { title: "Usuarios", icon: UserCog, href: "/admin/users" },
+    { title: "Gestión Usuarios", icon: UserCog, href: "/admin/users" },
     { title: "Productividad", icon: BarChart3, href: "/admin/reports" },
   ]
 
@@ -84,7 +84,7 @@ export function CRMSidebar() {
           </div>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden">
             <span className="text-lg font-bold tracking-tight text-primary">AsistenciaPro</span>
-            <span className="text-xs font-medium text-muted-foreground">CRM de Servicios</span>
+            <span className="text-[10px] font-bold text-muted-foreground uppercase">CRM Operativo</span>
           </div>
         </div>
       </SidebarHeader>
@@ -93,7 +93,7 @@ export function CRMSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel className="px-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <SidebarGroupLabel className="px-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
             Operación
           </SidebarGroupLabel>
           <SidebarMenu className="px-2 mt-2">
@@ -106,15 +106,15 @@ export function CRMSidebar() {
                   className={cn(
                     "relative flex items-center gap-3 rounded-md px-3 py-2 transition-all duration-200",
                     pathname === item.href 
-                      ? "bg-primary/10 text-primary font-semibold" 
+                      ? "bg-primary/10 text-primary font-bold shadow-sm" 
                       : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   )}
                 >
                   <Link href={item.href}>
-                    <item.icon className="h-5 w-5" />
-                    <span>{item.title}</span>
+                    <item.icon className="h-5 w-5 shrink-0" />
+                    <span className="truncate">{item.title}</span>
                     {item.badge && (
-                      <Badge className={cn("ml-auto h-5 w-5 flex items-center justify-center p-0 rounded-full animate-pulse", item.badgeColor)}>
+                      <Badge className={cn("ml-auto h-5 w-5 flex items-center justify-center p-0 rounded-full text-[10px] animate-pulse", item.badgeColor)}>
                         {item.badge}
                       </Badge>
                     )}
@@ -126,7 +126,7 @@ export function CRMSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel className="px-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <SidebarGroupLabel className="px-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
             Administración
           </SidebarGroupLabel>
           <SidebarMenu className="px-2 mt-2">
@@ -139,13 +139,13 @@ export function CRMSidebar() {
                   className={cn(
                     "relative flex items-center gap-3 rounded-md px-3 py-2 transition-all duration-200",
                     (pathname === item.href || (item.href === '/accounting' && pathname.startsWith('/accounting')))
-                      ? "bg-primary/10 text-primary font-semibold" 
+                      ? "bg-primary/10 text-primary font-bold shadow-sm" 
                       : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   )}
                 >
                   <Link href={item.href}>
-                    <item.icon className="h-5 w-5" />
-                    <span>{item.title}</span>
+                    <item.icon className="h-5 w-5 shrink-0" />
+                    <span className="truncate">{item.title}</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
