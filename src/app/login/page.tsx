@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { ShieldCheck, Lock, User, Loader2, Globe, Mail } from "lucide-react"
+import { ShieldCheck, Lock, User, Loader2, Globe, Mail, Smartphone, Download, Share, PlusSquare, ChevronRight } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { signInAnonymously } from "firebase/auth"
 import { doc, setDoc } from "firebase/firestore"
@@ -14,27 +14,18 @@ import { useFirebase } from "@/firebase"
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 
-// Componente del Logo RYS (SVG profesional)
 function RYSLogo({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 100 100" className={className} xmlns="http://www.w3.org/2000/svg">
-      {/* Techo de la casa */}
       <path d="M20 35 L50 15 L80 35" fill="none" stroke="#E53E3E" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M70 28 V20 H75 V31" fill="#E53E3E" />
-      
-      {/* Llama/Gota central */}
       <path d="M50 85 C30 85 25 65 25 50 C25 35 50 25 50 25 C50 25 75 35 75 50 C75 65 70 85 50 85Z" fill="url(#rys-gradient)" />
-      
-      {/* Grifo */}
       <path d="M45 45 H55 V52 L60 52 V56 H40 V52 L45 52 Z" fill="white" />
       <circle cx="48" cy="62" r="1.5" fill="white" />
       <circle cx="48" cy="68" r="1.5" fill="white" />
-      
-      {/* Llave inglesa curva */}
       <path d="M25 60 Q50 85 75 60 L80 65 Q50 95 20 65 Z" fill="black" />
       <circle cx="80" cy="58" r="4" fill="black" />
       <rect x="78" y="55" width="4" height="2" fill="white" />
-
       <defs>
         <linearGradient id="rys-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="#1F5BCC" />
@@ -53,6 +44,35 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [userId, setUserId] = useState("")
   const [password, setPassword] = useState("")
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
+  const [isIos, setIsIos] = useState(false)
+
+  useEffect(() => {
+    // Detect iOS
+    const isIosDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
+    setIsIos(isIosDevice)
+
+    // Listen for PWA install prompt
+    const handler = (e: any) => {
+      e.preventDefault()
+      setDeferredPrompt(e)
+    }
+    window.addEventListener('beforeinstallprompt', handler)
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) {
+      toast({
+        title: "App ya instalada",
+        description: "Si no la ves, búscala en tus aplicaciones.",
+      })
+      return
+    }
+    deferredPrompt.prompt()
+    const { outcome } = await deferredPrompt.userChoice
+    if (outcome === 'accepted') setDeferredPrompt(null)
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -108,15 +128,7 @@ export default function LoginPage() {
         cedula
       }
       
-      setDoc(profileRef, profileData, { merge: true })
-        .catch(async (error) => {
-          const permissionError = new FirestorePermissionError({
-            path: profileRef.path,
-            operation: "write",
-            requestResourceData: profileData,
-          })
-          errorEmitter.emit('permission-error', permissionError)
-        })
+      await setDoc(profileRef, profileData, { merge: true })
 
       toast({
         title: "Bienvenido a RYS SAS",
@@ -136,26 +148,60 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-background p-4 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/20 via-background to-background">
-      <div className="w-full max-w-md space-y-8 animate-in fade-in zoom-in duration-500">
+      <div className="w-full max-w-md space-y-6 animate-in fade-in zoom-in duration-500">
+        
+        {/* Sección de Instalación Fija */}
+        <Card className="bg-primary text-primary-foreground border-none shadow-xl overflow-hidden ring-4 ring-white/10">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-4">
+              <div className="h-12 w-12 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+                <Smartphone className="h-6 w-6" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-black uppercase tracking-tight">Instalar RYS Gestión</p>
+                <p className="text-[10px] font-medium opacity-90 leading-tight">
+                  {isIos 
+                    ? "Pulsa compartir y luego 'Añadir a pantalla de inicio'" 
+                    : "Accede rápido desde tu pantalla principal."}
+                </p>
+              </div>
+              {isIos ? (
+                <div className="flex items-center gap-2 px-3 py-2 bg-white/10 rounded-lg">
+                  <Share className="h-4 w-4" />
+                  <PlusSquare className="h-4 w-4" />
+                </div>
+              ) : (
+                <Button 
+                  size="sm" 
+                  variant="secondary" 
+                  className="font-bold shadow-sm h-9 px-4 rounded-xl text-primary"
+                  onClick={handleInstallClick}
+                >
+                  INSTALAR
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="text-center space-y-2">
-          <div className="inline-flex h-24 w-24 items-center justify-center rounded-3xl bg-white shadow-2xl mb-4 border-2 border-slate-100 p-2">
+          <div className="inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-white shadow-2xl mb-2 border-2 border-slate-100 p-2">
             <RYSLogo className="h-full w-full" />
           </div>
-          <h1 className="text-2xl font-black tracking-tighter text-primary leading-tight uppercase">
+          <h1 className="text-xl font-black tracking-tighter text-primary leading-tight uppercase">
             RYS Gestión
           </h1>
-          <p className="text-muted-foreground font-bold text-sm tracking-widest uppercase opacity-70">
-            Plomería y Servicios Integrales
+          <p className="text-muted-foreground font-bold text-[10px] tracking-[0.3em] uppercase opacity-60">
+            SISTEMA DE CONTROL OPERATIVO
           </p>
         </div>
 
         <Card className="border-t-8 border-t-primary shadow-2xl overflow-hidden">
           <CardHeader className="bg-slate-50/50 border-b">
-            <CardTitle className="text-xl font-bold uppercase tracking-tight">Acceso Corporativo</CardTitle>
-            <CardDescription>Gestión de servicios RYS SAS.</CardDescription>
+            <CardTitle className="text-lg font-bold uppercase tracking-tight">Acceso Corporativo</CardTitle>
           </CardHeader>
           <form onSubmit={handleLogin}>
-            <CardContent className="space-y-6 pt-6">
+            <CardContent className="space-y-5 pt-6">
               <div className="space-y-2">
                 <Label htmlFor="userId" className="text-[10px] uppercase font-black tracking-widest">ID de Usuario</Label>
                 <div className="relative">
@@ -187,11 +233,11 @@ export default function LoginPage() {
               </div>
             </CardContent>
             <CardFooter className="bg-slate-50/50 border-t p-6 flex flex-col gap-4">
-              <Button className="w-full gap-2 text-lg font-black h-14 shadow-lg hover:shadow-primary/20 transition-all" disabled={isLoading}>
+              <Button className="w-full gap-2 text-lg font-black h-14 shadow-lg" disabled={isLoading}>
                 {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : "ACCEDER AL PANEL"}
               </Button>
               
-              <div className="w-full space-y-2 pt-2">
+              <div className="w-full space-y-2 pt-2 border-t border-slate-200/50 mt-2">
                 <div className="flex items-center justify-center gap-2 text-[10px] font-black text-primary uppercase">
                   <Globe className="h-3 w-3" />
                   <a href="https://www.rysplomeria.com" target="_blank" rel="noopener noreferrer" className="hover:underline">www.rysplomeria.com</a>
@@ -205,12 +251,9 @@ export default function LoginPage() {
           </form>
         </Card>
         
-        <div className="text-center space-y-1">
-          <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest opacity-40">
-            © {new Date().getFullYear()} RYS SAS - Sistema de Control Operativo
-          </p>
-          <p className="text-[9px] font-bold text-muted-foreground uppercase opacity-30">
-            Soporte técnico: plomeriasas@gmail.com
+        <div className="text-center space-y-1 pb-4">
+          <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest opacity-30">
+            © {new Date().getFullYear()} RYS SAS - Soporte: plomeriasas@gmail.com
           </p>
         </div>
       </div>
