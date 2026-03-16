@@ -9,11 +9,11 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { UserPlus, Mail, Shield, MoreVertical, Key, Power, UserCog, Phone, Fingerprint, Loader2, Save, Search } from "lucide-react"
+import { UserPlus, Mail, Shield, MoreVertical, Key, Power, UserCog, Phone, Fingerprint, Loader2, Save, Search, CreditCard } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { toast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, doc, updateDoc, setDoc, query, orderBy } from "firebase/firestore"
+import { collection, doc, updateDoc, setDoc, query } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 
 export default function AdminUsersPage() {
@@ -23,10 +23,10 @@ export default function AdminUsersPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
 
-  // Fetch users from Firestore
+  // Fetch all users from Firestore
   const usersQuery = useMemoFirebase(() => {
     if (!db) return null
-    return query(collection(db, "user_profiles"), orderBy("username", "asc"))
+    return collection(db, "user_profiles")
   }, [db])
 
   const { data: users, isLoading } = useCollection(usersQuery)
@@ -34,8 +34,9 @@ export default function AdminUsersPage() {
   const filteredUsers = users?.filter(u => 
     u.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.lastName?.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+    u.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    u.cedula?.includes(searchTerm)
+  ).sort((a, b) => (a.username || "").localeCompare(b.username || ""))
 
   const handleSaveUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -50,6 +51,7 @@ export default function AdminUsersPage() {
       lastName: formData.get("lastName") as string || "",
       email: formData.get("email") as string || "",
       phoneNumber: formData.get("phoneNumber") as string || "",
+      cedula: formData.get("cedula") as string || "",
       roleId: formData.get("roleId") as string || "Servicio al Cliente",
       isActive: true,
     }
@@ -121,7 +123,7 @@ export default function AdminUsersPage() {
               <div className="relative w-full md:w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input 
-                  placeholder="Buscar por ID o Nombre..." 
+                  placeholder="Buscar por ID, Cédula o Nombre..." 
                   className="pl-9 h-9 text-xs"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -134,7 +136,7 @@ export default function AdminUsersPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/30">
-                    <TableHead className="w-[120px] font-black uppercase text-[10px] tracking-widest">ID Corporativo</TableHead>
+                    <TableHead className="w-[120px] font-black uppercase text-[10px] tracking-widest">ID / Cédula</TableHead>
                     <TableHead className="font-black uppercase text-[10px] tracking-widest">Colaborador / Contacto</TableHead>
                     <TableHead className="font-black uppercase text-[10px] tracking-widest">Rol Asignado</TableHead>
                     <TableHead className="font-black uppercase text-[10px] tracking-widest">Estado</TableHead>
@@ -158,9 +160,14 @@ export default function AdminUsersPage() {
                   ) : filteredUsers?.map((user) => (
                     <TableRow key={user.id} className="hover:bg-muted/20 group">
                       <TableCell>
-                        <Badge variant="outline" className="font-mono font-black text-primary text-xs bg-primary/5 py-1 px-2 border-primary/20">
-                          {user.username}
-                        </Badge>
+                        <div className="flex flex-col gap-1">
+                          <Badge variant="outline" className="font-mono font-black text-primary text-[10px] bg-primary/5 py-0.5 px-2 border-primary/20 w-fit">
+                            {user.username}
+                          </Badge>
+                          <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1">
+                            <CreditCard className="h-2.5 w-2.5" /> {user.cedula || '---'}
+                          </span>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
@@ -226,9 +233,15 @@ export default function AdminUsersPage() {
             </CardHeader>
             <CardContent className="pt-6">
               <form onSubmit={handleSaveUser} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="username" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">ID de Usuario (ADMINxx, SERxx, CONxx)</Label>
-                  <Input id="username" name="username" placeholder="Ej. SER05" defaultValue={editingUser?.username} required className="font-mono font-bold uppercase h-11" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="username" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">ID Usuario</Label>
+                    <Input id="username" name="username" placeholder="Ej. SER05" defaultValue={editingUser?.username} required className="font-mono font-bold uppercase" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="cedula" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Cédula</Label>
+                    <Input id="cedula" name="cedula" placeholder="1110564748" defaultValue={editingUser?.cedula} required />
+                  </div>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
@@ -243,7 +256,7 @@ export default function AdminUsersPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Correo Electrónico</Label>
+                  <Label htmlFor="email" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Correo Corporativo</Label>
                   <Input id="email" name="email" type="email" placeholder="daniel@rys.com" defaultValue={editingUser?.email} required />
                 </div>
 
@@ -269,10 +282,10 @@ export default function AdminUsersPage() {
 
                 <div className="flex gap-2 pt-4">
                   <Button type="submit" className="flex-1 font-black shadow-lg h-12" disabled={isProcessing}>
-                    {isProcessing ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Save className="h-5 w-5 mr-2" /> {editingUser ? "GUARDAR CAMBIOS" : "CONFIRMAR REGISTRO"}</>}
+                    {isProcessing ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Save className="h-5 w-5 mr-2" /> {editingUser ? "GUARDAR" : "VINCULAR"}</>}
                   </Button>
                   <Button type="button" variant="ghost" className="h-12 font-bold" onClick={() => { setIsCreating(false); setEditingUser(null); }} disabled={isProcessing}>
-                    CANCELAR
+                    X
                   </Button>
                 </div>
               </form>

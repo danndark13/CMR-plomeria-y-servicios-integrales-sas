@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { ShieldCheck, Lock, User, Loader2 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { signInAnonymously } from "firebase/auth"
-import { doc, getDoc, setDoc } from "firebase/firestore"
+import { doc, setDoc } from "firebase/firestore"
 import { useFirebase } from "@/firebase"
 
 export default function LoginPage() {
@@ -25,7 +25,6 @@ export default function LoginPage() {
     e.preventDefault()
     setIsLoading(true)
 
-    // Validación de contraseña corporativa RYS2025
     const isCorrectPassword = password === "RYS2025"
     const inputId = userId.toUpperCase().trim()
     const rolePrefix = inputId.substring(0, 3)
@@ -42,16 +41,17 @@ export default function LoginPage() {
     }
 
     try {
-      // 1. Iniciamos sesión en Firebase Auth (Anónimo para el prototipo)
+      // 1. Iniciar sesión anónima para obtener un UID único
       const userCredential = await signInAnonymously(auth)
       const user = userCredential.user
 
-      // 2. Determinamos el rol basado en el prefijo del ID ingresado
+      // 2. Determinar rol
       let roleId = "Servicio al Cliente"
       if (rolePrefix === "ADM") roleId = "Administrador"
       if (rolePrefix === "CON") roleId = "Contabilidad"
 
-      // 3. Sincronizamos el perfil de Daniel Céspedes con el rol actual
+      // 3. Crear o actualizar el perfil de Daniel para este ID específico
+      // Cada sesión anónima tendrá un UID diferente, permitiendo ver múltiples perfiles en Admin
       const profileRef = doc(firestore, "user_profiles", user.uid)
       
       await setDoc(profileRef, {
