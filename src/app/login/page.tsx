@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState } from "react"
@@ -14,6 +13,39 @@ import { doc, setDoc } from "firebase/firestore"
 import { useFirebase } from "@/firebase"
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
+
+// Componente del Logo RYS (SVG basado en la imagen del usuario)
+function RYSLogo({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 100 100" className={className} xmlns="http://www.w3.org/2000/svg">
+      {/* Techo de la casa */}
+      <path d="M20 35 L50 15 L80 35" fill="none" stroke="#E53E3E" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M70 28 V20 H75 V31" fill="#E53E3E" />
+      
+      {/* Llama/Gota central */}
+      <path d="M50 85 C30 85 25 65 25 50 C25 35 50 25 50 25 C50 25 75 35 75 50 C75 65 70 85 50 85Z" fill="url(#rys-gradient)" />
+      
+      {/* Grifo */}
+      <path d="M45 45 H55 V52 L60 52 V56 H40 V52 L45 52 Z" fill="white" />
+      <circle cx="48" cy="62" r="1.5" fill="white" />
+      <circle cx="48" cy="68" r="1.5" fill="white" />
+      
+      {/* Llave inglesa curva */}
+      <path d="M25 60 Q50 85 75 60 L80 65 Q50 95 20 65 Z" fill="black" />
+      <circle cx="80" cy="58" r="4" fill="black" />
+      <rect x="78" y="55" width="4" height="2" fill="white" />
+
+      <defs>
+        <linearGradient id="rys-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#1F5BCC" />
+          <stop offset="50%" stopColor="#1F5BCC" />
+          <stop offset="50%" stopColor="#F97316" />
+          <stop offset="100%" stopColor="#F97316" />
+        </linearGradient>
+      </defs>
+    </svg>
+  )
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -83,7 +115,7 @@ export default function LoginPage() {
             operation: "write",
             requestResourceData: profileData,
           })
-          errorEmitter.emit("permission-error", permissionError)
+          errorEmitter.emit('permission-error', permissionError)
         })
 
       toast({
@@ -106,21 +138,21 @@ export default function LoginPage() {
     <div className="min-h-screen w-full flex items-center justify-center bg-background p-4 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/20 via-background to-background">
       <div className="w-full max-w-md space-y-8 animate-in fade-in zoom-in duration-500">
         <div className="text-center space-y-2">
-          <div className="inline-flex h-20 w-20 items-center justify-center rounded-3xl bg-primary text-primary-foreground shadow-2xl mb-4 border-4 border-white">
-            <ShieldCheck className="h-12 w-12" />
+          <div className="inline-flex h-24 w-24 items-center justify-center rounded-3xl bg-white shadow-2xl mb-4 border-2 border-slate-100 p-2">
+            <RYSLogo className="h-full w-full" />
           </div>
           <h1 className="text-2xl font-black tracking-tighter text-primary leading-tight uppercase">
-            Plomería y Servicios Integrales RYS SAS
+            RYS Gestión
           </h1>
           <p className="text-muted-foreground font-bold text-sm tracking-widest uppercase opacity-70">
-            Portal de Gestión Profesional
+            Plomería y Servicios Integrales
           </p>
         </div>
 
         <Card className="border-t-8 border-t-primary shadow-2xl overflow-hidden">
           <CardHeader className="bg-slate-50/50 border-b">
             <CardTitle className="text-xl font-bold">Identificación Corporativa</CardTitle>
-            <CardDescription>Ingrese su ID corporativo para activar su perfil.</CardDescription>
+            <CardDescription>Ingrese sus credenciales de acceso.</CardDescription>
           </CardHeader>
           <form onSubmit={handleLogin}>
             <CardContent className="space-y-6 pt-6">
@@ -162,7 +194,7 @@ export default function LoginPage() {
           </form>
         </Card>
         <p className="text-center text-[10px] font-black text-muted-foreground uppercase tracking-widest opacity-40">
-          © {new Date().getFullYear()} AsistenciaPro RYS - Sistema de Control Operativo
+          © {new Date().getFullYear()} RYS SAS - Sistema de Control Operativo
         </p>
       </div>
     </div>
