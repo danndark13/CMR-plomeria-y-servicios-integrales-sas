@@ -71,9 +71,12 @@ export default function RequestsPage() {
   }, [db, user])
   const { data: firestoreRequests, isLoading: isRequestsLoading } = useCollection(requestsQuery)
 
-  // Combined requests (Firestore + Mocks for demo)
+  // Combined requests (Firestore + Mocks for demo) - Ensure uniqueness
   const allRequests = firestoreRequests 
-    ? [...firestoreRequests, ...MOCK_REQUESTS.filter(mr => !firestoreRequests.find(fr => fr.claimNumber === mr.claimNumber))]
+    ? [
+        ...firestoreRequests, 
+        ...MOCK_REQUESTS.filter(mr => !firestoreRequests.find(fr => fr.id === mr.id || fr.claimNumber === mr.claimNumber))
+      ]
     : MOCK_REQUESTS
 
   const filteredRequests = allRequests.filter(req => 

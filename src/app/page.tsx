@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
@@ -92,7 +91,10 @@ export default function DashboardPage() {
   }
 
   const allRequests = firestoreRequests 
-    ? [...firestoreRequests, ...MOCK_REQUESTS.filter(mr => !firestoreRequests.find(fr => fr.claimNumber === mr.claimNumber))]
+    ? [
+        ...firestoreRequests, 
+        ...MOCK_REQUESTS.filter(mr => !firestoreRequests.find(fr => fr.id === mr.id || fr.claimNumber === mr.claimNumber))
+      ]
     : MOCK_REQUESTS
 
   const allCompanies = (companies && companies.length > 0) ? companies : MOCK_COMPANIES
@@ -217,7 +219,7 @@ export default function DashboardPage() {
                 todayVisits.slice(0, 4).map((visit) => {
                   const tech = MOCK_TECHNICIANS.find(t => t.id === visit.technicianId)
                   return (
-                    <div key={visit.id} className="p-3 bg-white rounded-lg border border-accent/20 shadow-sm space-y-2 group hover:border-accent transition-colors">
+                    <div key={`${visit.id}-${visit.request.id}`} className="p-3 bg-white rounded-lg border border-accent/20 shadow-sm space-y-2 group hover:border-accent transition-colors">
                       <div className="flex justify-between items-start">
                         <span className="text-[10px] font-black text-primary bg-primary/10 px-2 py-0.5 rounded uppercase">{visit.request.claimNumber}</span>
                         <span className="text-xs font-mono font-black text-accent">

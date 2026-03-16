@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
@@ -8,7 +7,7 @@ import { MOCK_REQUESTS, MOCK_TECHNICIANS, MOCK_COMPANIES } from "@/lib/mock-data
 import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
-import { Clock, MapPin, User, Building2, ChevronRight, Loader2 } from "lucide-react"
+import { Clock, MapPin, User as UserIcon, Building2, ChevronRight, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase"
@@ -27,7 +26,10 @@ export default function CalendarPage() {
   const { data: firestoreRequests, isLoading } = useCollection(requestsQuery)
 
   const allRequests = firestoreRequests 
-    ? [...firestoreRequests, ...MOCK_REQUESTS.filter(mr => !firestoreRequests.find(fr => fr.claimNumber === mr.claimNumber))]
+    ? [
+        ...firestoreRequests, 
+        ...MOCK_REQUESTS.filter(mr => !firestoreRequests.find(fr => fr.id === mr.id || fr.claimNumber === mr.claimNumber))
+      ]
     : MOCK_REQUESTS
 
   const selectedDateStr = date?.toLocaleDateString() || ""
