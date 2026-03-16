@@ -21,7 +21,8 @@ import {
   FileText,
   ClipboardList,
   Phone,
-  User
+  User,
+  Wrench
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -29,7 +30,7 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu"
-import { MOCK_REQUESTS, MOCK_COMPANIES } from "@/lib/mock-data"
+import { MOCK_REQUESTS, MOCK_COMPANIES, MOCK_TECHNICIANS } from "@/lib/mock-data"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
 import Link from "next/link"
@@ -50,7 +51,7 @@ export default function RequestsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-primary">Solicitudes de Servicio</h1>
-          <p className="text-muted-foreground">Gestiona y haz seguimiento a todos los servicios en curso.</p>
+          <p className="text-muted-foreground">Historial y seguimiento de intervenciones técnicas.</p>
         </div>
         <Button className="gap-2 shadow-lg">
           <Plus className="h-4 w-4" /> Nueva Solicitud
@@ -63,7 +64,7 @@ export default function RequestsPage() {
             <div className="relative w-full md:w-96">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input 
-                placeholder="Buscar por Expediente, Asegurado, ID..." 
+                placeholder="Buscar Expediente, Asegurado o ID..." 
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -83,10 +84,10 @@ export default function RequestsPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead className="w-[120px]">Expediente / ID</TableHead>
-                <TableHead>Asegurado / Contacto</TableHead>
-                <TableHead>Servicio / Categoría</TableHead>
-                <TableHead>Empresa Solicitante</TableHead>
+                <TableHead className="w-[120px]">Expediente</TableHead>
+                <TableHead>Asegurado</TableHead>
+                <TableHead>Categoría / Técnicos</TableHead>
+                <TableHead>Compañía</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
@@ -102,20 +103,26 @@ export default function RequestsPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col">
-                      <div className="flex items-center gap-2">
-                        <User className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-sm font-semibold">{req.insuredName}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Phone className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">{req.phoneNumber}</span>
+                      <span className="text-sm font-semibold">{req.insuredName}</span>
+                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <Phone className="h-2.5 w-2.5" /> {req.phoneNumber}
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <CategoryIcon category={req.category} className="h-4 w-4 text-accent" />
-                      <span className="font-medium">{req.category}</span>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <CategoryIcon category={req.category} className="h-3 w-3 text-accent" />
+                        <span className="text-xs font-medium">{req.category}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Wrench className="h-2.5 w-2.5 text-muted-foreground" />
+                        <span className="text-[10px] text-muted-foreground">
+                          {req.interventions.length > 0 
+                            ? `${req.interventions.length} visitas`
+                            : "Sin asignar"}
+                        </span>
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -137,10 +144,10 @@ export default function RequestsPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem asChild>
                           <Link href={`/requests/${req.id}`} className="flex items-center gap-2">
-                            <FileText className="h-4 w-4" /> Ver Detalles
+                            <FileText className="h-4 w-4" /> Gestionar
                           </Link>
                         </DropdownMenuItem>
-                        <DropdownMenuItem>Asignar Técnico</DropdownMenuItem>
+                        <DropdownMenuItem>Añadir Visita</DropdownMenuItem>
                         <DropdownMenuItem className="text-destructive">Cancelar</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -153,7 +160,6 @@ export default function RequestsPage() {
             <div className="py-20 text-center">
               <ClipboardList className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
               <p className="text-lg font-medium text-muted-foreground">No se encontraron solicitudes</p>
-              <p className="text-sm text-muted-foreground">Prueba ajustando los filtros de búsqueda.</p>
             </div>
           )}
         </CardContent>

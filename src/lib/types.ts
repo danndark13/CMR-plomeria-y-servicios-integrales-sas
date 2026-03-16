@@ -9,6 +9,18 @@ export type ServiceCategory =
   | 'Instalación' 
   | 'Destaponamiento';
 
+export type InterventionType = 'Diagnóstico' | 'Reparación' | 'Seguimiento' | 'Finalización';
+
+export interface TechnicianIntervention {
+  id: string;
+  technicianId: string;
+  type: InterventionType;
+  date: string;
+  notes: string;
+  laborCost: number;     // Costo de mano de obra para este técnico
+  expenses: number;      // Gastos (materiales, transporte, etc.)
+}
+
 export interface AssistanceCompany {
   id: string;
   name: string;
@@ -28,17 +40,19 @@ export interface ServiceRequest {
   companyId: string;
   accountName: string;
   status: ServiceStatus;
-  technicianId?: string;
   
-  // Nuevos campos solicitados
-  insuredName: string;    // Nombre del asegurado
-  claimNumber: string;    // Expediente
-  address: string;        // Dirección
-  phoneNumber: string;    // Teléfono
+  // Información del Cliente
+  insuredName: string;
+  claimNumber: string;
+  address: string;
+  phoneNumber: string;
   
-  description: string;    // Descripción inicial
-  notes: string;          // Notas técnicas/bitácora
-  summary?: string;       // Resumen generado por IA
+  description: string;    // Descripción inicial del problema
+  
+  // Historial de intervenciones (soporta múltiples técnicos)
+  interventions: TechnicianIntervention[];
+  
+  summary?: string;       // Resumen consolidado IA
   report?: string;        // Reporte final formal
   
   createdAt: string;
