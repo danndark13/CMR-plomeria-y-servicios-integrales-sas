@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
@@ -6,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { User, Mail, Phone, Shield, Fingerprint, Save, Lock, Loader2 } from "lucide-react"
+import { User, Mail, Phone, Shield, Fingerprint, Save, Lock, Loader2, Info, Globe, AlertCircle } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
 import { doc, updateDoc } from 'firebase/firestore'
@@ -55,7 +54,6 @@ export default function ProfilePage() {
       phoneNumber: formData.phoneNumber,
     }
 
-    // CRITICAL: No await here.
     updateDoc(profileRef, updateData)
       .then(() => {
         toast({
@@ -75,10 +73,18 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
-      <div>
-        <h1 className="text-3xl font-black tracking-tight text-primary uppercase">Mi Perfil</h1>
-        <p className="text-muted-foreground font-medium">Gestiona tu información personal de contacto.</p>
+    <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-black tracking-tight text-primary uppercase">Mi Perfil</h1>
+          <p className="text-muted-foreground font-medium">Gestiona tu información personal de contacto.</p>
+        </div>
+        <div className="hidden md:flex flex-col items-end">
+           <a href="https://www.rysplomeria.com" target="_blank" rel="noopener noreferrer" className="text-xs font-black text-primary uppercase flex items-center gap-2 hover:underline">
+             <Globe className="h-4 w-4" /> Visitar sitio web
+           </a>
+           <span className="text-[10px] font-bold text-muted-foreground">gerente@rysplomeria.com</span>
+        </div>
       </div>
 
       <div className="grid gap-6">
@@ -102,7 +108,6 @@ export default function ProfilePage() {
                   <div className="flex items-center gap-2 p-3 bg-white rounded-lg border text-sm font-mono font-bold text-slate-500 shadow-sm">
                     {profile?.username || 'CARGANDO...'}
                   </div>
-                  <p className="text-[9px] text-muted-foreground italic leading-tight">El ID de acceso es gestionado por el Administrador.</p>
                 </div>
                 <div className="space-y-2">
                   <Label className="text-[10px] text-muted-foreground uppercase font-black tracking-widest flex items-center gap-1">
@@ -137,51 +142,65 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Correo Electrónico Corporativo</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input 
-                    id="email" 
-                    type="email" 
-                    value={formData.email}
-                    onChange={(e) => setFormData({...formData, email: e.target.value})}
-                    className="pl-10" 
-                    required 
-                  />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Correo Electrónico</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      id="email" 
+                      type="email" 
+                      value={formData.email}
+                      onChange={(e) => setFormData({...formData, email: e.target.value})}
+                      className="pl-10" 
+                      required 
+                    />
+                  </div>
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phone">Teléfono de Contacto</Label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input 
-                    id="phone" 
-                    value={formData.phoneNumber}
-                    onChange={(e) => setFormData({...formData, phoneNumber: e.target.value})}
-                    className="pl-10" 
-                    required 
-                  />
-                </div>
-              </div>
-
-              <div className="p-4 bg-orange-50 rounded-lg border border-orange-200 flex items-start gap-3">
-                <Lock className="h-5 w-5 text-orange-600 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="text-xs font-bold text-orange-800 uppercase">Seguridad y Credenciales</p>
-                  <p className="text-[10px] text-orange-700 leading-tight">
-                    Por políticas de seguridad de <strong>RYS SAS</strong>, el cambio de contraseña y nombre de usuario debe ser solicitado formalmente al Administrador del sistema.
-                  </p>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Teléfono Móvil</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      id="phone" 
+                      value={formData.phoneNumber}
+                      onChange={(e) => setFormData({...formData, phoneNumber: e.target.value})}
+                      className="pl-10" 
+                      required 
+                    />
+                  </div>
                 </div>
               </div>
             </CardContent>
             <CardFooter className="bg-slate-50/50 border-t p-6">
               <Button type="submit" className="gap-2 w-full md:w-auto font-bold shadow-lg h-11" disabled={isProcessing}>
-                {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="h-5 w-5" /> Actualizar Perfil</>}
+                {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="h-5 w-5" /> Guardar Cambios</>}
               </Button>
             </CardFooter>
           </form>
+        </Card>
+
+        <Card className="bg-slate-900 text-white border-none shadow-xl">
+          <CardHeader>
+            <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-primary" /> Soporte Técnico RYS SAS
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+             <div className="p-4 bg-white/5 rounded-xl border border-white/10 flex flex-col md:flex-row justify-between gap-4">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black uppercase text-slate-400">Reporte de fallos en app</p>
+                  <p className="text-sm font-bold text-primary">plomeriasas@gmail.com</p>
+                </div>
+                <div className="space-y-1 md:text-right">
+                  <p className="text-[10px] font-black uppercase text-slate-400">Contacto Gerencia</p>
+                  <p className="text-sm font-bold">gerente@rysplomeria.com</p>
+                </div>
+             </div>
+             <p className="text-[10px] text-slate-400 leading-relaxed italic text-center">
+               Para cambios de contraseña, roles o usuarios bloqueados, comuníquese directamente con los correos oficiales arriba mencionados.
+             </p>
+          </CardContent>
         </Card>
       </div>
     </div>

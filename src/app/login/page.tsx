@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { ShieldCheck, Lock, User, Loader2 } from "lucide-react"
+import { ShieldCheck, Lock, User, Loader2, Globe, Mail } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { signInAnonymously } from "firebase/auth"
 import { doc, setDoc } from "firebase/firestore"
@@ -14,7 +14,7 @@ import { useFirebase } from "@/firebase"
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 
-// Componente del Logo RYS (SVG basado en la imagen del usuario)
+// Componente del Logo RYS (SVG profesional)
 function RYSLogo({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 100 100" className={className} xmlns="http://www.w3.org/2000/svg">
@@ -151,8 +151,8 @@ export default function LoginPage() {
 
         <Card className="border-t-8 border-t-primary shadow-2xl overflow-hidden">
           <CardHeader className="bg-slate-50/50 border-b">
-            <CardTitle className="text-xl font-bold">Identificación Corporativa</CardTitle>
-            <CardDescription>Ingrese sus credenciales de acceso.</CardDescription>
+            <CardTitle className="text-xl font-bold uppercase tracking-tight">Acceso Corporativo</CardTitle>
+            <CardDescription>Gestión de servicios RYS SAS.</CardDescription>
           </CardHeader>
           <form onSubmit={handleLogin}>
             <CardContent className="space-y-6 pt-6">
@@ -162,7 +162,7 @@ export default function LoginPage() {
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input 
                     id="userId" 
-                    placeholder="Ej. ADMIN01" 
+                    placeholder="EJ. ADMIN01" 
                     className="pl-10 h-12 font-mono font-bold uppercase"
                     value={userId}
                     onChange={(e) => setUserId(e.target.value)}
@@ -186,16 +186,33 @@ export default function LoginPage() {
                 </div>
               </div>
             </CardContent>
-            <CardFooter className="bg-slate-50/50 border-t p-6">
+            <CardFooter className="bg-slate-50/50 border-t p-6 flex flex-col gap-4">
               <Button className="w-full gap-2 text-lg font-black h-14 shadow-lg hover:shadow-primary/20 transition-all" disabled={isLoading}>
                 {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : "ACCEDER AL PANEL"}
               </Button>
+              
+              <div className="w-full space-y-2 pt-2">
+                <div className="flex items-center justify-center gap-2 text-[10px] font-black text-primary uppercase">
+                  <Globe className="h-3 w-3" />
+                  <a href="https://www.rysplomeria.com" target="_blank" rel="noopener noreferrer" className="hover:underline">www.rysplomeria.com</a>
+                </div>
+                <div className="flex items-center justify-center gap-2 text-[10px] font-bold text-muted-foreground uppercase">
+                  <Mail className="h-3 w-3" />
+                  <span>gerente@rysplomeria.com</span>
+                </div>
+              </div>
             </CardFooter>
           </form>
         </Card>
-        <p className="text-center text-[10px] font-black text-muted-foreground uppercase tracking-widest opacity-40">
-          © {new Date().getFullYear()} RYS SAS - Sistema de Control Operativo
-        </p>
+        
+        <div className="text-center space-y-1">
+          <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest opacity-40">
+            © {new Date().getFullYear()} RYS SAS - Sistema de Control Operativo
+          </p>
+          <p className="text-[9px] font-bold text-muted-foreground uppercase opacity-30">
+            Soporte técnico: plomeriasas@gmail.com
+          </p>
+        </div>
       </div>
     </div>
   )

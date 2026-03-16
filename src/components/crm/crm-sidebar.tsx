@@ -17,7 +17,9 @@ import {
   User as UserIcon,
   Package,
   RefreshCw,
-  Receipt
+  Receipt,
+  Globe,
+  Info
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -210,7 +212,21 @@ export function CRMSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-4 mt-auto">
+      <SidebarFooter className="p-4 mt-auto space-y-4">
+        <div className="px-4 space-y-2">
+          <a 
+            href="https://www.rysplomeria.com" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 text-[10px] font-black uppercase text-primary hover:underline"
+          >
+            <Globe className="h-3 w-3" /> www.rysplomeria.com
+          </a>
+          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter flex items-center gap-2">
+            <Info className="h-3 w-3" /> RYS SAS v1.0
+          </p>
+        </div>
+
         <button 
           onClick={() => {
             handleLogout();
