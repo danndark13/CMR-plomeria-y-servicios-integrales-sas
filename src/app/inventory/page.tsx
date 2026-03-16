@@ -31,6 +31,7 @@ import { toast } from "@/hooks/use-toast"
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { ServiceRequest, Expense } from "@/lib/types"
+import { MOCK_TECHNICIANS, MOCK_REQUESTS } from "@/lib/mock-data"
 
 export default function InventoryPage() {
   const db = useFirestore()
@@ -46,32 +47,44 @@ export default function InventoryPage() {
   }, [db, user])
   const { data: inventoryItems, isLoading: isInventoryLoading } = useCollection(inventoryQuery)
 
-  // 2. Fetch Technicians
-  const techsQuery = useMemoFirebase(() => {
+  // 2. Fetch Technicians from Firestore
+  const usersQuery = useMemoFirebase(() => {
     if (!db || !user) return null
     return collection(db, "user_profiles")
   }, [db, user])
-  const { data: allUsers } = useCollection(techsQuery)
-  const technicians = allUsers?.filter(u => u.roleId === 'Técnico') || []
+  const { data: firestoreUsers } = useCollection(usersQuery)
 
   // 3. Fetch Service Requests to calculate "Field Stock" (isUnused items)
   const requestsQuery = useMemoFirebase(() => {
     if (!db || !user) return null
     return collection(db, "service_requests")
   }, [db, user])
-  const { data: allRequests, isLoading: isRequestsLoading } = useCollection(requestsQuery)
+  const { data: firestoreRequests, isLoading: isRequestsLoading } = useCollection(requestsQuery)
+
+  // Combinar Técnicos (Mocks + Firestore)
+  const allTechnicians = firestoreUsers 
+    ? [
+        ...firestoreUsers.filter(u => u.roleId === 'Técnico'),
+        ...MOCK_TECHNICIANS.filter(mt => !firestoreUsers.find(fu => fu.username === mt.id || fu.id === mt.id))
+      ]
+    : MOCK_TECHNICIANS
+
+  // Combinar Solicitudes para el cálculo de stock
+  const allRequests = firestoreRequests 
+    ? [...firestoreRequests, ...MOCK_REQUESTS.filter(mr => !firestoreRequests.find(fr => fr.claimNumber === mr.claimNumber))]
+    : MOCK_REQUESTS
 
   // Calculate Field Stock per Technician
   const getFieldStockForTech = (techId: string) => {
-    if (!allRequests) return []
-    
     const unusedExpenses: Expense[] = []
     
     allRequests.forEach((req: ServiceRequest) => {
       (req.interventions || []).forEach(interv => {
+        // Buscamos coincidencia por ID de técnico o por username (para compatibilidad con mocks)
         if (interv.technicianId === techId) {
           (interv.detailedExpenses || []).forEach(exp => {
-            if (exp.isUnused) {
+            // Un material está en stock si isUnused es explícitamente true
+            if (exp.isUnused === true) {
               unusedExpenses.push(exp)
             }
           })
@@ -79,9 +92,9 @@ export default function InventoryPage() {
       })
     })
 
-    // Group by description
+    // Agrupar por descripción para mostrar totales consolidados
     const grouped = unusedExpenses.reduce((acc, exp) => {
-      const key = exp.description.toUpperCase()
+      const key = exp.description.toUpperCase().trim()
       if (!acc[key]) {
         acc[key] = { description: key, quantity: 0, unit: exp.unit || 'UND' }
       }
@@ -92,7 +105,7 @@ export default function InventoryPage() {
     return Object.values(grouped)
   }
 
-  const filteredItems = inventoryItems?.filter(item => 
+  const filteredItems = (inventoryItems || []).filter(item => 
     item.description.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
@@ -127,7 +140,7 @@ export default function InventoryPage() {
       .finally(() => setIsProcessing(false))
   }
 
-  const totalValue = inventoryItems?.reduce((sum, item) => sum + (item.quantity * item.unitValue), 0) || 0
+  const totalValue = (inventoryItems || []).reduce((sum, item) => sum + (item.quantity * item.unitValue), 0) || 0
   const isLoadingTotal = isUserLoading || isInventoryLoading || isRequestsLoading
 
   return (
@@ -164,7 +177,7 @@ export default function InventoryPage() {
             <CardTitle className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Materiales en Campo</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-black text-orange-600">{technicians.length} Técnicos</div>
+            <div className="text-3xl font-black text-orange-600">{allTechnicians.length} Técnicos</div>
           </CardContent>
         </Card>
       </div>
@@ -215,14 +228,14 @@ export default function InventoryPage() {
                         <p className="mt-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest">Sincronizando bodega...</p>
                       </TableCell>
                     </TableRow>
-                  ) : filteredItems?.length === 0 ? (
+                  ) : filteredItems.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={4} className="h-40 text-center">
                         <AlertCircle className="h-8 w-8 mx-auto text-slate-200 mb-2" />
                         <p className="text-sm font-bold text-slate-400 italic">No hay registros que coincidan con la búsqueda.</p>
                       </TableCell>
                     </TableRow>
-                  ) : filteredItems?.map((item) => (
+                  ) : filteredItems.map((item) => (
                     <TableRow key={item.id} className="hover:bg-primary/5 transition-colors">
                       <TableCell className="font-bold text-slate-700 uppercase text-xs">{item.description}</TableCell>
                       <TableCell className="text-center">
@@ -246,11 +259,13 @@ export default function InventoryPage() {
 
         <TabsContent value="tecnicos">
           <div className="grid gap-6 md:grid-cols-2">
-            {technicians.map((tech) => {
-              const fieldStock = getFieldStockForTech(tech.id)
+            {allTechnicians.map((tech) => {
+              const techId = tech.id || tech.username
+              const fieldStock = getFieldStockForTech(techId)
+              const techName = tech.name || `${tech.firstName} ${tech.lastName}`
               
               return (
-                <Card key={tech.id} className="border-l-4 border-l-orange-500 shadow-sm hover:shadow-md transition-all group">
+                <Card key={techId} className="border-l-4 border-l-orange-500 shadow-sm hover:shadow-md transition-all group">
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -258,8 +273,8 @@ export default function InventoryPage() {
                           <Users className="h-6 w-6" />
                         </div>
                         <div>
-                          <CardTitle className="text-sm font-black uppercase">{tech.firstName} {tech.lastName}</CardTitle>
-                          <CardDescription className="text-[10px] font-bold uppercase tracking-tighter">ID: {tech.username}</CardDescription>
+                          <CardTitle className="text-sm font-black uppercase">{techName}</CardTitle>
+                          <CardDescription className="text-[10px] font-bold uppercase tracking-tighter">ID: {tech.username || tech.id}</CardDescription>
                         </div>
                       </div>
                     </div>
