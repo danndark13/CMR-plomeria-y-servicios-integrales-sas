@@ -2,10 +2,11 @@ import { AssistanceCompany, Technician, ServiceRequest, Reminder } from './types
 
 export const MOCK_COMPANIES: AssistanceCompany[] = [
   { 
-    id: '1', 
+    id: 'IKE', 
     name: 'IKE Asistencia', 
     accounts: [
       'HDI (AL) COOMEVA', 
+      'HDI', 
       'HDI COOMEVA', 
       'NEXUS', 
       'PREVISORA', 
@@ -28,7 +29,7 @@ export const MOCK_COMPANIES: AssistanceCompany[] = [
     ] 
   },
   { 
-    id: '2', 
+    id: 'IGS', 
     name: 'IGS', 
     accounts: [
       'ALLIANZ', 
@@ -45,12 +46,12 @@ export const MOCK_COMPANIES: AssistanceCompany[] = [
     ] 
   },
   { 
-    id: '3', 
+    id: 'MAWDY', 
     name: 'MAWDY', 
     accounts: ['DAVIVIENDA', 'SURA', 'BOLIVAR', 'MAPFRE', 'AXA COLPATRIA'] 
   },
   { 
-    id: '4', 
+    id: 'ASSISPREX', 
     name: 'ASSISPREX', 
     accounts: ['GENERALI', 'LIBERTY SEGUROS', 'ALLIANZ', 'LA EQUIDAD'] 
   },
@@ -75,7 +76,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
   {
     id: 'REQ-001',
     category: 'Plomería',
-    companyId: '1',
+    companyId: 'IKE',
     accountName: 'HDI (AL) COOMEVA',
     status: 'in_progress',
     insuredName: 'MARIA FERNANDA ROJAS',
@@ -103,7 +104,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
   {
     id: 'REQ-002',
     category: 'Cerrajería',
-    companyId: '2',
+    companyId: 'IGS',
     accountName: 'ALLIANZ',
     status: 'assigned',
     insuredName: 'CARLOS ANDRES GOMEZ',
@@ -125,7 +126,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
   {
     id: 'REQ-003',
     category: 'Impermeabilización',
-    companyId: '2',
+    companyId: 'IGS',
     accountName: 'BANCOLOMBIA',
     status: 'pending',
     insuredName: 'JUAN PABLO BELTRAN',
@@ -141,7 +142,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
   {
     id: 'REQ-004',
     category: 'Electricidad',
-    companyId: '1',
+    companyId: 'IKE',
     accountName: 'PREVISORA',
     status: 'completed',
     insuredName: 'ALICIA MEJIA',
@@ -171,7 +172,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
   {
     id: 'REQ-005',
     category: 'Destaponamiento',
-    companyId: '1',
+    companyId: 'IKE',
     accountName: 'NEXUS',
     status: 'in_progress',
     insuredName: 'ROBERTO CANO',
@@ -197,7 +198,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
   {
     id: 'REQ-006',
     category: 'Garantía',
-    companyId: '2',
+    companyId: 'IGS',
     accountName: 'SURA',
     status: 'warranty',
     insuredName: 'SANDRA MILENA PAEZ',
@@ -213,7 +214,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
   {
     id: 'REQ-007',
     category: 'Plomería',
-    companyId: '3',
+    companyId: 'MAWDY',
     accountName: 'DAVIVIENDA',
     status: 'completed',
     insuredName: 'FERNANDO ARANGO',
@@ -243,7 +244,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
   {
     id: 'REQ-008',
     category: 'Vidriería',
-    companyId: '2',
+    companyId: 'IGS',
     accountName: 'TUYA',
     status: 'assigned',
     insuredName: 'GLORIA ESTELLA',
@@ -265,7 +266,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
   {
     id: 'REQ-009',
     category: 'Electricidad',
-    companyId: '1',
+    companyId: 'IKE',
     accountName: 'HDI COOMEVA',
     status: 'pending',
     insuredName: 'DANIEL CASTAÑO',
@@ -281,7 +282,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
   {
     id: 'REQ-010',
     category: 'Plomería',
-    companyId: '2',
+    companyId: 'IGS',
     accountName: 'MAPFRE',
     status: 'in_progress',
     insuredName: 'JIMENA SUAREZ',

@@ -43,7 +43,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase'
-import { collection, doc, addDoc } from 'firebase/firestore'
+import { collection, doc, addDoc, setDoc } from 'firebase/firestore'
 import { toast } from "@/hooks/use-toast"
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
@@ -55,6 +55,11 @@ export default function DashboardPage() {
   const [mounted, setMounted] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  
+  // States for dynamic account selection
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>("")
+  const [selectedAccountName, setSelectedAccountName] = useState<string>("")
+  const [isAddingNewAccount, setIsAddingNewAccount] = useState(false)
   
   const { user, isUserLoading } = useUser()
   const db = useFirestore()
@@ -76,13 +81,18 @@ export default function DashboardPage() {
     if (!db || !user) return null
     return collection(db, "assistance_companies")
   }, [db, user])
-  const { data: companies } = useCollection(companiesQuery)
+  const { data: firestoreCompanies } = useCollection(companiesQuery)
+
+  const clientAccountsQuery = useMemoFirebase(() => {
+    if (!db || !user) return null
+    return collection(db, "client_accounts")
+  }, [db, user])
+  const { data: firestoreAccounts } = useCollection(clientAccountsQuery)
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  // Robust unique merge
   const allRequests = useMemo(() => {
     const combined = [...(firestoreRequests || [])]
     const seenIds = new Set(combined.map(r => r.id))
@@ -108,32 +118,52 @@ export default function DashboardPage() {
     )
   }
 
-  const allCompanies = (companies && companies.length > 0) ? companies : MOCK_COMPANIES
+  const allCompanies = (firestoreCompanies && firestoreCompanies.length > 0) ? firestoreCompanies : MOCK_COMPANIES
 
-  // Metrics
-  const activeRequests = allRequests.filter(r => r.status !== 'completed' && r.status !== 'cancelled')
-  const todayStr = new Date().toLocaleDateString()
-  const todayVisits = allRequests.flatMap(req => 
-    (req.interventions || [])
-      .filter(i => new Date(i.date).toLocaleDateString() === todayStr)
-      .map(i => ({ ...i, request: req }))
-  ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  // Dynamic accounts logic
+  const currentCompany = allCompanies.find(c => c.id === selectedCompanyId)
+  const availableAccounts = useMemo(() => {
+    if (!selectedCompanyId) return []
+    
+    // Combine mock accounts with firestore accounts
+    const mockAccounts = currentCompany?.accounts || []
+    const dbAccounts = (firestoreAccounts || [])
+      .filter(acc => acc.assistanceCompanyId === selectedCompanyId)
+      .map(acc => acc.name)
+    
+    return Array.from(new Set([...mockAccounts, ...dbAccounts])).sort()
+  }, [selectedCompanyId, currentCompany, firestoreAccounts])
 
-  const overloadedTechs = MOCK_TECHNICIANS.filter(t => t.activeTasks > 3)
-
-  const handleCreateService = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleCreateService = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!db || !user) return
 
     setIsProcessing(true)
     const formData = new FormData(e.currentTarget)
     
+    let finalAccountName = selectedAccountName
+    if (isAddingNewAccount) {
+      finalAccountName = (formData.get("newAccountName") as string || "").toUpperCase().trim()
+      
+      // Optionally save this new account to Firestore for the company
+      if (finalAccountName && selectedCompanyId) {
+        const newAccId = Math.random().toString(36).substring(7).toUpperCase()
+        const newAccRef = doc(db, "client_accounts", newAccId)
+        setDoc(newAccRef, {
+          id: newAccId,
+          name: finalAccountName,
+          assistanceCompanyId: selectedCompanyId,
+          createdAt: new Date().toISOString()
+        }).catch(err => console.error("Error saving new account:", err))
+      }
+    }
+
     const newService = {
       claimNumber: (formData.get("claimNumber") as string).toUpperCase(),
       category: formData.get("category") as string,
-      companyId: formData.get("companyId") as string,
-      accountName: (formData.get("accountName") as string).toUpperCase(),
-      insuredName: formData.get("insuredName") as string,
+      companyId: selectedCompanyId,
+      accountName: finalAccountName,
+      insuredName: (formData.get("insuredName") as string).toUpperCase(),
       address: formData.get("address") as string,
       phoneNumber: formData.get("phoneNumber") as string,
       description: formData.get("description") as string,
@@ -162,6 +192,14 @@ export default function DashboardPage() {
       })
       .finally(() => setIsProcessing(false))
   }
+
+  const activeRequests = allRequests.filter(r => r.status !== 'completed' && r.status !== 'cancelled')
+  const todayStr = new Date().toLocaleDateString()
+  const todayVisits = allRequests.flatMap(req => 
+    (req.interventions || [])
+      .filter(i => new Date(i.date).toLocaleDateString() === todayStr)
+      .map(i => ({ ...i, request: req }))
+  ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
   const canCreate = profile?.roleId === 'Administrador' || profile?.roleId === 'Servicio al Cliente'
 
@@ -195,23 +233,17 @@ export default function DashboardPage() {
             <CardDescription className="text-destructive/70 font-bold uppercase text-[10px]">Técnicos con exceso de tareas.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {overloadedTechs.length > 0 ? (
-              overloadedTechs.map((tech) => (
-                <div key={tech.id} className="p-3 bg-white rounded-lg border border-destructive/20 flex justify-between items-center shadow-sm">
-                  <div className="flex flex-col">
-                    <span className="text-sm font-bold text-slate-800 uppercase">{tech.name}</span>
-                    <span className="text-[9px] text-muted-foreground font-black uppercase">{tech.specialties.slice(0,2).join(" • ")}</span>
-                  </div>
-                  <Badge variant="destructive" className="h-6 px-2 animate-pulse font-black text-[10px]">
-                    {tech.activeTasks} ACTIVOS
-                  </Badge>
+            {MOCK_TECHNICIANS.filter(t => t.activeTasks > 3).map((tech) => (
+              <div key={tech.id} className="p-3 bg-white rounded-lg border border-destructive/20 flex justify-between items-center shadow-sm">
+                <div className="flex flex-col">
+                  <span className="text-sm font-bold text-slate-800 uppercase">{tech.name}</span>
+                  <span className="text-[9px] text-muted-foreground font-black uppercase">{tech.specialties.slice(0,2).join(" • ")}</span>
                 </div>
-              ))
-            ) : (
-              <div className="py-8 text-center text-muted-foreground text-xs italic">
-                Carga de trabajo balanceada.
+                <Badge variant="destructive" className="h-6 px-2 animate-pulse font-black text-[10px]">
+                  {tech.activeTasks} ACTIVOS
+                </Badge>
               </div>
-            )}
+            ))}
           </CardContent>
         </Card>
 
@@ -272,7 +304,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-black truncate text-primary uppercase">{req.claimNumber}</p>
-                      <p className="text-[9px] text-muted-foreground font-bold uppercase truncate">{companyName} • {req.category}</p>
+                      <p className="text-[9px] text-muted-foreground font-bold uppercase truncate">{companyName} • {req.accountName}</p>
                     </div>
                     <StatusBadge status={req.status} />
                   </Link>
@@ -288,38 +320,18 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <Card className="bg-slate-900 border-none text-white shadow-xl overflow-hidden relative">
-        <div className="absolute right-0 top-0 h-full w-1/3 bg-primary/20 skew-x-12 translate-x-12" />
-        <CardHeader className="relative z-10">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 bg-white/10 rounded-lg flex items-center justify-center backdrop-blur-sm border border-white/20">
-              <Calculator className="h-6 w-6 text-primary" />
-            </div>
-            <div>
-              <CardTitle className="text-xl font-black uppercase tracking-widest">Módulo de Contabilidad</CardTitle>
-              <CardDescription className="text-slate-400 font-medium uppercase text-[10px]">Gestión de Facturación y Nómina.</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="relative z-10 flex gap-4">
-          <Link href="/accounting">
-            <Button variant="default" className="gap-2 bg-primary hover:bg-primary/90 font-black uppercase text-xs h-12 px-6">
-              Ingresar al Hub Contable <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
-          <Link href="/admin/reports">
-            <Button variant="outline" className="gap-2 border-white/20 text-white hover:bg-white/10 font-black uppercase text-xs h-12 px-6">
-              Reportes de Productividad
-            </Button>
-          </Link>
-        </CardContent>
-      </Card>
-
-      <Dialog open={isCreating} onOpenChange={setIsCreating}>
+      <Dialog open={isCreating} onOpenChange={(open) => {
+        setIsCreating(open)
+        if (!open) {
+          setSelectedCompanyId("")
+          setSelectedAccountName("")
+          setIsAddingNewAccount(false)
+        }
+      }}>
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black uppercase tracking-tighter text-primary">Apertura de Expediente</DialogTitle>
-            <DialogDescription className="font-bold">Registro rápido de nuevo servicio desde el Panel Principal.</DialogDescription>
+            <DialogDescription className="font-bold">Registro de nuevo servicio con selección dinámica de cuentas.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateService} className="space-y-6 pt-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -355,7 +367,11 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Empresa de Asistencia</Label>
-                <Select name="companyId" required>
+                <Select value={selectedCompanyId} onValueChange={(v) => {
+                  setSelectedCompanyId(v)
+                  setSelectedAccountName("")
+                  setIsAddingNewAccount(false)
+                }} required>
                   <SelectTrigger className="font-black uppercase h-12 border-primary/20">
                     <SelectValue placeholder="Seleccionar aliado" />
                   </SelectTrigger>
@@ -366,14 +382,50 @@ export default function DashboardPage() {
                   </SelectContent>
                 </Select>
               </div>
+              
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cuenta Cliente</Label>
-                <div className="relative">
-                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input name="accountName" placeholder="EJ: ALLIANZ" required className="pl-10 font-black uppercase h-12 border-primary/20" />
-                </div>
+                <Select 
+                  value={isAddingNewAccount ? "NEW" : selectedAccountName} 
+                  onValueChange={(v) => {
+                    if (v === "NEW") {
+                      setIsAddingNewAccount(true)
+                      setSelectedAccountName("")
+                    } else {
+                      setIsAddingNewAccount(false)
+                      setSelectedAccountName(v)
+                    }
+                  }} 
+                  disabled={!selectedCompanyId}
+                  required={!isAddingNewAccount}
+                >
+                  <SelectTrigger className="font-black uppercase h-12 border-primary/20">
+                    <SelectValue placeholder={selectedCompanyId ? "Seleccionar cuenta" : "Primero elija asistencia"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableAccounts.map(acc => (
+                      <SelectItem key={acc} value={acc}>{acc}</SelectItem>
+                    ))}
+                    <SelectItem value="NEW" className="font-bold text-primary italic">+ OTRA (Agregar nueva...)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
+
+            {isAddingNewAccount && (
+              <div className="space-y-2 animate-in slide-in-from-top-2">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-primary">Nombre de la Nueva Cuenta</Label>
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
+                  <Input 
+                    name="newAccountName" 
+                    placeholder="Escriba el nombre de la cuenta..." 
+                    required 
+                    className="pl-10 font-black uppercase h-12 border-primary ring-offset-background"
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="p-4 bg-slate-50 rounded-xl border-2 border-dashed border-primary/10 space-y-4">
                <p className="text-[11px] font-black uppercase text-primary tracking-widest border-b pb-2">Datos del Cliente Final</p>

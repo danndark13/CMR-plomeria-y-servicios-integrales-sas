@@ -43,7 +43,7 @@ import { MOCK_REQUESTS, MOCK_COMPANIES, MOCK_TECHNICIANS } from "@/lib/mock-data
 import { StatusBadge } from "@/components/crm/status-badge"
 import Link from "next/link"
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase'
-import { collection, doc, addDoc } from 'firebase/firestore'
+import { collection, doc, addDoc, setDoc } from 'firebase/firestore'
 import { toast } from "@/hooks/use-toast"
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
@@ -54,6 +54,11 @@ export default function RequestsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isCreating, setIsCreating] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  
+  // States for dynamic account selection
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>("")
+  const [selectedAccountName, setSelectedAccountName] = useState<string>("")
+  const [isAddingNewAccount, setIsAddingNewAccount] = useState(false)
   
   const { user, isUserLoading } = useUser()
   const db = useFirestore()
@@ -72,7 +77,19 @@ export default function RequestsPage() {
   }, [db, user])
   const { data: firestoreRequests, isLoading: isRequestsLoading } = useCollection(requestsQuery)
 
-  // Robust unique merge
+  // Fetch Companies and Accounts
+  const companiesQuery = useMemoFirebase(() => {
+    if (!db || !user) return null
+    return collection(db, "assistance_companies")
+  }, [db, user])
+  const { data: firestoreCompanies } = useCollection(companiesQuery)
+
+  const clientAccountsQuery = useMemoFirebase(() => {
+    if (!db || !user) return null
+    return collection(db, "client_accounts")
+  }, [db, user])
+  const { data: firestoreAccounts } = useCollection(clientAccountsQuery)
+
   const allRequests = useMemo(() => {
     const combined = [...(firestoreRequests || [])]
     const seenIds = new Set(combined.map(r => r.id))
@@ -97,28 +114,48 @@ export default function RequestsPage() {
     ).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
   }, [allRequests, searchTerm])
 
-  // Fetch Companies for the form
-  const companiesQuery = useMemoFirebase(() => {
-    if (!db || !user) return null
-    return collection(db, "assistance_companies")
-  }, [db, user])
-  const { data: companies } = useCollection(companiesQuery)
-  
-  const allCompanies = (companies && companies.length > 0) ? companies : MOCK_COMPANIES
+  const allCompanies = (firestoreCompanies && firestoreCompanies.length > 0) ? firestoreCompanies : MOCK_COMPANIES
 
-  const handleCreateService = (e: React.FormEvent<HTMLFormElement>) => {
+  // Dynamic accounts logic
+  const currentCompany = allCompanies.find(c => c.id === selectedCompanyId)
+  const availableAccounts = useMemo(() => {
+    if (!selectedCompanyId) return []
+    const mockAccounts = currentCompany?.accounts || []
+    const dbAccounts = (firestoreAccounts || [])
+      .filter(acc => acc.assistanceCompanyId === selectedCompanyId)
+      .map(acc => acc.name)
+    return Array.from(new Set([...mockAccounts, ...dbAccounts])).sort()
+  }, [selectedCompanyId, currentCompany, firestoreAccounts])
+
+  const handleCreateService = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!db || !user) return
 
     setIsProcessing(true)
     const formData = new FormData(e.currentTarget)
     
+    let finalAccountName = selectedAccountName
+    if (isAddingNewAccount) {
+      finalAccountName = (formData.get("newAccountName") as string || "").toUpperCase().trim()
+      
+      if (finalAccountName && selectedCompanyId) {
+        const newAccId = Math.random().toString(36).substring(7).toUpperCase()
+        const newAccRef = doc(db, "client_accounts", newAccId)
+        setDoc(newAccRef, {
+          id: newAccId,
+          name: finalAccountName,
+          assistanceCompanyId: selectedCompanyId,
+          createdAt: new Date().toISOString()
+        }).catch(err => console.error("Error saving new account:", err))
+      }
+    }
+
     const newService = {
       claimNumber: (formData.get("claimNumber") as string).toUpperCase(),
       category: formData.get("category") as string,
-      companyId: formData.get("companyId") as string,
-      accountName: formData.get("accountName") as string,
-      insuredName: formData.get("insuredName") as string,
+      companyId: selectedCompanyId,
+      accountName: finalAccountName,
+      insuredName: (formData.get("insuredName") as string).toUpperCase(),
       address: formData.get("address") as string,
       phoneNumber: formData.get("phoneNumber") as string,
       description: formData.get("description") as string,
@@ -151,28 +188,11 @@ export default function RequestsPage() {
   const handleExportExcel = () => {
     const headers = [
       "Expediente", "Fecha", "Asistencia", "Cuenta", "Asegurado", "Dirección", "Tipo de Servicio",
-      "Reporte Inicial", "Reporte 2", "Reporte 3", "Reporte 4", "Reporte 5",
-      "Técnico 1", "Técnico 2", "Técnico 3", "Técnico 4", "Técnico 5",
-      "Valor Reporte 1", "Valor Reporte 2", "Valor Reporte 3", "Valor Reporte 4", "Valor Reporte 5",
-      "Gasto Reporte 1", "Gasto Reporte 2", "Gasto Reporte 3", "Gasto Reporte 4", "Gasto Reporte 5",
-      "Valor Total Cobrado", "Valor Total Todos los Gastos"
+      "Valor Total Cobrado"
     ]
 
     const csvRows = filteredRequests.map(req => {
       const companyName = allCompanies.find(c => c.id === req.companyId)?.name || "N/A"
-      const interventions = req.interventions || []
-      
-      const getIntNotes = (idx: number) => (interventions[idx]?.notes || "").replace(/,/g, " ")
-      const getTechName = (idx: number) => {
-        const techId = interventions[idx]?.technicianId
-        return (MOCK_TECHNICIANS.find(t => t.id === techId)?.name || "").replace(/,/g, " ")
-      }
-      const getLabor = (idx: number) => interventions[idx]?.laborCost || 0
-      const getExpenses = (idx: number) => (interventions[idx]?.detailedExpenses || []).reduce((s, e) => s + e.amount, 0)
-
-      const totalLabor = interventions.reduce((s, i) => s + i.laborCost, 0)
-      const totalExpenses = interventions.flatMap(i => i.detailedExpenses || []).reduce((s, e) => s + e.amount, 0)
-      const totalFinancial = totalLabor + totalExpenses
       const totalCobrado = req.approvedAmount || req.requestedAmount || 0
 
       return [
@@ -183,16 +203,7 @@ export default function RequestsPage() {
         req.insuredName,
         (req.address || "").replace(/,/g, " "),
         req.category,
-        // Reportes (1-5)
-        getIntNotes(0), getIntNotes(1), getIntNotes(2), getIntNotes(3), getIntNotes(4),
-        // Técnicos (1-5)
-        getTechName(0), getTechName(1), getTechName(2), getTechName(3), getTechName(4),
-        // Valores (1-5)
-        getLabor(0), getLabor(1), getLabor(2), getLabor(3), getLabor(4),
-        // Gastos (1-5)
-        getExpenses(0), getExpenses(1), getExpenses(2), getExpenses(3), getExpenses(4),
-        totalCobrado,
-        totalFinancial
+        totalCobrado
       ]
     })
 
@@ -211,10 +222,7 @@ export default function RequestsPage() {
     link.click()
     document.body.removeChild(link)
 
-    toast({
-      title: "Planilla Generada",
-      description: "Se ha descargado el reporte detallado de la bitácora."
-    })
+    toast({ title: "Planilla Generada" })
   }
 
   const role = profile?.roleId
@@ -315,21 +323,21 @@ export default function RequestsPage() {
               })}
             </TableBody>
           </Table>
-          {!isLoadingTotal && filteredRequests.length === 0 && (
-            <div className="py-20 text-center flex flex-col items-center justify-center">
-              <ClipboardList className="h-12 w-12 text-slate-200 mb-4" />
-              <p className="text-lg font-bold text-slate-400">No se encontraron servicios</p>
-              <p className="text-sm text-slate-400 font-medium">Prueba con otro número de expediente o nombre de cliente.</p>
-            </div>
-          )}
         </CardContent>
       </Card>
 
-      <Dialog open={isCreating} onOpenChange={setIsCreating}>
+      <Dialog open={isCreating} onOpenChange={(open) => {
+        setIsCreating(open)
+        if (!open) {
+          setSelectedCompanyId("")
+          setSelectedAccountName("")
+          setIsAddingNewAccount(false)
+        }
+      }}>
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black uppercase tracking-tighter text-primary">Apertura de Expediente</DialogTitle>
-            <DialogDescription>Ingrese la información del nuevo servicio solicitado por la asistencia.</DialogDescription>
+            <DialogDescription>Seleccione la asistencia y la cuenta cliente de forma dinámica.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateService} className="space-y-6 pt-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -337,13 +345,13 @@ export default function RequestsPage() {
                 <Label className="text-[10px] font-black uppercase tracking-widest">N° de Expediente / Claim</Label>
                 <div className="relative">
                   <FileText className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input name="claimNumber" placeholder="EJ: EXP-123456" required className="pl-10 font-mono font-bold uppercase" />
+                  <Input name="claimNumber" placeholder="EJ: EXP-123456" required className="pl-10 font-mono font-bold uppercase h-12" />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase tracking-widest">Categoría de Servicio</Label>
                 <Select name="category" required>
-                  <SelectTrigger className="font-bold">
+                  <SelectTrigger className="font-bold h-12">
                     <SelectValue placeholder="Seleccionar tipo" />
                   </SelectTrigger>
                   <SelectContent>
@@ -365,8 +373,12 @@ export default function RequestsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase tracking-widest">Empresa de Asistencia</Label>
-                <Select name="companyId" required>
-                  <SelectTrigger className="font-bold">
+                <Select value={selectedCompanyId} onValueChange={(v) => {
+                  setSelectedCompanyId(v)
+                  setSelectedAccountName("")
+                  setIsAddingNewAccount(false)
+                }} required>
+                  <SelectTrigger className="font-bold h-12">
                     <SelectValue placeholder="Seleccionar aliado" />
                   </SelectTrigger>
                   <SelectContent>
@@ -376,14 +388,50 @@ export default function RequestsPage() {
                   </SelectContent>
                 </Select>
               </div>
+              
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase tracking-widest">Cuenta / Asegurado</Label>
-                <div className="relative">
-                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input name="accountName" placeholder="EJ: ALLIANZ" required className="pl-10 font-bold uppercase" />
-                </div>
+                <Label className="text-[10px] font-black uppercase tracking-widest">Cuenta Cliente</Label>
+                <Select 
+                  value={isAddingNewAccount ? "NEW" : selectedAccountName} 
+                  onValueChange={(v) => {
+                    if (v === "NEW") {
+                      setIsAddingNewAccount(true)
+                      setSelectedAccountName("")
+                    } else {
+                      setIsAddingNewAccount(false)
+                      setSelectedAccountName(v)
+                    }
+                  }} 
+                  disabled={!selectedCompanyId}
+                  required={!isAddingNewAccount}
+                >
+                  <SelectTrigger className="font-bold h-12">
+                    <SelectValue placeholder={selectedCompanyId ? "Seleccionar cuenta" : "Primero elija asistencia"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableAccounts.map(acc => (
+                      <SelectItem key={acc} value={acc}>{acc}</SelectItem>
+                    ))}
+                    <SelectItem value="NEW" className="font-bold text-primary italic">+ OTRA (Agregar nueva...)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
+
+            {isAddingNewAccount && (
+              <div className="space-y-2 animate-in slide-in-from-top-2">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-primary">Nombre de la Nueva Cuenta</Label>
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
+                  <Input 
+                    name="newAccountName" 
+                    placeholder="Escriba el nombre de la cuenta..." 
+                    required 
+                    className="pl-10 font-black uppercase h-12 border-primary"
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="p-4 bg-slate-50 rounded-xl border-2 border-dashed space-y-4">
                <p className="text-[11px] font-black uppercase text-primary tracking-widest border-b pb-2">Datos del Cliente Final</p>
@@ -392,14 +440,14 @@ export default function RequestsPage() {
                     <Label className="text-[10px] font-black uppercase tracking-widest">Nombre Completo</Label>
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input name="insuredName" placeholder="Juan Perez" required className="pl-10 font-bold" />
+                      <Input name="insuredName" placeholder="Juan Perez" required className="pl-10 font-bold uppercase h-10" />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase tracking-widest">Teléfono</Label>
                     <div className="relative">
                       <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input name="phoneNumber" placeholder="310 000 0000" required className="pl-10 font-bold" />
+                      <Input name="phoneNumber" placeholder="310 000 0000" required className="pl-10 font-bold h-10" />
                     </div>
                   </div>
                </div>
@@ -407,19 +455,19 @@ export default function RequestsPage() {
                   <Label className="text-[10px] font-black uppercase tracking-widest">Dirección de Visita</Label>
                   <div className="relative">
                     <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input name="address" placeholder="Calle 1 #2-3" required className="pl-10 font-medium" />
+                    <Input name="address" placeholder="Calle 1 #2-3" required className="pl-10 font-medium h-10" />
                   </div>
                </div>
             </div>
 
             <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest">Descripción de la Solicitud</Label>
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción de la Solicitud</Label>
               <Textarea name="description" placeholder="Describa el problema reportado..." className="min-h-[80px]" required />
             </div>
 
             <DialogFooter className="gap-2 pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsCreating(false)} disabled={isProcessing} className="font-bold">CANCELAR</Button>
-              <Button type="submit" disabled={isProcessing} className="font-black gap-2 shadow-lg h-12">
+              <Button type="button" variant="outline" onClick={() => setIsCreating(false)} disabled={isProcessing} className="font-bold h-12 px-8">CANCELAR</Button>
+              <Button type="submit" disabled={isProcessing} className="font-black gap-2 shadow-lg h-12 px-10">
                 {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} CREAR SERVICIO
               </Button>
             </DialogFooter>
