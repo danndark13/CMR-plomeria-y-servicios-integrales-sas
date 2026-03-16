@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { ShieldCheck, Lock, User, Loader2, Globe, Mail, Smartphone, Download, Share, PlusSquare, HelpCircle, RefreshCw, AlertCircle } from "lucide-react"
+import { ShieldCheck, Lock, User, Loader2, Globe, Mail, Smartphone, Download, Share, PlusSquare, HelpCircle, RefreshCw, AlertCircle, Trash2 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { signInAnonymously } from "firebase/auth"
 import { doc, setDoc } from "firebase/firestore"
@@ -52,7 +52,7 @@ export default function LoginPage() {
     setIsIos(isIosDevice)
 
     const handler = (e: any) => {
-      console.log('beforeinstallprompt event fired');
+      console.log('Evento beforeinstallprompt capturado');
       e.preventDefault()
       setDeferredPrompt(e)
     }
@@ -65,7 +65,7 @@ export default function LoginPage() {
       setShowInstallHelp(true)
       toast({
         title: "Instalación Manual",
-        description: "Sigue los pasos de ayuda que aparecen abajo.",
+        description: "El navegador no detecta el botón. Sigue la ayuda de abajo.",
       })
       return
     }
@@ -74,6 +74,23 @@ export default function LoginPage() {
     if (outcome === 'accepted') {
       setDeferredPrompt(null)
       toast({ title: "¡Instalación Iniciada!", description: "RYS Gestión se está añadiendo a tu equipo." })
+    }
+  }
+
+  const clearAppCache = async () => {
+    try {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (const registration of registrations) {
+        await registration.unregister();
+      }
+      const cacheNames = await caches.keys();
+      for (const name of cacheNames) {
+        await caches.delete(name);
+      }
+      toast({ title: "Sistema Reseteado", description: "Caché borrada. Recargando la página..." });
+      setTimeout(() => window.location.reload(), 1000);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error", description: "No se pudo limpiar la caché." });
     }
   }
 
@@ -196,19 +213,27 @@ export default function LoginPage() {
         </Card>
 
         {showInstallHelp && !isIos && (
-          <Alert className="bg-white border-primary/20 animate-in slide-in-from-top-2">
-            <HelpCircle className="h-4 w-4 text-primary" />
-            <AlertTitle className="text-[10px] font-black uppercase text-primary">Solución de Instalación</AlertTitle>
-            <AlertDescription className="text-[10px] text-slate-600 font-medium space-y-3">
-              <p>Si el botón no funciona o dice "Ya instalada":</p>
-              <ol className="list-decimal pl-4 space-y-1">
-                <li>Pulsa los <strong>tres puntos (⋮)</strong> de tu navegador.</li>
-                <li>Busca <strong>"Instalar aplicación"</strong> o "Añadir a panta. de inicio".</li>
-                <li>Si no aparece, ve a <strong>Ajustes &gt; Privacidad &gt; Borrar datos de navegación</strong> (solo de este sitio) y recarga.</li>
-              </ol>
-              <p className="text-[9px] italic border-t pt-2">Esto sucede cuando el navegador bloquea la descarga automática tras una desinstalación previa.</p>
-            </AlertDescription>
-          </Alert>
+          <div className="space-y-4 animate-in slide-in-from-top-2">
+            <Alert className="bg-white border-primary/20">
+              <HelpCircle className="h-4 w-4 text-primary" />
+              <AlertTitle className="text-[10px] font-black uppercase text-primary">Solución Manual</AlertTitle>
+              <AlertDescription className="text-[10px] text-slate-600 font-medium space-y-3">
+                <p>Si el botón no funciona:</p>
+                <ol className="list-decimal pl-4 space-y-1">
+                  <li>Pulsa los <strong>tres puntos (⋮)</strong> de Chrome.</li>
+                  <li>Busca <strong>"Instalar aplicación"</strong>.</li>
+                </ol>
+              </AlertDescription>
+            </Alert>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="w-full h-10 gap-2 text-destructive border-destructive/20 hover:bg-destructive/5 font-bold uppercase text-[10px]"
+              onClick={clearAppCache}
+            >
+              <Trash2 className="h-4 w-4" /> Limpiar App y Reintentar
+            </Button>
+          </div>
         )}
 
         <div className="text-center space-y-2">
@@ -263,17 +288,6 @@ export default function LoginPage() {
               <Button className="w-full gap-2 text-lg font-black h-14 shadow-lg" disabled={isLoading}>
                 {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : "ACCEDER AL PANEL"}
               </Button>
-              
-              <div className="w-full space-y-2 pt-2 border-t border-slate-200/50 mt-2">
-                <div className="flex items-center justify-center gap-2 text-[10px] font-black text-primary uppercase">
-                  <Globe className="h-3 w-3" />
-                  <a href="https://www.rysplomeria.com" target="_blank" rel="noopener noreferrer" className="hover:underline">www.rysplomeria.com</a>
-                </div>
-                <div className="flex items-center justify-center gap-2 text-[10px] font-bold text-muted-foreground uppercase">
-                  <Mail className="h-3 w-3" />
-                  <span>gerente@rysplomeria.com</span>
-                </div>
-              </div>
             </CardFooter>
           </form>
         </Card>

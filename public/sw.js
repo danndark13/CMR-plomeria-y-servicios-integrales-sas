@@ -1,9 +1,17 @@
-// Service Worker for RYS Gestión PWA
-// Mandatory for Android installability
-
 const CACHE_NAME = 'rys-gestion-v1';
+const OFFLINE_URL = '/offline.html';
 
 self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll([
+        '/',
+        '/login',
+        OFFLINE_URL,
+        'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap'
+      ]);
+    })
+  );
   self.skipWaiting();
 });
 
@@ -17,12 +25,23 @@ self.addEventListener('activate', (event) => {
           }
         })
       );
-    }).then(() => self.clients.claim())
+    })
   );
+  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
-  // Pass-through fetch for production to satisfy PWA requirements
-  // without interfering with the dynamic app logic.
-  event.respondWith(fetch(event.request));
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        return caches.match(OFFLINE_URL);
+      })
+    );
+  } else {
+    event.respondWith(
+      caches.match(event.request).then((response) => {
+        return response || fetch(event.request);
+      })
+    );
+  }
 });
