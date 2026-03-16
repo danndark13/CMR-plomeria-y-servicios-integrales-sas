@@ -17,21 +17,18 @@ import {
   ArrowLeft,
   FileText,
   Loader2,
-  AlertCircle,
   CheckCircle2,
   Calculator,
   Save,
   Clock,
-  Briefcase
+  Briefcase,
+  Layers
 } from "lucide-react"
 import { MOCK_REQUESTS, MOCK_COMPANIES } from "@/lib/mock-data"
 import { toast } from "@/hooks/use-toast"
-import { cn } from "@/lib/utils"
 import Link from "next/link"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase"
 import { collection, doc, updateDoc } from "firebase/firestore"
-import { StatusBadge } from "@/components/crm/status-badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { ServiceRequest, BillingStatus } from "@/lib/types"
 
@@ -65,14 +62,22 @@ export default function BillingReportPage() {
   const preValidatedRequests = filteredRequests.filter(r => r.billingStatus !== 'validated' && r.billingStatus !== 'paid')
   const validatedRequests = filteredRequests.filter(r => r.billingStatus === 'validated' || r.billingStatus === 'paid')
 
+  // Group validated requests by Invoice Number
+  const groupedByInvoice = validatedRequests.reduce((acc, req) => {
+    const inv = req.invoiceNumber || "SIN_FACTURA"
+    if (!acc[inv]) acc[inv] = []
+    acc[inv].push(req)
+    return acc
+  }, {} as Record<string, ServiceRequest[]>)
+
   const handleValidateBilling = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!db || !validatingRequest) return
 
     setIsProcessing(true)
     const formData = new FormData(e.currentTarget)
-    const invoiceNumber = formData.get("invoiceNumber") as string
-    const billingConsecutive = formData.get("billingConsecutive") as string
+    const invoiceNumber = (formData.get("invoiceNumber") as string).toUpperCase()
+    const billingConsecutive = (formData.get("billingConsecutive") as string).toUpperCase()
 
     const docRef = doc(db, "service_requests", validatingRequest.id)
     const updatedData = {
@@ -252,54 +257,80 @@ export default function BillingReportPage() {
         </TabsContent>
 
         <TabsContent value="validated">
-          <Card className="overflow-hidden border-t-4 border-t-green-600 shadow-xl">
-            <CardHeader className="bg-slate-50/80 border-b">
-              <CardTitle className="text-sm font-black flex items-center gap-2 uppercase tracking-wider">
-                <Receipt className="h-4 w-4 text-green-600" /> Facturación Emitida
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/30">
-                    <TableHead className="font-black uppercase text-[10px]">Consecutivo / Factura</TableHead>
-                    <TableHead className="font-black uppercase text-[10px]">Expediente</TableHead>
-                    <TableHead className="font-black uppercase text-[10px]">Asegurado</TableHead>
-                    <TableHead className="text-right font-black uppercase text-[10px]">Valor Facturado</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoadingTotal ? (
-                    <TableRow><TableCell colSpan={5} className="h-40 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary/20" /></TableCell></TableRow>
-                  ) : validatedRequests.length === 0 ? (
-                    <TableRow><TableCell colSpan={5} className="h-40 text-center text-muted-foreground italic">Aún no hay expedientes facturados para esta compañía.</TableCell></TableRow>
-                  ) : validatedRequests.map((req) => (
-                    <TableRow key={req.id} className="bg-green-50/30">
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <Badge variant="outline" className="w-fit font-black text-[10px] border-green-200 text-green-700 bg-white">
-                            CONS: {req.billingConsecutive || '---'}
+          <div className="space-y-8">
+            {isLoadingTotal ? (
+              <div className="h-60 flex flex-col items-center justify-center gap-4 bg-white rounded-xl border border-dashed">
+                <Loader2 className="h-8 w-8 animate-spin text-primary opacity-20" />
+                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Organizando facturas...</p>
+              </div>
+            ) : Object.keys(groupedByInvoice).length === 0 ? (
+              <Card className="border-dashed py-20 flex flex-col items-center justify-center text-center text-muted-foreground">
+                <Receipt className="h-12 w-12 opacity-10 mb-4" />
+                <p className="text-lg font-bold">Sin facturas generadas</p>
+                <p className="text-xs uppercase font-black tracking-tighter">Valida servicios en la pestaña de conciliación</p>
+              </Card>
+            ) : Object.entries(groupedByInvoice).sort((a,b) => b[0].localeCompare(a[0])).map(([invoiceNum, requests]) => {
+              const totalFactura = requests.reduce((sum, r) => sum + (r.approvedAmount || 0), 0)
+              const firstReq = requests[0]
+              
+              return (
+                <Card key={invoiceNum} className="overflow-hidden border-none shadow-lg group">
+                  <CardHeader className="bg-slate-900 text-white flex flex-row items-center justify-between p-4">
+                    <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 rounded-lg bg-white/10 flex items-center justify-center">
+                        <Receipt className="h-5 w-5 text-primary-foreground" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-black uppercase tracking-widest">Factura: {invoiceNum}</span>
+                          <Badge variant="outline" className="border-white/20 text-white text-[9px] font-black">
+                            CONS: {firstReq.billingConsecutive || '---'}
                           </Badge>
-                          <span className="text-[10px] font-bold text-slate-500">FACT: {req.invoiceNumber || '---'}</span>
                         </div>
-                      </TableCell>
-                      <TableCell><span className="font-mono font-bold text-primary">{req.claimNumber}</span></TableCell>
-                      <TableCell><span className="font-bold text-sm">{req.insuredName}</span></TableCell>
-                      <TableCell className="text-right font-mono font-black text-green-600">
-                        ${(req.approvedAmount || 0).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Link href={`/requests/${req.id}`}>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-primary"><ChevronRight className="h-5 w-5" /></Button>
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                        <p className="text-[10px] text-white/60 font-medium uppercase">{requests.length} expedientes asociados</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] font-black uppercase text-white/40 tracking-widest">Total Facturado</p>
+                      <p className="text-xl font-black text-primary-foreground">${totalFactura.toLocaleString()}</p>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50">
+                          <TableHead className="font-black uppercase text-[10px]">Expediente</TableHead>
+                          <TableHead className="font-black uppercase text-[10px]">Asegurado</TableHead>
+                          <TableHead className="font-black uppercase text-[10px]">Cuenta Cliente</TableHead>
+                          <TableHead className="text-right font-black uppercase text-[10px]">Valor Aprobado</TableHead>
+                          <TableHead></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {requests.map((req) => (
+                          <TableRow key={req.id} className="hover:bg-primary/5 border-b-slate-100 last:border-0 transition-colors">
+                            <TableCell><span className="font-mono font-black text-primary">{req.claimNumber}</span></TableCell>
+                            <TableCell><span className="font-bold text-sm">{req.insuredName}</span></TableCell>
+                            <TableCell><span className="text-[10px] font-black uppercase text-muted-foreground">{req.accountName}</span></TableCell>
+                            <TableCell className="text-right font-mono font-black text-slate-800">
+                              ${(req.approvedAmount || 0).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Link href={`/requests/${req.id}`}>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10">
+                                  <ChevronRight className="h-4 w-4" />
+                                </Button>
+                              </Link>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
         </TabsContent>
       </Tabs>
 
@@ -324,14 +355,14 @@ export default function BillingReportPage() {
                 <Label className="text-[10px] font-black uppercase tracking-widest">N° Factura Electrónica</Label>
                 <div className="relative">
                   <Receipt className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input name="invoiceNumber" placeholder="Ej. FE-1025" required className="pl-10 font-bold" />
+                  <Input name="invoiceNumber" placeholder="Ej. FE-1025" required className="pl-10 font-bold uppercase" />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase tracking-widest">Consecutivo Interno RYS</Label>
                 <div className="relative">
                   <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input name="billingConsecutive" placeholder="Ej. 2025-001" required className="pl-10 font-bold" />
+                  <Input name="billingConsecutive" placeholder="Ej. 2025-001" required className="pl-10 font-bold uppercase" />
                 </div>
               </div>
             </div>
