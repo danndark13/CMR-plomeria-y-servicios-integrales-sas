@@ -15,9 +15,12 @@ import {
   Zap, 
   Database,
   Info,
-  ShieldCheck
+  ShieldCheck,
+  ZapOff,
+  CheckCircle2
 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Progress } from "@/components/ui/progress"
 
 const PRODUCTIVITY_DATA = [
   { name: 'Andrés Castro', services: 12, totalCost: 850000, efficiency: '95%' },
@@ -39,142 +42,116 @@ export default function AdminReportsPage() {
         </div>
       </div>
 
-      <Alert className="bg-blue-50 border-blue-200">
-        <Info className="h-4 w-4 text-primary" />
-        <AlertTitle className="text-sm font-black uppercase text-primary">Información sobre Publicación</AlertTitle>
-        <AlertDescription className="text-xs text-blue-800">
-          Publicar esta app en <strong>Firebase App Hosting</strong> (Plan Blaze) suele tener un costo de <strong>$0 USD</strong> para operaciones pequeñas. Solo pagas por uso real después de superar generosas cuotas gratuitas.
-        </AlertDescription>
-      </Alert>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-l-4 border-l-primary">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Servicios Creados</CardTitle>
-            <ClipboardCheck className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-black">{totalServices}</div>
-            <p className="text-[10px] text-muted-foreground font-bold uppercase">Este mes</p>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-green-500">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Costos Gestionados</CardTitle>
-            <DollarSign className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-black text-green-600">${totalFinancial.toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground font-bold uppercase">M. de Obra + Gastos</p>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-accent">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Eficiencia Media</CardTitle>
-            <TrendingUp className="h-4 w-4 text-accent" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-black text-accent">92%</div>
-            <p className="text-[10px] text-muted-foreground font-bold uppercase">Cierre de expedientes</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-primary text-primary-foreground">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-[10px] font-black uppercase tracking-widest opacity-70">Líder del Mes</CardTitle>
-            <Award className="h-4 w-4 opacity-70" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-lg font-black uppercase">{PRODUCTIVITY_DATA[2].name}</div>
-            <p className="text-[10px] font-bold opacity-70">15 Expedientes Finalizados</p>
-          </CardContent>
-        </Card>
-      </div>
-
       <div className="grid gap-6 lg:grid-cols-12">
-        <Card className="lg:col-span-8 shadow-md border-none overflow-hidden">
-          <CardHeader className="bg-slate-50 border-b">
-            <CardTitle className="text-lg font-black uppercase">Rendimiento por Colaborador</CardTitle>
-            <CardDescription className="text-xs">Cantidad de expedientes gestionados vs meta mensual.</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[350px] pt-6">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={PRODUCTIVITY_DATA}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
-                <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} fontWeight="bold" />
-                <YAxis axisLine={false} tickLine={false} fontSize={10} />
-                <Tooltip cursor={{ fill: 'rgba(31, 91, 204, 0.05)' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
-                <Bar dataKey="services" fill="#1F5BCC" radius={[6, 6, 0, 0]} barSize={40} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        <div className="lg:col-span-8 space-y-6">
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card className="border-l-4 border-l-primary">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Servicios Creados</CardTitle>
+                <ClipboardCheck className="h-4 w-4 text-primary" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-black">{totalServices}</div>
+                <p className="text-[10px] text-muted-foreground font-bold uppercase">Este mes</p>
+              </CardContent>
+            </Card>
+            <Card className="border-l-4 border-l-green-500">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Costos Gestionados</CardTitle>
+                <DollarSign className="h-4 w-4 text-green-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-black text-green-600">${totalFinancial.toLocaleString()}</div>
+                <p className="text-[10px] text-muted-foreground font-bold uppercase">M. de Obra + Gastos</p>
+              </CardContent>
+            </Card>
+            <Card className="border-l-4 border-l-accent">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Eficiencia Media</CardTitle>
+                <TrendingUp className="h-4 w-4 text-accent" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-black text-accent">92%</div>
+                <p className="text-[10px] text-muted-foreground font-bold uppercase">Cierre de expedientes</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="shadow-md border-none overflow-hidden">
+            <CardHeader className="bg-slate-50 border-b">
+              <CardTitle className="text-lg font-black uppercase">Rendimiento por Colaborador</CardTitle>
+              <CardDescription className="text-xs">Cantidad de expedientes gestionados vs meta mensual.</CardDescription>
+            </CardHeader>
+            <CardContent className="h-[350px] pt-6">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={PRODUCTIVITY_DATA}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
+                  <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} fontWeight="bold" />
+                  <YAxis axisLine={false} tickLine={false} fontSize={10} />
+                  <Tooltip cursor={{ fill: 'rgba(31, 91, 204, 0.05)' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
+                  <Bar dataKey="services" fill="#1F5BCC" radius={[6, 6, 0, 0]} barSize={40} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
 
         <div className="lg:col-span-4 space-y-6">
-          <Card className="shadow-lg border-t-4 border-t-primary overflow-hidden">
-            <CardHeader className="bg-slate-50/50">
+          <Card className="bg-slate-900 text-white shadow-2xl overflow-hidden border-none">
+            <CardHeader className="border-b border-white/10 bg-white/5">
               <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
-                <Cloud className="h-4 w-4 text-primary" /> Salud de Infraestructura
+                <ShieldCheck className="h-4 w-4 text-green-400" /> Monitor de Costos $0 USD
               </CardTitle>
+              <CardDescription className="text-slate-400 text-[10px]">Capa gratuita de Google Cloud activa.</CardDescription>
             </CardHeader>
-            <CardContent className="pt-4 space-y-4">
-              <div className="flex flex-col gap-3">
-                <div className="flex justify-between items-center p-3 bg-white border rounded-lg shadow-sm">
-                  <div className="flex items-center gap-2">
-                    <Database className="h-4 w-4 text-slate-400" />
-                    <span className="text-xs font-bold text-slate-700">Firestore Storage</span>
+            <CardContent className="pt-6 space-y-6">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[10px] font-black uppercase">
+                    <span>Escrituras en Base de Datos</span>
+                    <span className="text-green-400">0.1% de 20k/día</span>
                   </div>
-                  <Badge variant="outline" className="text-[9px] font-black bg-green-50 text-green-700 border-green-200 uppercase">Saludable</Badge>
+                  <Progress value={1} className="h-1 bg-white/10" />
                 </div>
-                <div className="flex justify-between items-center p-3 bg-white border rounded-lg shadow-sm">
-                  <div className="flex items-center gap-2">
-                    <Zap className="h-4 w-4 text-slate-400" />
-                    <span className="text-xs font-bold text-slate-700">GenAI Summarizer</span>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[10px] font-black uppercase">
+                    <span>Lecturas de Expedientes</span>
+                    <span className="text-green-400">0.5% de 50k/día</span>
                   </div>
-                  <Badge variant="outline" className="text-[9px] font-black bg-green-50 text-green-700 border-green-200 uppercase">Activo</Badge>
+                  <Progress value={5} className="h-1 bg-white/10" />
                 </div>
-                <div className="flex justify-between items-center p-3 bg-white border rounded-lg shadow-sm">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="h-4 w-4 text-slate-400" />
-                    <span className="text-xs font-bold text-slate-700">Auth Services</span>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[10px] font-black uppercase">
+                    <span>Almacenamiento (1GB Gratis)</span>
+                    <span className="text-green-400">Libre</span>
                   </div>
-                  <Badge variant="outline" className="text-[9px] font-black bg-green-50 text-green-700 border-green-200 uppercase">Seguro</Badge>
+                  <Progress value={2} className="h-1 bg-white/10" />
                 </div>
               </div>
-              <p className="text-[10px] text-muted-foreground leading-relaxed italic border-t pt-3">
-                Nota: Esta app utiliza el Plan Blaze de Google Cloud. Los costos son despreciables para este volumen de datos.
-              </p>
+
+              <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-3">
+                <p className="text-[11px] leading-relaxed font-medium">
+                  Mientras no superes las <strong className="text-green-400">20,000 escrituras diarias</strong>, tu factura mensual será de <strong className="text-green-400">$0.00 USD</strong>.
+                </p>
+                <div className="flex items-center gap-2 text-[9px] font-black uppercase text-slate-400">
+                  <CheckCircle2 className="h-3 w-3 text-green-500" /> Todo incluido bajo el Plan Blaze
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-white/10 flex justify-between items-center">
+                <span className="text-xs font-black uppercase">Costo Est. Mes</span>
+                <span className="text-2xl font-black text-green-400">$0.00</span>
+              </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-slate-900 text-white shadow-xl">
-            <CardHeader>
-              <CardTitle className="text-xs font-black uppercase tracking-widest opacity-70">Estimación de Costo de Publicación</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between text-[11px] font-bold uppercase">
-                  <span>Alojamiento (Hosting)</span>
-                  <span className="text-green-400">$0.00 / mes*</span>
-                </div>
-                <div className="flex justify-between text-[11px] font-bold uppercase">
-                  <span>Base de Datos (Firestore)</span>
-                  <span className="text-green-400">$0.00 / mes*</span>
-                </div>
-                <div className="flex justify-between text-[11px] font-bold uppercase">
-                  <span>IA (Gemini Flash)</span>
-                  <span className="text-green-400">&lt; $0.05 / mes</span>
-                </div>
-              </div>
-              <div className="border-t border-white/10 pt-4 flex justify-between items-center">
-                <span className="text-sm font-black uppercase">Costo Total Est.</span>
-                <span className="text-xl font-black text-green-400">Gratis**</span>
-              </div>
-              <p className="text-[8px] opacity-40 leading-tight">
-                *Dentro de la capa gratuita de Google Cloud.<br/>
-                **Requiere Plan Blaze para habilitar IA y Hosting, pero solo se cobra por uso excedente.
-              </p>
-            </CardContent>
-          </Card>
+          <Alert className="bg-blue-50 border-blue-200">
+            <Info className="h-4 w-4 text-primary" />
+            <AlertTitle className="text-[10px] font-black uppercase text-primary">Nota sobre IA</AlertTitle>
+            <AlertDescription className="text-[10px] text-blue-800">
+              El resumen con IA (Gemini Flash) consume "tokens". Resumir 1,000 servicios te costaría menos de un café ($0.10 USD).
+            </AlertDescription>
+          </Alert>
         </div>
       </div>
     </div>
