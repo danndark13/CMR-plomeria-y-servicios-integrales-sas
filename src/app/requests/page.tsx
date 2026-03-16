@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { 
   Table, 
@@ -47,6 +47,7 @@ import { collection, doc, addDoc } from 'firebase/firestore'
 import { toast } from "@/hooks/use-toast"
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
+import { ServiceRequest } from "@/lib/types"
 
 export default function RequestsPage() {
   const router = useRouter()
@@ -71,19 +72,30 @@ export default function RequestsPage() {
   }, [db, user])
   const { data: firestoreRequests, isLoading: isRequestsLoading } = useCollection(requestsQuery)
 
-  // Combined requests (Firestore + Mocks for demo) - Ensure uniqueness
-  const allRequests = firestoreRequests 
-    ? [
-        ...firestoreRequests, 
-        ...MOCK_REQUESTS.filter(mr => !firestoreRequests.find(fr => fr.id === mr.id || fr.claimNumber === mr.claimNumber))
-      ]
-    : MOCK_REQUESTS
+  // Robust unique merge
+  const allRequests = useMemo(() => {
+    const combined = [...(firestoreRequests || [])]
+    const seenIds = new Set(combined.map(r => r.id))
+    const seenClaims = new Set(combined.map(r => r.claimNumber?.toUpperCase()))
+    
+    for (const mock of MOCK_REQUESTS) {
+      const mockClaim = mock.claimNumber?.toUpperCase()
+      if (!seenIds.has(mock.id) && !seenClaims.has(mockClaim)) {
+        combined.push(mock)
+        seenIds.add(mock.id)
+        seenClaims.add(mockClaim)
+      }
+    }
+    return combined
+  }, [firestoreRequests])
 
-  const filteredRequests = allRequests.filter(req => 
-    (req.claimNumber || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (req.id || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (req.insuredName || "").toLowerCase().includes(searchTerm.toLowerCase())
-  ).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+  const filteredRequests = useMemo(() => {
+    return allRequests.filter(req => 
+      (req.claimNumber || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (req.id || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (req.insuredName || "").toLowerCase().includes(searchTerm.toLowerCase())
+    ).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+  }, [allRequests, searchTerm])
 
   // Fetch Companies for the form
   const companiesQuery = useMemoFirebase(() => {
@@ -313,7 +325,6 @@ export default function RequestsPage() {
         </CardContent>
       </Card>
 
-      {/* Dialog for Creating New Service */}
       <Dialog open={isCreating} onOpenChange={setIsCreating}>
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>

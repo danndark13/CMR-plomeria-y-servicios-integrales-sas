@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { 
   ClipboardList, 
@@ -48,6 +48,7 @@ import { toast } from "@/hooks/use-toast"
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { cn } from "@/lib/utils"
+import { ServiceRequest } from "@/lib/types"
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -81,6 +82,23 @@ export default function DashboardPage() {
     setMounted(true)
   }, [])
 
+  // Robust unique merge
+  const allRequests = useMemo(() => {
+    const combined = [...(firestoreRequests || [])]
+    const seenIds = new Set(combined.map(r => r.id))
+    const seenClaims = new Set(combined.map(r => r.claimNumber?.toUpperCase()))
+    
+    for (const mock of MOCK_REQUESTS) {
+      const mockClaim = mock.claimNumber?.toUpperCase()
+      if (!seenIds.has(mock.id) && !seenClaims.has(mockClaim)) {
+        combined.push(mock)
+        seenIds.add(mock.id)
+        seenClaims.add(mockClaim)
+      }
+    }
+    return combined
+  }, [firestoreRequests])
+
   if (!mounted || isUserLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
@@ -89,13 +107,6 @@ export default function DashboardPage() {
       </div>
     )
   }
-
-  const allRequests = firestoreRequests 
-    ? [
-        ...firestoreRequests, 
-        ...MOCK_REQUESTS.filter(mr => !firestoreRequests.find(fr => fr.id === mr.id || fr.claimNumber === mr.claimNumber))
-      ]
-    : MOCK_REQUESTS
 
   const allCompanies = (companies && companies.length > 0) ? companies : MOCK_COMPANIES
 
@@ -176,7 +187,6 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* COLUMNA 1: ALERTAS DE SOBRECARGA */}
         <Card className="border-destructive/20 bg-destructive/5 shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2 text-destructive font-black uppercase">
@@ -205,7 +215,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* COLUMNA 2: NOTIFICACIONES DE SERVICIOS PROGRAMADOS */}
         <Card className="border-accent/20 bg-accent/5 shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2 text-accent-foreground font-black uppercase">
@@ -245,7 +254,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* COLUMNA 3: ÚLTIMOS SERVICIOS CREADOS */}
         <Card className="shadow-sm border-l-4 border-l-primary">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2 font-black uppercase">
@@ -307,7 +315,6 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Quick Access Create Service Dialog */}
       <Dialog open={isCreating} onOpenChange={setIsCreating}>
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
