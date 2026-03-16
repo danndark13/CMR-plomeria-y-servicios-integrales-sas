@@ -124,18 +124,21 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-6">
-              {MOCK_REQUESTS.slice(0, 5).map((req) => (
-                <div key={req.id} className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/20 text-accent">
-                    <CategoryIcon category={req.category} className="h-5 w-5" />
+              {MOCK_REQUESTS.slice(0, 5).map((req) => {
+                const companyName = MOCK_COMPANIES.find(c => c.id === req.companyId)?.name || "Asistencia"
+                return (
+                  <div key={req.id} className="flex items-center gap-4">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/20 text-accent">
+                      <CategoryIcon category={req.category} className="h-5 w-5" />
+                    </div>
+                    <div className="flex flex-1 flex-col overflow-hidden">
+                      <p className="text-sm font-bold leading-none truncate text-primary">{req.claimNumber}</p>
+                      <p className="text-xs text-muted-foreground truncate">{companyName} • {req.category}</p>
+                    </div>
+                    <StatusBadge status={req.status} />
                   </div>
-                  <div className="flex flex-1 flex-col overflow-hidden">
-                    <p className="text-sm font-medium leading-none truncate">{req.accountName}</p>
-                    <p className="text-xs text-muted-foreground truncate">{req.category}</p>
-                  </div>
-                  <StatusBadge status={req.status} />
-                </div>
-              ))}
+                )
+              })}
             </div>
           </CardContent>
         </Card>
