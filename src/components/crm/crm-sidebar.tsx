@@ -31,7 +31,8 @@ import {
   SidebarMenuItem,
   SidebarGroup,
   SidebarGroupLabel,
-  SidebarSeparator
+  SidebarSeparator,
+  useSidebar
 } from "@/components/ui/sidebar"
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
 import { doc } from 'firebase/firestore'
@@ -45,6 +46,7 @@ export function CRMSidebar() {
   const { user } = useUser()
   const db = useFirestore()
   const auth = getAuth()
+  const { setOpenMobile } = useSidebar()
 
   const profileRef = useMemoFirebase(() => {
     if (!user || !db) return null
@@ -61,6 +63,10 @@ export function CRMSidebar() {
       })
       router.push("/login")
     })
+  }
+
+  const closeSidebar = () => {
+    setOpenMobile(false)
   }
 
   // Define navigation based on role
@@ -96,7 +102,11 @@ export function CRMSidebar() {
   return (
     <Sidebar variant="sidebar" collapsible="offcanvas" className="bg-white border-r shadow-xl">
       <SidebarHeader className="p-6">
-        <Link href="/profile" className="flex items-center gap-4 group transition-all hover:bg-slate-50 p-2 rounded-xl">
+        <Link 
+          href="/profile" 
+          onClick={closeSidebar}
+          className="flex items-center gap-4 group transition-all hover:bg-slate-50 p-2 rounded-xl"
+        >
           <Avatar className="h-12 w-12 border-2 border-primary/20 shadow-md group-hover:scale-105 transition-transform">
             <AvatarImage src={`https://picsum.photos/seed/${user?.uid || '1'}/100/100`} />
             <AvatarFallback className="bg-primary text-primary-foreground font-bold text-lg">
@@ -134,7 +144,7 @@ export function CRMSidebar() {
                       : "text-slate-600 hover:bg-slate-50 hover:text-primary"
                   )}
                 >
-                  <Link href={item.href}>
+                  <Link href={item.href} onClick={closeSidebar}>
                     <item.icon className={cn("h-5 w-5", pathname === item.href ? "text-white" : "text-slate-400")} />
                     <span className="text-sm font-medium">{item.title}</span>
                   </Link>
@@ -162,7 +172,7 @@ export function CRMSidebar() {
                         : "text-slate-600 hover:bg-slate-50 hover:text-primary"
                     )}
                   >
-                    <Link href={item.href}>
+                    <Link href={item.href} onClick={closeSidebar}>
                       <item.icon className="h-5 w-5 text-slate-400" />
                       <span className="text-sm font-medium">{item.title}</span>
                     </Link>
@@ -190,7 +200,7 @@ export function CRMSidebar() {
                       : "text-slate-600 hover:bg-slate-50 hover:text-primary"
                   )}
                 >
-                  <Link href={item.href}>
+                  <Link href={item.href} onClick={closeSidebar}>
                     <item.icon className="h-5 w-5 text-slate-400" />
                     <span className="text-sm font-medium">{item.title}</span>
                   </Link>
@@ -203,7 +213,10 @@ export function CRMSidebar() {
 
       <SidebarFooter className="p-4 mt-auto">
         <button 
-          onClick={handleLogout}
+          onClick={() => {
+            handleLogout();
+            closeSidebar();
+          }}
           className="flex w-full items-center gap-3 rounded-xl px-4 py-4 text-slate-600 hover:bg-destructive/5 hover:text-destructive transition-all group"
         >
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 group-hover:bg-destructive/10">
