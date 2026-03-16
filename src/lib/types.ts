@@ -53,6 +53,8 @@ export interface Advance {
   reason: string;
   date: string;
   createdByUserId: string;
+  isPaidInPayroll?: boolean; // Nuevo: indica si ya se descontó en una nómina
+  payrollId?: string;        // ID de la nómina donde se descontó
 }
 
 export interface TechnicianIntervention {
@@ -64,6 +66,8 @@ export interface TechnicianIntervention {
   laborCost: number;     // Costo de mano de obra para este técnico
   detailedExpenses: Expense[]; // Lista de gastos detallados
   authorName?: string;   // Nombre de quien hizo el reporte
+  payrollStatus?: 'pending' | 'processed'; // Nuevo: estado de pago en nómina
+  payrollId?: string;                      // ID de la nómina vinculada
 }
 
 export interface AssistanceCompany {
@@ -88,6 +92,19 @@ export interface Reminder {
   technicianId?: string;
   requestId?: string;
   createdAt: string;
+}
+
+export interface PayrollRecord {
+  id: string;
+  technicianId: string;
+  date: string;
+  totalLabor: number;
+  totalExpenses: number;
+  totalAdvances: number;
+  netPaid: number;
+  itemsCount: number;
+  processedInterventionIds: string[];
+  processedAdvanceIds: string[];
 }
 
 export interface ServiceRequest {

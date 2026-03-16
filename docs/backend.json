@@ -92,6 +92,22 @@
         "lastModifiedBy": { "type": "string" }
       },
       "required": ["description", "quantity", "unitValue"]
+    },
+    "PayrollRecord": {
+      "title": "PayrollRecord",
+      "type": "object",
+      "description": "Historativo de pagos de nómina realizados a técnicos.",
+      "properties": {
+        "id": { "type": "string" },
+        "technicianId": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "totalLabor": { "type": "number" },
+        "totalExpenses": { "type": "number" },
+        "totalAdvances": { "type": "number" },
+        "netPaid": { "type": "number" },
+        "itemsCount": { "type": "number" }
+      },
+      "required": ["id", "technicianId", "date", "netPaid"]
     }
   },
   "auth": {
@@ -122,6 +138,10 @@
       {
         "path": "/service_requests/{serviceRequestId}",
         "definition": { "entityName": "ServiceRequest", "schema": { "$ref": "#/backend/entities/ServiceRequest" }, "description": "Service requests." }
+      },
+      {
+        "path": "/payroll_history/{payrollId}",
+        "definition": { "entityName": "PayrollRecord", "schema": { "$ref": "#/backend/entities/PayrollRecord" }, "description": "Historical payroll records." }
       }
     ]
   }
