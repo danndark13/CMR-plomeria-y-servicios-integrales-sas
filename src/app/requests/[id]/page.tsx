@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert } from "@/components/ui/alert"
+import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
   ArrowLeft, 
@@ -31,6 +32,8 @@ import {
   CalendarDays,
   Clock,
   CheckCircle2,
+  PackageCheck,
+  PackageX,
   User as UserIcon
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
@@ -93,7 +96,6 @@ export default function RequestDetailPage() {
   const profileRef = useMemoFirebase(() => (user && db ? doc(db, 'user_profiles', user.uid) : null), [user, db])
   const { data: profile, isLoading: isProfileLoading } = useDoc(profileRef)
 
-  // Logic for automatic status change (5 minutes after appointment)
   useEffect(() => {
     if (!localRequest || !db || !requestRef) return;
     
@@ -104,7 +106,6 @@ export default function RequestDetailPage() {
         const fiveMinutes = 5 * 60 * 1000;
 
         if (currentTime > (visitTime + fiveMinutes)) {
-          // Auto-update to in_progress
           updateDoc(requestRef, {
             status: 'in_progress',
             updatedAt: new Date().toISOString()
@@ -116,8 +117,8 @@ export default function RequestDetailPage() {
       }
     };
 
-    const interval = setInterval(checkStatusUpdate, 60000); // Check every minute
-    checkStatusUpdate(); // Initial check
+    const interval = setInterval(checkStatusUpdate, 60000);
+    checkStatusUpdate();
 
     return () => clearInterval(interval);
   }, [localRequest, db, requestRef]);
@@ -157,6 +158,45 @@ export default function RequestDetailPage() {
   const handleUpdateField = (field: keyof ServiceRequest, value: any) => {
     if (!canEdit) return
     setLocalRequest(prev => prev ? { ...prev, [field]: value } : null)
+  }
+
+  const handleToggleExpenseUsage = (interventionId: string, expenseId: string, currentUnused: boolean) => {
+    if (!db || !requestRef || !canEdit) return
+
+    const updatedInterventions = (localRequest.interventions || []).map(interv => {
+      if (interv.id === interventionId) {
+        const updatedExpenses = (interv.detailedExpenses || []).map(exp => {
+          if (exp.id === expenseId) {
+            return { ...exp, isUnused: !currentUnused }
+          }
+          return exp
+        })
+        return { ...interv, detailedExpenses: updatedExpenses }
+      }
+      return interv
+    })
+
+    const updatedData = {
+      interventions: updatedInterventions,
+      updatedAt: new Date().toISOString()
+    }
+
+    updateDoc(requestRef, updatedData)
+      .then(() => {
+        setLocalRequest(prev => prev ? { ...prev, ...updatedData } : null)
+        toast({ 
+          title: !currentUnused ? "Material en Stock" : "Material Consumido", 
+          description: !currentUnused ? "El insumo se ha devuelto al inventario." : "El insumo se ha marcado como usado en el servicio."
+        })
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: requestRef.path,
+          operation: "update",
+          requestResourceData: updatedData,
+        })
+        errorEmitter.emit("permission-error", permissionError)
+      })
   }
 
   const handleScheduleVisit = () => {
@@ -332,7 +372,12 @@ export default function RequestDetailPage() {
 
   const interventions = localRequest.interventions || []
   const totalLabor = interventions.reduce((sum, i) => sum + (i.laborCost || 0), 0)
-  const totalExpenses = interventions.flatMap(i => i.detailedExpenses || []).reduce((sum, e) => sum + (e.amount || 0), 0)
+  
+  // Lógica: Solo sumar gastos que NO estén marcados como 'isUnused'
+  const totalExpenses = interventions.flatMap(i => i.detailedExpenses || [])
+    .filter(e => !e.isUnused)
+    .reduce((sum, e) => sum + (e.amount || 0), 0)
+    
   const totalSuggested = totalLabor + totalExpenses
 
   return (
@@ -372,7 +417,6 @@ export default function RequestDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-12">
         <div className="lg:col-span-8 space-y-6">
-          {/* Section: Schedule Visit */}
           <Card className="border-l-4 border-l-accent shadow-lg bg-accent/5">
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <div>
@@ -650,29 +694,52 @@ export default function RequestDetailPage() {
                       </p>
                       
                       {item.detailedExpenses && item.detailedExpenses.length > 0 && (
-                        <div className="grid gap-2">
+                        <div className="grid gap-3">
+                          <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Control de Insumos y Gastos</p>
                           {item.detailedExpenses.map(exp => {
                             const stock = checkWarehouseStock(exp.description)
                             return (
-                              <div key={exp.id} className="flex flex-col gap-2 p-3 bg-slate-50 rounded-lg border">
-                                <div className="flex justify-between items-center">
-                                  <div className="flex flex-col">
-                                    <span className="text-[10px] font-black uppercase text-slate-800">{exp.description}</span>
-                                    <span className="text-[9px] font-bold text-muted-foreground">
-                                      {exp.quantity} {exp.unit} x ${exp.unitValue?.toLocaleString() || ((exp.amount || 0) / (exp.quantity || 1)).toLocaleString()}
-                                    </span>
-                                  </div>
-                                  <span className="text-xs font-mono font-black text-slate-800">${(exp.amount || 0).toLocaleString()}</span>
-                                </div>
-                                {stock && (
-                                  <Alert className="bg-blue-50 border-blue-200 py-1.5 px-3">
-                                    <div className="flex items-center gap-2">
-                                      <Warehouse className="h-3 w-3 text-blue-600" />
-                                      <p className="text-[10px] font-bold text-blue-800 uppercase">
-                                        STOCK EN BODEGA: {stock.quantity} und de "{stock.description}"
-                                      </p>
+                              <div key={exp.id} className={`flex flex-col gap-3 p-4 rounded-xl border-2 transition-all ${exp.isUnused ? 'bg-slate-50 border-dashed border-slate-200 grayscale' : 'bg-white border-primary/10 shadow-sm'}`}>
+                                <div className="flex justify-between items-start">
+                                  <div className="flex items-center gap-3">
+                                    <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${exp.isUnused ? 'bg-slate-200 text-slate-500' : 'bg-green-100 text-green-600'}`}>
+                                      {exp.isUnused ? <PackageX className="h-5 w-5" /> : <PackageCheck className="h-5 w-5" />}
                                     </div>
-                                  </Alert>
+                                    <div className="flex flex-col">
+                                      <span className="text-sm font-black uppercase text-slate-800">{exp.description}</span>
+                                      <span className="text-[10px] font-bold text-muted-foreground uppercase">
+                                        {exp.quantity} {exp.unit} x ${exp.unitValue?.toLocaleString() || ((exp.amount || 0) / (exp.quantity || 1)).toLocaleString()}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className={`text-sm font-mono font-black ${exp.isUnused ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+                                      ${(exp.amount || 0).toLocaleString()}
+                                    </span>
+                                    <div className="mt-1">
+                                      <Badge variant={exp.isUnused ? "outline" : "default"} className={`text-[9px] font-black uppercase ${exp.isUnused ? 'text-slate-400' : 'bg-green-600 text-white'}`}>
+                                        {exp.isUnused ? 'En Stock / Sobrante' : 'Usado en Servicio'}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {canEdit && (
+                                  <div className="flex items-center justify-between pt-3 border-t border-dashed">
+                                    <div className="flex items-center gap-2">
+                                      <Switch 
+                                        checked={!exp.isUnused} 
+                                        onCheckedChange={() => handleToggleExpenseUsage(item.id, exp.id, exp.isUnused || false)}
+                                        className="data-[state=checked]:bg-green-600"
+                                      />
+                                      <Label className="text-[10px] font-black uppercase text-slate-500">¿Material Consumido?</Label>
+                                    </div>
+                                    {stock && (
+                                      <div className="flex items-center gap-2 text-[9px] font-black uppercase text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                                        <Warehouse className="h-3 w-3" /> Bodega: {stock.quantity} und
+                                      </div>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                             )
@@ -702,7 +769,7 @@ export default function RequestDetailPage() {
             <CardContent className="pt-6 space-y-6">
               <div className="space-y-3">
                 <div className="flex justify-between text-[10px] font-black uppercase text-slate-500 tracking-tighter">
-                  <span>Sugerido (M.O + Insumos)</span>
+                  <span>Sugerido (M.O + Insumos Usados)</span>
                   <Badge variant="outline" className="text-[9px] border-primary/20 bg-primary/5 text-primary">Pre-Liquidado</Badge>
                 </div>
                 <div className="p-4 bg-slate-900 rounded-xl flex items-center justify-between text-white shadow-2xl border-b-4 border-primary">
@@ -711,6 +778,9 @@ export default function RequestDetailPage() {
                     <RefreshCw className="h-5 w-5 opacity-40 animate-pulse" />
                   </div>
                 </div>
+                <p className="text-[9px] text-muted-foreground italic text-center">
+                  * No se incluyen materiales marcados como "En Stock".
+                </p>
               </div>
 
               {canEdit && (
