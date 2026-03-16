@@ -40,8 +40,7 @@ const MOCK_USERS = [
     status: 'active',
     cedula: '1110564748',
     phone: '3167533657'
-  },
-  { id: 'SER02', name: 'Laura Martinez', email: 'ser02@rys-sas.com', role: 'Servicio al Cliente', status: 'inactive' },
+  }
 ]
 
 export default function AdminUsersPage() {
@@ -68,7 +67,7 @@ export default function AdminUsersPage() {
   const handleChangePassword = (userId: string) => {
     toast({
       title: "Cambio de Contraseña",
-      description: `Se ha solicitado el cambio de clave para el ID: ${userId}.`
+      description: `Se ha solicitado el cambio de clave para el ID: ${userId}. La nueva clave temporal es RYS2025.`
     })
   }
 

@@ -21,20 +21,25 @@ export default function LoginPage() {
     e.preventDefault()
     setIsLoading(true)
 
-    // Simulación de autenticación basada en IDs
+    // Simulación de autenticación con contraseña asignada: RYS2025
     setTimeout(() => {
       setIsLoading(false)
-      if (userId.startsWith("ADMIN") || userId.startsWith("CON") || userId.startsWith("SER")) {
+      const validIds = userId.startsWith("ADMIN") || userId.startsWith("CON") || userId.startsWith("SER")
+      const isCorrectPassword = password === "RYS2025"
+
+      if (validIds && isCorrectPassword) {
         toast({
           title: "Sesión Iniciada",
-          description: `Bienvenido al sistema, ${userId}.`,
+          description: `Bienvenido al sistema, Daniel Céspedes (${userId}).`,
         })
         router.push("/")
       } else {
         toast({
           variant: "destructive",
           title: "Error de Acceso",
-          description: "ID de usuario o contraseña incorrectos.",
+          description: !isCorrectPassword && validIds 
+            ? "Contraseña incorrecta para este ID." 
+            : "ID de usuario o contraseña incorrectos.",
         })
       }
     }, 1500)
@@ -88,6 +93,7 @@ export default function LoginPage() {
                     required 
                   />
                 </div>
+                <p className="text-[10px] text-muted-foreground italic">Pista para pruebas: RYS2025</p>
               </div>
               <div className="flex items-center space-x-2">
                 <Checkbox id="remember" />
