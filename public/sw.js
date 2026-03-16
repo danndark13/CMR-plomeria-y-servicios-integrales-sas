@@ -1,6 +1,8 @@
+
 const CACHE_NAME = 'rys-gestion-v1';
 const OFFLINE_URL = '/offline.html';
 
+// Archivos básicos para que la app sea instalable
 const ASSETS_TO_CACHE = [
   '/',
   '/offline.html',

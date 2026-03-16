@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -52,7 +53,7 @@ export default function LoginPage() {
     setIsIos(isIosDevice)
 
     const handler = (e: any) => {
-      console.log('Evento beforeinstallprompt capturado');
+      console.log('RYS PWA: Evento de instalación capturado');
       e.preventDefault()
       setDeferredPrompt(e)
     }
@@ -65,7 +66,7 @@ export default function LoginPage() {
       setShowInstallHelp(true)
       toast({
         title: "Instalación Manual",
-        description: "El navegador no detecta el botón. Sigue la ayuda de abajo.",
+        description: "El navegador no detecta el botón. Sigue los pasos de ayuda.",
       })
       return
     }
@@ -73,7 +74,7 @@ export default function LoginPage() {
     const { outcome } = await deferredPrompt.userChoice
     if (outcome === 'accepted') {
       setDeferredPrompt(null)
-      toast({ title: "¡Instalación Iniciada!", description: "RYS Gestión se está añadiendo a tu equipo." })
+      toast({ title: "¡Instalación Iniciada!", description: "La app se está añadiendo a tu dispositivo." })
     }
   }
 
@@ -216,13 +217,14 @@ export default function LoginPage() {
           <div className="space-y-4 animate-in slide-in-from-top-2">
             <Alert className="bg-white border-primary/20">
               <HelpCircle className="h-4 w-4 text-primary" />
-              <AlertTitle className="text-[10px] font-black uppercase text-primary">Solución Manual</AlertTitle>
+              <AlertTitle className="text-[10px] font-black uppercase text-primary">Solución Manual Definitiva</AlertTitle>
               <AlertDescription className="text-[10px] text-slate-600 font-medium space-y-3">
-                <p>Si el botón no funciona:</p>
-                <ol className="list-decimal pl-4 space-y-1">
-                  <li>Pulsa los <strong>tres puntos (⋮)</strong> de Chrome.</li>
-                  <li>Busca <strong>"Instalar aplicación"</strong>.</li>
+                <p>Si el botón azul no responde, es un bloqueo de tu navegador. Sigue estos pasos:</p>
+                <ol className="list-decimal pl-4 space-y-2 font-bold">
+                  <li>Pulsa los <strong className="text-primary">TRES PUNTOS (⋮)</strong> arriba a la derecha en Chrome.</li>
+                  <li>Busca y pulsa la opción <strong className="text-primary">"Instalar aplicación"</strong> o "Añadir a pantalla de inicio".</li>
                 </ol>
+                <p className="text-destructive font-black">IMPORTANTE: Si no ves la opción, pulsa el botón de abajo para resetear la app y vuelve a intentar.</p>
               </AlertDescription>
             </Alert>
             <Button 

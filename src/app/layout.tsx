@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { Metadata } from 'next';
@@ -23,14 +24,14 @@ export default function RootLayout({
   const isDashboard = pathname === '/';
 
   useEffect(() => {
-    if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
+    if ('serviceWorker' in navigator) {
       window.addEventListener('load', function() {
         navigator.serviceWorker.register('/sw.js').then(
           function(registration) {
-            console.log('RYS PWA: Registro exitoso:', registration.scope);
+            console.log('RYS PWA: Service Worker registrado con éxito:', registration.scope);
           },
           function(err) {
-            console.error('RYS PWA: Error de registro:', err);
+            console.error('RYS PWA: Error al registrar Service Worker:', err);
           }
         );
       });

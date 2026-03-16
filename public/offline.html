@@ -1,75 +1,22 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sin Conexión - RYS Gestión</title>
+    <title>RYS Gestión - Sin Conexión</title>
     <style>
-        body {
-            font-family: 'Inter', -apple-system, sans-serif;
-            background-color: #f8fafc;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            color: #1e293b;
-            text-align: center;
-            padding: 20px;
-        }
-        .container {
-            max-width: 400px;
-            background: white;
-            padding: 40px;
-            border-radius: 24px;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
-        }
-        .icon {
-            width: 80px;
-            height: 80px;
-            background: #1F5BCC10;
-            color: #1F5BCC;
-            border-radius: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 20px;
-        }
-        h1 {
-            font-weight: 900;
-            text-transform: uppercase;
-            letter-spacing: -0.05em;
-            margin: 0 0 10px;
-            color: #1F5BCC;
-        }
-        p {
-            font-size: 14px;
-            color: #64748b;
-            line-height: 1.6;
-            margin-bottom: 30px;
-        }
-        button {
-            background: #1F5BCC;
-            color: white;
-            border: none;
-            padding: 14px 28px;
-            border-radius: 12px;
-            font-weight: 800;
-            text-transform: uppercase;
-            cursor: pointer;
-            width: 100%;
-        }
+        body { font-family: 'Inter', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #ECF1FC; color: #1F5BCC; text-align: center; padding: 20px; }
+        .icon { font-size: 64px; margin-bottom: 20px; }
+        h1 { font-weight: 900; text-transform: uppercase; margin: 0; }
+        p { color: #64748b; font-weight: 500; }
+        button { background: #1F5BCC; color: white; border: none; padding: 12px 24px; border-radius: 12px; font-weight: bold; cursor: pointer; margin-top: 20px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="icon">
-            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l22 22"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><path d="M12 20h.01"/></svg>
-        </div>
-        <h1>Sin Conexión</h1>
-        <p>Parece que no tienes acceso a internet. RYS Gestión requiere conexión para sincronizar los servicios.</p>
-        <button onclick="window.location.reload()">Reintentar Conexión</button>
-    </div>
+    <div class="icon">📡</div>
+    <h1>Sin Conexión</h1>
+    <p>RYS Gestión requiere internet para sincronizar datos.<br>Por favor, revisa tu señal y reintenta.</p>
+    <button onclick="window.location.reload()">REINTENTAR ACCESO</button>
 </body>
 </html>
