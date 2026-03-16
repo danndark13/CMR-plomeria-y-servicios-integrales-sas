@@ -1,3 +1,4 @@
+
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -21,7 +22,9 @@ import {
   User,
   AlertCircle,
   BellRing,
-  AlertTriangle
+  AlertTriangle,
+  Calculator,
+  ArrowRight
 } from "lucide-react"
 import { MOCK_REQUESTS, MOCK_COMPANIES, MOCK_TECHNICIANS, MOCK_REMINDERS } from "@/lib/mock-data"
 import { StatusBadge } from "@/components/crm/status-badge"
@@ -55,7 +58,7 @@ export default function DashboardPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-primary">Panel de Control</h1>
-          <p className="text-muted-foreground">Resumen operativo y alertas prioritarias.</p>
+          <p className="text-muted-foreground">Resumen operativo y accesos administrativos.</p>
         </div>
         <div className="flex gap-2">
           <Link href="/calendar">
@@ -68,6 +71,29 @@ export default function DashboardPage() {
           </Button>
         </div>
       </div>
+
+      {/* ACCESO EXCLUSIVO ADMIN: HUB DE CONTABILIDAD */}
+      <Card className="bg-primary border-none text-primary-foreground shadow-xl overflow-hidden relative">
+        <div className="absolute right-0 top-0 h-full w-1/3 bg-white/10 skew-x-12 translate-x-12" />
+        <CardHeader className="relative z-10">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
+              <Calculator className="h-6 w-6" />
+            </div>
+            <div>
+              <CardTitle className="text-xl">Gestión Contable</CardTitle>
+              <CardDescription className="text-primary-foreground/70">Facturación, Nómina y Conciliación Financiera.</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="relative z-10">
+          <Link href="/accounting">
+            <Button variant="secondary" className="w-full md:w-auto gap-2 bg-white text-primary hover:bg-white/90">
+              Ingresar a Contabilidad <ArrowRight className="h-4 w-4" />
+            </Button>
+          </Link>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card className="hover:shadow-md transition-shadow">
