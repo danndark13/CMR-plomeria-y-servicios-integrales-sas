@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -33,15 +33,40 @@ export default function AdminUsersPage() {
 
   const { data: users, isLoading } = useCollection(usersQuery)
 
-  const filteredUsers = users?.filter(u => {
-    const search = searchTerm.toLowerCase()
-    return (
-      (u.username?.toLowerCase() || "").includes(search) ||
-      (u.firstName?.toLowerCase() || "").includes(search) ||
-      (u.lastName?.toLowerCase() || "").includes(search) ||
-      (u.cedula || "").includes(search)
-    )
-  }).sort((a, b) => (a.username || "").localeCompare(b.username || ""))
+  // CONSOLIDATION LOGIC: Filter duplicates by username
+  const filteredUsers = useMemo(() => {
+    if (!users) return []
+    
+    // Group by username to avoid duplicates in display caused by multiple sessions
+    const uniqueMap = new Map()
+    users.forEach(u => {
+      const uname = (u.username || "").toUpperCase().trim()
+      if (!uname) return;
+      
+      // If we already have this username, we keep the one that is active or the most "complete"
+      if (!uniqueMap.has(uname)) {
+        uniqueMap.set(uname, u)
+      } else {
+        const existing = uniqueMap.get(uname)
+        // Keep the active one or the one with a real firstName
+        if (u.isActive && !existing.isActive) {
+          uniqueMap.set(uname, u)
+        }
+      }
+    })
+
+    return Array.from(uniqueMap.values())
+      .filter(u => {
+        const search = searchTerm.toLowerCase()
+        return (
+          (u.username?.toLowerCase() || "").includes(search) ||
+          (u.firstName?.toLowerCase() || "").includes(search) ||
+          (u.lastName?.toLowerCase() || "").includes(search) ||
+          (u.cedula || "").includes(search)
+        )
+      })
+      .sort((a, b) => (a.username || "").localeCompare(b.username || ""))
+  }, [users, searchTerm])
 
   const handleSaveUser = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -51,10 +76,21 @@ export default function AdminUsersPage() {
     const formData = new FormData(e.currentTarget)
     const username = (formData.get("username") as string || "").toUpperCase().trim()
     
+    // Check for duplicates if creating new
+    if (!editingUser && filteredUsers.some(u => u.username === username)) {
+      toast({
+        variant: "destructive",
+        title: "ID Duplicado",
+        description: `El usuario ${username} ya existe en el sistema.`
+      })
+      setIsProcessing(false)
+      return
+    }
+
     const userData = {
       username,
-      firstName: formData.get("firstName") as string || "",
-      lastName: formData.get("lastName") as string || "",
+      firstName: (formData.get("firstName") as string || "").toUpperCase(),
+      lastName: (formData.get("lastName") as string || "").toUpperCase(),
       email: formData.get("email") as string || "",
       phoneNumber: formData.get("phoneNumber") as string || "",
       cedula: formData.get("cedula") as string || "",
@@ -184,7 +220,7 @@ export default function AdminUsersPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="username" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">ID Usuario</Label>
-                  <Input id="username" name="username" placeholder="Ej. SER01" defaultValue={editingUser?.username} required className="font-mono font-bold uppercase" />
+                  <Input id="username" name="username" placeholder="Ej. SER01" defaultValue={editingUser?.username} required className="font-mono font-bold uppercase" readOnly={!!editingUser} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="cedula" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Cédula</Label>
@@ -192,11 +228,11 @@ export default function AdminUsersPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="firstName" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Nombre(s)</Label>
-                  <Input id="firstName" name="firstName" placeholder="Daniel" defaultValue={editingUser?.firstName} required />
+                  <Input id="firstName" name="firstName" placeholder="Daniel" defaultValue={editingUser?.firstName} required className="uppercase" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="lastName" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Apellido(s)</Label>
-                  <Input id="lastName" name="lastName" placeholder="Cespedes" defaultValue={editingUser?.lastName} required />
+                  <Input id="lastName" name="lastName" placeholder="Cespedes" defaultValue={editingUser?.lastName} required className="uppercase" />
                 </div>
               </div>
               
@@ -249,7 +285,7 @@ export default function AdminUsersPage() {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <CardTitle className="text-lg">Personal Registrado</CardTitle>
-              <CardDescription>Los perfiles se crean automáticamente al primer ingreso del colaborador.</CardDescription>
+              <CardDescription>Los perfiles se consolidan automáticamente por ID Corporativo.</CardDescription>
             </div>
             <div className="relative w-full md:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -292,7 +328,7 @@ export default function AdminUsersPage() {
                         <div className="max-w-[300px] mx-auto">
                           <p className="text-sm font-bold text-slate-800">No hay perfiles activos</p>
                           <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                            Recuerda que para que aparezcan <strong>SER01</strong>, <strong>CON01</strong> y <strong>GERENTE</strong>, primero debes iniciar sesión con esos IDs una vez.
+                            Vincula personal o inicia sesión para ver los perfiles registrados.
                           </p>
                         </div>
                       </div>
@@ -312,7 +348,7 @@ export default function AdminUsersPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span className="font-bold text-slate-800">{u.firstName} {u.lastName}</span>
+                        <span className="font-bold text-slate-800 uppercase">{u.firstName} {u.lastName}</span>
                         <div className="flex items-center gap-3 mt-1 opacity-60">
                           <span className="flex items-center gap-1 text-[10px]"><Mail className="h-3 w-3" /> {u.email}</span>
                           <span className="flex items-center gap-1 text-[10px]"><Phone className="h-3 w-3" /> {u.phoneNumber}</span>
