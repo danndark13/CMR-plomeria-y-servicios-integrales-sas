@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "Role": {
@@ -108,6 +109,29 @@
         "itemsCount": { "type": "number" }
       },
       "required": ["id", "technicianId", "date", "netPaid"]
+    },
+    "ChatRoom": {
+      "title": "ChatRoom",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["direct", "group"] },
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "name": { "type": "string" },
+        "lastMessage": { "type": "string" },
+        "lastMessageAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "auth": {
@@ -142,6 +166,14 @@
       {
         "path": "/payroll_history/{payrollId}",
         "definition": { "entityName": "PayrollRecord", "schema": { "$ref": "#/backend/entities/PayrollRecord" }, "description": "Historical payroll records." }
+      },
+      {
+        "path": "/chats/{chatId}",
+        "definition": { "entityName": "ChatRoom", "schema": { "$ref": "#/backend/entities/ChatRoom" }, "description": "Chat rooms." }
+      },
+      {
+        "path": "/chats/{chatId}/messages/{messageId}",
+        "definition": { "entityName": "ChatMessage", "schema": { "$ref": "#/backend/entities/ChatMessage" }, "description": "Chat messages." }
       }
     ]
   }

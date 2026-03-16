@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Menu as HamburgerIcon } from 'lucide-react';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { PWAInstallPrompt } from '@/components/pwa-install-prompt';
+import { ChatWidget } from '@/components/chat/ChatWidget';
 
 export default function RootLayout({
   children,
@@ -96,6 +97,7 @@ export default function RootLayout({
                   </main>
                 </SidebarInset>
               </div>
+              <ChatWidget />
             </SidebarProvider>
           )}
           <PWAInstallPrompt />
