@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from "react"
@@ -39,15 +40,13 @@ export default function BillingReportPage() {
   const handleExportExcel = () => {
     if (!selectedCompany) return
 
-    // Preparar encabezados y datos para el CSV (Excel compatible)
-    const headers = ["Expediente", "Asegurado", "Tipo de Servicio", "Cuenta", "Valor Solicitado", "Valor Aprobado"]
+    const headers = ["Expediente", "Asegurado", "Tipo de Servicio", "Cuenta", "Valor Final a Cobrar"]
     const rows = filteredRequests.map(req => [
       req.claimNumber,
       req.insuredName,
       req.category,
       req.accountName,
-      req.requestedAmount || 0,
-      req.approvedAmount || 0
+      req.approvedAmount || req.requestedAmount || 0
     ])
 
     const csvContent = [
@@ -114,7 +113,7 @@ export default function BillingReportPage() {
           </Button>
           <div>
             <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">{selectedCompany.name}</h1>
-            <p className="text-muted-foreground font-medium">Gestión de conciliación y valores a cobrar.</p>
+            <p className="text-muted-foreground font-medium">Conciliación de valores finales para cobro.</p>
           </div>
         </div>
         <Button onClick={handleExportExcel} className="gap-2 bg-green-600 hover:bg-green-700 font-bold shadow-lg h-12">
@@ -137,7 +136,7 @@ export default function BillingReportPage() {
       <Card className="overflow-hidden border-t-4 border-t-primary shadow-xl">
         <CardHeader className="bg-slate-50/80 border-b">
           <CardTitle className="text-sm font-black flex items-center gap-2 uppercase tracking-wider">
-            <Receipt className="h-4 w-4 text-primary" /> Expedientes Pendientes de Conciliación
+            <Receipt className="h-4 w-4 text-primary" /> Historial de Conciliación
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -147,9 +146,8 @@ export default function BillingReportPage() {
                 <TableHead className="font-black uppercase text-[10px]">Expediente</TableHead>
                 <TableHead className="font-black uppercase text-[10px]">Asegurado / Cuenta</TableHead>
                 <TableHead className="font-black uppercase text-[10px]">Servicio</TableHead>
-                <TableHead className="text-right font-black uppercase text-[10px]">Valor Solicitado</TableHead>
-                <TableHead className="text-right font-black uppercase text-[10px]">Valor Aprobado</TableHead>
-                <TableHead className="text-right font-black uppercase text-[10px]">Margen</TableHead>
+                <TableHead className="text-right font-black uppercase text-[10px]">Conciliación (Inicial vs Real)</TableHead>
+                <TableHead className="text-right font-black uppercase text-[10px]">Utilidad</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
@@ -160,7 +158,9 @@ export default function BillingReportPage() {
                   sum + i.detailedExpenses.filter(e => !e.isUnused).reduce((s, e) => s + e.amount, 0), 0
                 )
                 const totalCost = totalLabor + totalUsedExpenses
-                const margin = (req.approvedAmount || 0) - totalCost
+                const finalAmount = req.approvedAmount || req.requestedAmount || 0
+                const margin = finalAmount - totalCost
+                const hasBeenConciliated = !!req.approvedAmount && req.approvedAmount !== req.requestedAmount
 
                 return (
                   <TableRow key={req.id} className="hover:bg-primary/5 transition-colors">
@@ -180,10 +180,19 @@ export default function BillingReportPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <span className="font-mono font-bold text-blue-600">${(req.requestedAmount || 0).toLocaleString()}</span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <span className="font-mono font-bold text-green-600">${(req.approvedAmount || 0).toLocaleString()}</span>
+                      <div className="flex flex-col items-end">
+                        {hasBeenConciliated && (
+                          <span className="text-xs font-mono text-slate-400 line-through decoration-red-500/50">
+                            ${(req.requestedAmount || 0).toLocaleString()}
+                          </span>
+                        )}
+                        <span className={cn(
+                          "font-mono font-black text-lg",
+                          hasBeenConciliated ? "text-green-600" : "text-primary"
+                        )}>
+                          ${finalAmount.toLocaleString()}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <Badge className={cn(
@@ -205,51 +214,8 @@ export default function BillingReportPage() {
               })}
             </TableBody>
           </Table>
-          {filteredRequests.length === 0 && (
-            <div className="py-20 text-center flex flex-col items-center justify-center text-muted-foreground">
-              <Calculator className="h-12 w-12 opacity-10 mb-2" />
-              <p className="font-bold uppercase text-xs tracking-widest">No hay expedientes bajo este criterio</p>
-            </div>
-          )}
         </CardContent>
       </Card>
-
-      <div className="grid gap-6 md:grid-cols-3">
-         <Card className="bg-primary/5 border-primary/20 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-[10px] font-black text-primary uppercase tracking-widest">Total a Cobrar (Aprobado)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-black text-primary">
-                ${filteredRequests.reduce((sum, r) => sum + (r.approvedAmount || 0), 0).toLocaleString()}
-              </div>
-            </CardContent>
-         </Card>
-         <Card className="bg-slate-50 border-slate-200 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Diferencia Solicitada</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-black text-slate-700">
-                ${filteredRequests.reduce((sum, r) => sum + ((r.requestedAmount || 0) - (r.approvedAmount || 0)), 0).toLocaleString()}
-              </div>
-            </CardContent>
-         </Card>
-         <Card className="bg-green-50 border-green-200 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-[10px] font-black text-green-700 uppercase tracking-widest">Utilidad Estimada</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-black text-green-700">
-                ${filteredRequests.reduce((sum, r) => {
-                   const labor = r.interventions.reduce((s, i) => s + i.laborCost, 0)
-                   const expenses = r.interventions.reduce((s, i) => s + i.detailedExpenses.filter(e => !e.isUnused).reduce((se, e) => se + e.amount, 0), 0)
-                   return sum + ((r.approvedAmount || 0) - (labor + expenses))
-                }, 0).toLocaleString()}
-              </div>
-            </CardContent>
-         </Card>
-      </div>
     </div>
   )
 }
