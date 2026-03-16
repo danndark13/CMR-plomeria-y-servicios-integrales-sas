@@ -48,6 +48,7 @@ export default function RequestDetailPage() {
   // Billing States
   const [requestedAmount, setRequestedAmount] = useState<number>(0)
   const [approvedAmount, setApprovedAmount] = useState<number>(0)
+  const [isConciliated, setIsConciliated] = useState(false)
   const [currentStatus, setCurrentStatus] = useState<ServiceStatus>('pending')
   
   const profileRef = useMemoFirebase(() => {
@@ -65,6 +66,7 @@ export default function RequestDetailPage() {
       setAccountingNotes(found.accountingNotes || "")
       setRequestedAmount(found.requestedAmount || 0)
       setApprovedAmount(found.approvedAmount || 0)
+      setIsConciliated(!!found.approvedAmount && found.approvedAmount > 0)
       setCurrentStatus(found.status || 'pending')
     }
   }, [id])
@@ -118,9 +120,10 @@ export default function RequestDetailPage() {
 
   const handleSaveBilling = () => {
     if (!isAdmin && !isAccounting) return;
+    setIsConciliated(true)
     toast({ 
       title: "Valores Conciliados", 
-      description: "Se ha actualizado el valor real a cobrar para este expediente." 
+      description: `Se ha fijado el valor de cobro en $${approvedAmount.toLocaleString()}.` 
     })
   }
 
@@ -177,7 +180,6 @@ export default function RequestDetailPage() {
             </Card>
           </div>
 
-          {/* DESGLOSE FINANCIERO PARA COBRO */}
           <Card className="shadow-lg border-t-4 border-t-slate-800">
             <CardHeader className="bg-slate-50">
               <CardTitle className="text-lg font-black uppercase flex items-center gap-2">
@@ -320,7 +322,7 @@ export default function RequestDetailPage() {
                   <Label className="text-[10px] font-black uppercase text-muted-foreground">Valor Inicial Solicitado</Label>
                   <div className={cn(
                     "text-xl font-mono font-black py-2 px-3 bg-slate-50 rounded-lg border",
-                    approvedAmount > 0 ? "text-slate-400 line-through decoration-red-500 decoration-2" : "text-primary"
+                    isConciliated ? "text-slate-400 line-through decoration-red-500 decoration-2" : "text-primary"
                   )}>
                     ${requestedAmount.toLocaleString()}
                   </div>
@@ -343,6 +345,13 @@ export default function RequestDetailPage() {
                 <Button className="w-full h-14 bg-primary hover:bg-primary/90 font-black uppercase tracking-widest shadow-xl text-lg gap-2" onClick={handleSaveBilling}>
                   <RefreshCw className="h-5 w-5" /> ACTUALIZAR COBRO
                 </Button>
+                
+                {isConciliated && (
+                  <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-100 animate-in fade-in zoom-in">
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <span className="text-[10px] font-bold text-green-700 uppercase">Valor Conciliado: ${approvedAmount.toLocaleString()}</span>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
