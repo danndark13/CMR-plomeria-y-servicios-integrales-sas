@@ -27,7 +27,8 @@ import {
   Package,
   Info,
   Warehouse,
-  ShoppingCart
+  ShoppingCart,
+  AlertCircle
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -82,7 +83,7 @@ export default function RequestDetailPage() {
       setRequestedAmount(firestoreRequest.requestedAmount || 0)
       setApprovedAmount(firestoreRequest.approvedAmount || 0)
       setIsConciliated(!!firestoreRequest.approvedAmount && firestoreRequest.approvedAmount > 0)
-    } else {
+    } else if (isRequestLoading === false) {
       const found = MOCK_REQUESTS.find(r => r.id === id || r.claimNumber === id)
       if (found) {
         setLocalRequest(found)
@@ -93,12 +94,23 @@ export default function RequestDetailPage() {
         setIsConciliated(!!found.approvedAmount && found.approvedAmount > 0)
       }
     }
-  }, [firestoreRequest, id])
+  }, [firestoreRequest, id, isRequestLoading])
 
-  if (!localRequest || isProfileLoading || isRequestLoading) return (
+  if (isRequestLoading || isProfileLoading) return (
     <div className="p-20 text-center flex flex-col items-center gap-4">
       <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
-      <p className="text-muted-foreground font-bold tracking-tighter uppercase text-xs">Cargando expediente...</p>
+      <p className="text-muted-foreground font-bold tracking-tighter uppercase text-xs">Sincronizando expediente...</p>
+    </div>
+  )
+
+  if (!localRequest && !isRequestLoading) return (
+    <div className="p-20 text-center flex flex-col items-center gap-4">
+      <AlertCircle className="h-12 w-12 text-destructive opacity-40" />
+      <h2 className="text-xl font-black uppercase text-slate-800">Expediente no encontrado</h2>
+      <p className="text-muted-foreground text-sm">El número de expediente solicitado no existe en la base de datos.</p>
+      <Button onClick={() => router.push('/requests')} variant="outline" className="mt-4">
+        Regresar a la Bitácora
+      </Button>
     </div>
   )
 
@@ -112,16 +124,16 @@ export default function RequestDetailPage() {
   const canEditFinancials = isAdmin || isAccounting
   const canSeeFinancials = isAdmin || isAccounting || isCustomerService
 
-  const allNotes = localRequest.interventions.map(i => `[${i.type} - ${MOCK_TECHNICIANS.find(t => t.id === i.technicianId)?.name}]: ${i.notes}`).join('\n')
+  const interventions = localRequest?.interventions || []
+  const allNotes = interventions.map(i => `[${i.type} - ${MOCK_TECHNICIANS.find(t => t.id === i.technicianId)?.name || 'Técnico'}]: ${i.notes}`).join('\n')
   
-  const totalLabor = localRequest.interventions.reduce((sum, i) => sum + i.laborCost, 0)
-  const allExpenses = localRequest.interventions.flatMap(i => i.detailedExpenses.filter(e => !e.isUnused))
-  const totalUsedExpenses = allExpenses.reduce((s, e) => s + e.amount, 0)
+  const totalLabor = interventions.reduce((sum, i) => sum + (Number(i.laborCost) || 0), 0)
+  const allExpenses = interventions.flatMap(i => (i.detailedExpenses || []).filter(e => !e.isUnused))
+  const totalUsedExpenses = allExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0)
   const totalSuggested = totalLabor + totalUsedExpenses
 
-  // Helper to check if an expense matches warehouse items
   const checkWarehouseStock = (expenseDescription: string) => {
-    if (!inventoryItems) return null
+    if (!inventoryItems || !expenseDescription) return null
     const search = expenseDescription.toUpperCase().trim()
     return inventoryItems.find(item => search.includes(item.description.toUpperCase()) || item.description.toUpperCase().includes(search))
   }
@@ -130,7 +142,7 @@ export default function RequestDetailPage() {
     if (!canEditReport) return;
     setIsSummarizing(true)
     try {
-      const result = await serviceNoteSummaryGenerator({ notes: allNotes })
+      const result = await serviceNoteSummaryGenerator({ notes: allNotes || "No hay notas disponibles" })
       setReport(prev => prev ? prev + "\n\n" + result.summary : result.summary)
       toast({ title: "Resumen generado", description: "La IA ha consolidado las intervenciones." })
     } catch (error) {
@@ -202,7 +214,7 @@ export default function RequestDetailPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
@@ -210,8 +222,8 @@ export default function RequestDetailPage() {
           </Button>
           <div className="flex flex-col">
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-black tracking-tighter text-primary uppercase">{localRequest.claimNumber}</h1>
-              <StatusBadge status={localRequest.status} />
+              <h1 className="text-2xl font-black tracking-tighter text-primary uppercase">{localRequest?.claimNumber}</h1>
+              {localRequest && <StatusBadge status={localRequest.status} />}
               {isAccountingMode && (
                 <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 font-black text-[9px] uppercase">
                   Modo Contable Activo
@@ -219,8 +231,8 @@ export default function RequestDetailPage() {
               )}
             </div>
             <p className="text-muted-foreground flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
-              <CategoryIcon category={localRequest.category} className="h-4 w-4 text-primary" />
-              {localRequest.category}
+              {localRequest && <CategoryIcon category={localRequest.category} className="h-4 w-4 text-primary" />}
+              {localRequest?.category}
             </p>
           </div>
         </div>
@@ -247,11 +259,11 @@ export default function RequestDetailPage() {
                 <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Asegurado</CardTitle>
               </CardHeader>
               <CardContent className="pt-4 space-y-1">
-                <p className="font-black text-xl text-slate-800">{localRequest.insuredName}</p>
+                <p className="font-black text-xl text-slate-800">{localRequest?.insuredName}</p>
                 <div className="flex items-center gap-4">
-                  <span className="text-xs font-bold text-slate-500">{localRequest.phoneNumber}</span>
+                  <span className="text-xs font-bold text-slate-500">{localRequest?.phoneNumber}</span>
                   <Badge variant="outline" className="text-[10px] uppercase font-black bg-blue-50 text-blue-700 border-blue-200">
-                    {localRequest.accountName}
+                    {localRequest?.accountName}
                   </Badge>
                 </div>
               </CardContent>
@@ -262,7 +274,7 @@ export default function RequestDetailPage() {
                 <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Descripción Operativa</CardTitle>
               </CardHeader>
               <CardContent className="pt-4">
-                <p className="text-sm font-medium text-slate-700 leading-relaxed">{localRequest.description}</p>
+                <p className="text-sm font-medium text-slate-700 leading-relaxed">{localRequest?.description}</p>
               </CardContent>
             </Card>
           </div>
@@ -298,20 +310,19 @@ export default function RequestDetailPage() {
             <h2 className="text-xl font-black tracking-tighter flex items-center gap-2 text-slate-800 uppercase">
               <Wrench className="h-5 w-5 text-primary" /> Intervenciones y Gastos
             </h2>
-            {localRequest.interventions.map((intervention) => (
+            {interventions.length > 0 ? interventions.map((intervention) => (
               <Card key={intervention.id} className="overflow-hidden border-none shadow-md">
                 <CardHeader className="bg-slate-50 py-3 border-b flex flex-row items-center justify-between">
                   <div className="flex items-center gap-3">
                     <Badge className="bg-primary/10 text-primary font-black uppercase text-[9px]">{intervention.type}</Badge>
                     <span className="text-[10px] font-bold text-slate-400">{new Date(intervention.date).toLocaleDateString()}</span>
-                    <span className="font-black text-[11px] text-slate-600 uppercase">{MOCK_TECHNICIANS.find(t => t.id === intervention.technicianId)?.name}</span>
+                    <span className="font-black text-[11px] text-slate-600 uppercase">{MOCK_TECHNICIANS.find(t => t.id === intervention.technicianId)?.name || 'Técnico'}</span>
                   </div>
                 </CardHeader>
                 <CardContent className="pt-4 space-y-4">
-                  <p className="text-sm text-slate-700 italic leading-relaxed">"{intervention.notes}"</p>
+                  <p className="text-sm text-slate-700 italic leading-relaxed">"{intervention.notes || 'Sin notas'}"</p>
                   
-                  {/* Expense Checking Logic */}
-                  {intervention.detailedExpenses.length > 0 && (
+                  {intervention.detailedExpenses?.length > 0 && (
                     <div className="space-y-3 pt-2">
                       <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest border-b pb-1">Análisis de Gastos de Campo</p>
                       {intervention.detailedExpenses.map(exp => {
@@ -321,7 +332,7 @@ export default function RequestDetailPage() {
                             <div className="flex justify-between items-start">
                               <div className="flex flex-col">
                                 <span className="text-xs font-bold text-slate-800">{exp.description}</span>
-                                <span className="text-[10px] text-muted-foreground">Valor solicitado: ${exp.amount.toLocaleString()}</span>
+                                <span className="text-[10px] text-muted-foreground">Valor solicitado: ${(exp.amount || 0).toLocaleString()}</span>
                               </div>
                               <Badge variant="outline" className="text-[9px] font-black uppercase bg-white">
                                 {exp.category}
@@ -352,7 +363,11 @@ export default function RequestDetailPage() {
                   )}
                 </CardContent>
               </Card>
-            ))}
+            )) : (
+              <Card className="border-dashed p-10 text-center">
+                <p className="text-muted-foreground text-sm font-medium">No se han registrado intervenciones todavía.</p>
+              </Card>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-6">
@@ -362,7 +377,7 @@ export default function RequestDetailPage() {
                   <CardTitle className="text-lg font-black text-green-700 uppercase">Reporte Técnico Formal</CardTitle>
                 </div>
                 {canEditReport ? (
-                  <Button size="sm" variant="outline" className="gap-2 font-bold" onClick={handleGenerateSummary} disabled={isSummarizing}>
+                  <Button size="sm" variant="outline" className="gap-2 font-bold" onClick={handleGenerateSummary} disabled={isSummarizing || !allNotes}>
                     <Sparkles className="h-4 w-4" /> Consolidar con IA
                   </Button>
                 ) : (

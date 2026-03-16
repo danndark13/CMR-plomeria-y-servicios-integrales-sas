@@ -2,6 +2,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { 
   Table, 
   TableBody, 
@@ -17,9 +18,7 @@ import {
   Plus, 
   Search, 
   Filter, 
-  MoreVertical,
-  ArrowUpDown,
-  ClipboardList,
+  ClipboardList, 
   ChevronRight,
   Loader2,
   Save,
@@ -29,12 +28,6 @@ import {
   Phone,
   FileText
 } from "lucide-react"
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
-} from "@/components/ui/dropdown-menu"
 import { 
   Dialog, 
   DialogContent, 
@@ -56,6 +49,7 @@ import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 
 export default function RequestsPage() {
+  const router = useRouter()
   const [searchTerm, setSearchTerm] = useState("")
   const [isCreating, setIsCreating] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -70,7 +64,7 @@ export default function RequestsPage() {
   }, [user, db])
   const { data: profile } = useDoc(profileRef)
 
-  // Fetch real requests from Firestore - Only when user is authenticated
+  // Fetch real requests from Firestore
   const requestsQuery = useMemoFirebase(() => {
     if (!db || !user) return null
     return collection(db, "service_requests")
@@ -95,7 +89,6 @@ export default function RequestsPage() {
   }, [db, user])
   const { data: companies } = useCollection(companiesQuery)
   
-  // Ensure we always have companies, falling back to mocks if DB is empty or loading
   const allCompanies = (companies && companies.length > 0) ? companies : MOCK_COMPANIES
 
   const handleCreateService = (e: React.FormEvent<HTMLFormElement>) => {
@@ -118,14 +111,16 @@ export default function RequestsPage() {
       interventions: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      createdBy: user.uid
+      createdBy: user.uid,
+      billingStatus: 'pending'
     }
 
     const colRef = collection(db, "service_requests")
     addDoc(colRef, newService)
-      .then(() => {
+      .then((docRef) => {
         toast({ title: "Servicio Creado", description: `El expediente ${newService.claimNumber} ha sido registrado.` })
         setIsCreating(false)
+        router.push(`/requests/${docRef.id}`)
       })
       .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
@@ -196,12 +191,16 @@ export default function RequestsPage() {
               ) : filteredRequests.map((req) => {
                 const companyName = allCompanies.find(c => c.id === req.companyId)?.name || "N/A"
                 return (
-                  <TableRow key={req.id} className="hover:bg-primary/5 transition-colors group">
+                  <TableRow 
+                    key={req.id} 
+                    className="hover:bg-primary/5 transition-colors group cursor-pointer"
+                    onClick={() => router.push(`/requests/${req.id}`)}
+                  >
                     <TableCell>
-                      <Link href={`/requests/${req.id}`} className="flex flex-col">
+                      <div className="flex flex-col">
                         <span className="font-mono font-black text-primary text-sm">{req.claimNumber}</span>
                         <span className="text-[10px] text-muted-foreground font-black uppercase tracking-tighter">{req.category}</span>
-                      </Link>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
@@ -214,11 +213,9 @@ export default function RequestsPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <Link href={`/requests/${req.id}`}>
-                          <Button variant="outline" size="sm" className="h-8 gap-1 font-bold text-xs border-primary/20 text-primary hover:bg-primary/5">
-                            Ver Detalle <ChevronRight className="h-3.5 w-3.5" />
-                          </Button>
-                        </Link>
+                        <Button variant="outline" size="sm" className="h-8 gap-1 font-bold text-xs border-primary/20 text-primary hover:bg-primary/5">
+                          Ver Detalle <ChevronRight className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
