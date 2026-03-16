@@ -2,8 +2,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useParams, useRouter, useSearchParams } from "next/navigation"
-import { MOCK_REQUESTS, MOCK_TECHNICIANS, MOCK_COMPANIES } from "@/lib/mock-data"
+import { useParams, useRouter } from "next/navigation"
+import { MOCK_REQUESTS, MOCK_TECHNICIANS } from "@/lib/mock-data"
 import { ServiceRequest, Expense, TechnicianIntervention, InterventionType, ExpenseCategory, ServiceStatus, UnitOfMeasure } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,29 +11,19 @@ import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
+import { Alert } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
   ArrowLeft, 
   Sparkles, 
   Loader2,
-  Wrench,
   DollarSign,
-  CheckCircle2,
-  Wallet,
   RefreshCw,
-  ArrowRight,
   Save,
-  Lock,
-  Package,
-  Info,
   Warehouse,
-  ShoppingCart,
   AlertCircle,
   Plus,
   Trash2,
-  User,
-  MapPin,
   ClipboardList,
   X,
   Calculator,
@@ -43,7 +33,6 @@ import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
 import { serviceNoteSummaryGenerator } from "@/ai/flows/service-note-summary-generator"
 import { toast } from "@/hooks/use-toast"
-import { cn } from "@/lib/utils"
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase'
 import { doc, setDoc, updateDoc, collection } from 'firebase/firestore'
 import { errorEmitter } from '@/firebase/error-emitter'
@@ -116,10 +105,17 @@ export default function RequestDetailPage() {
     </div>
   )
 
+  // Roles y permisos
   const isAdmin = profile?.roleId === 'Administrador'
   const isGerente = profile?.username === 'GERENTE'
+  const isAccounting = profile?.roleId === 'Contabilidad'
   const isCustomerService = profile?.roleId === 'Servicio al Cliente'
-  const canEdit = isAdmin || isGerente || isCustomerService
+  const isCompleted = localRequest.status === 'completed'
+
+  // El administrador, gerente y contabilidad SIEMPRE pueden editar.
+  // Atención al cliente solo puede editar si NO está finalizado.
+  const isPrivilegedRole = isAdmin || isGerente || isAccounting
+  const canEdit = isPrivilegedRole || (isCustomerService && !isCompleted)
 
   const handleUpdateField = (field: keyof ServiceRequest, value: any) => {
     if (!canEdit) return
@@ -157,7 +153,7 @@ export default function RequestDetailPage() {
   }
 
   const handleSaveIntervention = () => {
-    if (!db || !requestRef || !profile) return
+    if (!db || !requestRef || !profile || !canEdit) return
     if (!newIntervention.technicianId || !newIntervention.notes) {
       toast({ variant: "destructive", title: "Campos incompletos", description: "Debe asignar un técnico y redactar notas." })
       return
@@ -314,6 +310,15 @@ export default function RequestDetailPage() {
         </div>
       </div>
 
+      {isCompleted && isCustomerService && (
+        <Alert className="bg-orange-50 border-orange-200 text-orange-800">
+          <AlertCircle className="h-4 w-4 text-orange-600" />
+          <p className="text-xs font-bold uppercase tracking-tight">
+            Expediente Finalizado: El modo de edición está bloqueado para Servicio al Cliente.
+          </p>
+        </Alert>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-12">
         <div className="lg:col-span-8 space-y-6">
           <Card className="border-l-4 border-l-primary shadow-sm">
@@ -362,7 +367,7 @@ export default function RequestDetailPage() {
               )}
             </div>
 
-            {showAddEntry && (
+            {showAddEntry && canEdit && (
               <Card className="border-2 border-dashed border-primary animate-in slide-in-from-top-4">
                 <CardHeader className="bg-primary/5">
                   <CardTitle className="text-sm font-black uppercase">Nuevo Registro de Intervención</CardTitle>
@@ -610,6 +615,13 @@ export default function RequestDetailPage() {
                   <Button className="w-full h-14 font-black shadow-xl uppercase tracking-widest text-sm" onClick={handleSaveMainInfo} disabled={isSaving}>
                     {localRequest.status === 'completed' ? 'CERRAR Y ENVIAR A FACTURACIÓN' : 'GUARDAR CONCILIACIÓN'}
                   </Button>
+                </div>
+              )}
+
+              {!canEdit && isCompleted && (
+                <div className="p-4 bg-muted rounded-xl border border-dashed text-center">
+                   <p className="text-[10px] font-black uppercase text-muted-foreground">Valores Conciliados por Contabilidad</p>
+                   <p className="text-2xl font-black text-slate-800 mt-2">${(localRequest.approvedAmount || 0).toLocaleString()}</p>
                 </div>
               )}
 
