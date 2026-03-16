@@ -8,19 +8,15 @@ export const MOCK_COMPANIES: AssistanceCompany[] = [
 ];
 
 export const MOCK_TECHNICIANS: Technician[] = [
-  { 
-    id: 't1', 
-    name: 'Juan Perez', 
-    specialties: ['Plomería', 'Destaponamiento'], 
-    activeTasks: 4,
-    inventory: [
-      { id: 'i1', description: 'Cemento Blanco', quantity: '2kg', addedAt: new Date().toISOString() },
-      { id: 'i2', description: 'Tubo PVC 1/2', quantity: '1m', addedAt: new Date().toISOString() }
-    ]
-  },
-  { id: 't2', name: 'Carlos Ruiz', specialties: ['Electricidad', 'Instalación'], activeTasks: 1, inventory: [] },
-  { id: 't3', name: 'Luis Gomez', specialties: ['Cerrajería'], activeTasks: 0, inventory: [] },
-  { id: 't4', name: 'Mario Diaz', specialties: ['Trabajo en Alturas', 'Vidriería'], activeTasks: 3, inventory: [] },
+  { id: 'WILMAR', name: 'WILMAR BUITRAGO', specialties: ['Plomería', 'Destaponamiento'], activeTasks: 4 },
+  { id: 'JAIVER', name: 'JAIVER OCAMPO', specialties: ['Plomería', 'Instalación'], activeTasks: 1 },
+  { id: 'NORVEY', name: 'NORVEY MARIN', specialties: ['Electricidad', 'Plomería'], activeTasks: 0 },
+  { id: 'ANDRES', name: 'ANDRES CARRASCAL', specialties: ['Cerrajería', 'Instalación'], activeTasks: 0 },
+  { id: 'NEIDER', name: 'NEIDER VANEGAS', specialties: ['Plomería', 'Destaponamiento'], activeTasks: 0 },
+  { id: 'JHOAN', name: 'JHOAN BUITRAGO', specialties: ['Plomería', 'Reparación'], activeTasks: 3 },
+  { id: 'HECTOR', name: 'HECTOR', specialties: ['Vidriería', 'Cerrajería'], activeTasks: 0 },
+  { id: 'URBEY', name: 'URBEY OCAMPO', specialties: ['Plomería', 'Trabajo en Alturas'], activeTasks: 0 },
+  { id: 'JORGE', name: 'JORGE LOPEZ', specialties: ['Plomería', 'Instalación'], activeTasks: 0 },
 ];
 
 const today = new Date();
@@ -41,7 +37,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
     interventions: [
       {
         id: 'v1',
-        technicianId: 't1',
+        technicianId: 'WILMAR',
         type: 'Diagnóstico',
         date: new Date(today.getTime() - 86400000).toISOString(),
         notes: 'Se realizó visita técnica inicial. Se identifica que la fuga proviene del sello de la brida.',
@@ -52,7 +48,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
       },
       {
         id: 'v2',
-        technicianId: 't1',
+        technicianId: 'WILMAR',
         type: 'Reparación',
         date: today.toISOString(),
         notes: 'Programado para cambio de sellos hoy.',
@@ -111,7 +107,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
     interventions: [
       {
         id: 'v3',
-        technicianId: 't2',
+        technicianId: 'JAIVER',
         type: 'Reparación',
         date: new Date(today.getTime() + 86400000).toISOString(),
         notes: 'Visita programada para revisión de cableado.',
@@ -130,8 +126,8 @@ export const MOCK_REMINDERS: Reminder[] = [
     id: 'r1',
     type: 'critical',
     title: 'Alta Carga de Trabajo',
-    description: 'Juan Perez tiene 4 servicios activos. Considerar reasignación.',
-    technicianId: 't1',
+    description: 'Wilmar Buitrago tiene 4 servicios activos. Considerar reasignación.',
+    technicianId: 'WILMAR',
     createdAt: today.toISOString(),
   },
   {
