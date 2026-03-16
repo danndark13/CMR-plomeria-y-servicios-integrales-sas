@@ -29,9 +29,18 @@ export interface ServiceRequest {
   accountName: string;
   status: ServiceStatus;
   technicianId?: string;
-  description: string;
-  notes: string;
-  summary?: string;
+  
+  // Nuevos campos solicitados
+  insuredName: string;    // Nombre del asegurado
+  claimNumber: string;    // Expediente
+  address: string;        // Dirección
+  phoneNumber: string;    // Teléfono
+  
+  description: string;    // Descripción inicial
+  notes: string;          // Notas técnicas/bitácora
+  summary?: string;       // Resumen generado por IA
+  report?: string;        // Reporte final formal
+  
   createdAt: string;
   updatedAt: string;
 }
