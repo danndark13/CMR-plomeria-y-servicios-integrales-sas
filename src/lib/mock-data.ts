@@ -1,10 +1,60 @@
 import { AssistanceCompany, Technician, ServiceRequest, Reminder } from './types';
 
 export const MOCK_COMPANIES: AssistanceCompany[] = [
-  { id: '1', name: 'IKE Asistencia', accounts: ['Coomeva', 'HDI', 'Banco de Bogotá', 'Sura', 'Axa Colpatria'] },
-  { id: '2', name: 'IGS', accounts: ['Allianz', 'Bancolombia', 'Claro', 'Confama', 'Davivienda', 'Ser Finanzas', 'Tuya', 'Mapfre', 'BBVA'] },
-  { id: '3', name: 'Mawdy', accounts: ['Davivienda', 'Sura', 'Bolivar', 'Mapfre'] },
-  { id: '4', name: 'Assisprex', accounts: ['Generali', 'Liberty Seguros', 'Allianz'] },
+  { 
+    id: '1', 
+    name: 'IKE Asistencia', 
+    accounts: [
+      'HDI (AL) Coomeva', 
+      'HDI', 
+      'HDI Coomeva', 
+      'Nexus', 
+      'Previsora', 
+      'HDI (AL) Livianos Coomeva', 
+      'HDI Hogar Dulce Hogar', 
+      'Popular Downgrade', 
+      'Previsora Hogar 2024', 
+      'HDI (AL) Hogar Coomeva', 
+      'Previsora Areas Comunes', 
+      'HDI (AL) Hogar Basico+Plus', 
+      'HDI (AL) Hogar Basico+Plus+Especializado', 
+      'Previsora Areas Comunes 2024', 
+      'Banco Popular Cuentabientes 2019', 
+      'Colmena Cartera BCS', 
+      'HDI (AL) Generales Administrativos', 
+      'HDI (AL) Livianos', 
+      'Popular Cuentahabientes Plus', 
+      'Banco Popular Vital',
+      'Coomeva'
+    ] 
+  },
+  { 
+    id: '2', 
+    name: 'IGS', 
+    accounts: [
+      'Allianz', 
+      'Bancolombia', 
+      'Claro', 
+      'Confama', 
+      'Davivienda', 
+      'Ser Finanzas', 
+      'Tuya', 
+      'Mapfre', 
+      'BBVA',
+      'Sura',
+      'Seguros Bolivar'
+    ] 
+  },
+  { 
+    id: '3', 
+    name: 'Mawdy', 
+    accounts: ['Davivienda', 'Sura', 'Bolivar', 'Mapfre', 'Axa Colpatria'] 
+  },
+  { 
+    id: '4', 
+    name: 'Assisprex', 
+    accounts: ['Generali', 'Liberty Seguros', 'Allianz', 'La Equidad'] 
+  },
 ];
 
 export const MOCK_TECHNICIANS: Technician[] = [
@@ -26,7 +76,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
     id: 'REQ-001',
     category: 'Plomería',
     companyId: '1',
-    accountName: 'Coomeva',
+    accountName: 'HDI (AL) Coomeva',
     status: 'in_progress',
     insuredName: 'Ana Maria Restrepo',
     claimNumber: 'EXP-998822',
@@ -92,32 +142,6 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
     ],
     createdAt: new Date(today.getTime() - 172800000).toISOString(),
     updatedAt: today.toISOString(),
-  },
-  {
-    id: 'REQ-002',
-    category: 'Electricidad',
-    companyId: '2',
-    accountName: 'Allianz',
-    status: 'assigned',
-    insuredName: 'Roberto Gomez',
-    claimNumber: 'EXP-774411',
-    address: 'Carrera 7 #127-10, Casa 4',
-    phoneNumber: '315 222 9876',
-    description: 'Cortocircuito en tomas de la cocina.',
-    interventions: [
-      {
-        id: 'v3',
-        technicianId: 'JAIVER',
-        type: 'Reparación',
-        date: new Date(today.getTime() + 86400000).toISOString(),
-        notes: 'Visita programada para revisión de cableado.',
-        laborCost: 40000,
-        detailedExpenses: []
-      }
-    ],
-    billingStatus: 'pending',
-    createdAt: new Date(today.getTime() - 7200000).toISOString(),
-    updatedAt: new Date(today.getTime() - 7200000).toISOString(),
   }
 ];
 
@@ -128,14 +152,6 @@ export const MOCK_REMINDERS: Reminder[] = [
     title: 'Alta Carga de Trabajo',
     description: 'Wilmar Buitrago tiene 4 servicios activos. Considerar reasignación.',
     technicianId: 'WILMAR',
-    createdAt: today.toISOString(),
-  },
-  {
-    id: 'r2',
-    type: 'warning',
-    title: 'Reporte Pendiente',
-    description: 'Expediente EXP-998822 lleva 2 días sin reporte final.',
-    requestId: 'REQ-001',
     createdAt: today.toISOString(),
   }
 ];
