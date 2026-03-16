@@ -82,19 +82,25 @@ export function CRMSidebar() {
     { title: "Gestión Usuarios", icon: UserCog, href: "/admin/users", show: isAdmin },
   ]
 
+  const displayName = isLoading 
+    ? "Cargando..." 
+    : profile 
+      ? `${profile.firstName} ${profile.lastName}` 
+      : (user?.displayName || "Usuario RYS")
+
   return (
     <Sidebar variant="sidebar" collapsible="offcanvas" className="bg-white border-r shadow-xl">
       <SidebarHeader className="p-6">
         <Link href="/profile" className="flex items-center gap-4 group transition-all hover:bg-slate-50 p-2 rounded-xl">
           <Avatar className="h-12 w-12 border-2 border-primary/20 shadow-md group-hover:scale-105 transition-transform">
-            <AvatarImage src={`https://picsum.photos/seed/${user?.uid}/100/100`} />
+            <AvatarImage src={`https://picsum.photos/seed/${user?.uid || '1'}/100/100`} />
             <AvatarFallback className="bg-primary text-primary-foreground font-bold text-lg">
-              {profile?.firstName?.charAt(0) || 'U'}
+              {profile?.firstName?.charAt(0) || user?.email?.charAt(0).toUpperCase() || 'U'}
             </AvatarFallback>
           </Avatar>
-          <div className="flex flex-col overflow-hidden">
+          <div className="flex flex-col overflow-hidden text-left">
             <span className="text-sm font-black truncate text-slate-900 group-hover:text-primary transition-colors">
-              {isLoading ? 'Cargando...' : `${profile?.firstName} ${profile?.lastName}`}
+              {displayName}
             </span>
             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
               {role}
