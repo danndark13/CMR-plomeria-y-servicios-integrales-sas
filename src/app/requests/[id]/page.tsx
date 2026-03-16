@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -35,7 +36,8 @@ import {
   MapPin,
   ClipboardList,
   X,
-  Calculator
+  Calculator,
+  FileText
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -52,7 +54,6 @@ const UNITS: UnitOfMeasure[] = ['UND', 'KG', 'MTS', 'GL', 'PAR', 'LB', 'PQ', 'VI
 export default function RequestDetailPage() {
   const { id } = useParams()
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { user } = useUser()
   const db = useFirestore()
   
@@ -60,7 +61,6 @@ export default function RequestDetailPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
   
-  // Form States for adding new intervention
   const [showAddEntry, setShowAddEntry] = useState(false)
   const [newIntervention, setNewIntervention] = useState<Partial<TechnicianIntervention>>({
     type: 'Diagnóstico',
@@ -76,7 +76,6 @@ export default function RequestDetailPage() {
     category: 'material'
   })
 
-  // Fetch Inventory for cross-check
   const inventoryQuery = useMemoFirebase(() => {
     if (!db) return null
     return collection(db, "inventory")
@@ -208,10 +207,10 @@ export default function RequestDetailPage() {
       claimNumber: localRequest.claimNumber,
       address: localRequest.address,
       phoneNumber: localRequest.phoneNumber,
-      report: localRequest.report,
-      requestedAmount: localRequest.requestedAmount,
-      approvedAmount: localRequest.approvedAmount,
-      accountingNotes: localRequest.accountingNotes,
+      report: localRequest.report || "",
+      requestedAmount: localRequest.requestedAmount || 0,
+      approvedAmount: localRequest.approvedAmount || 0,
+      accountingNotes: localRequest.accountingNotes || "",
       status: localRequest.status,
       updatedAt: new Date().toISOString()
     }
@@ -230,13 +229,14 @@ export default function RequestDetailPage() {
   }
 
   const handleGenerateSummary = async () => {
-    if (!localRequest.interventions.length) {
+    const interventions = localRequest.interventions || []
+    if (!interventions.length) {
       toast({ variant: "destructive", title: "Sin datos", description: "No hay reportes técnicos para resumir." })
       return
     }
 
     setIsGeneratingSummary(true)
-    const allNotes = localRequest.interventions.map((i, idx) => `Reporte ${idx + 1}: ${i.notes}`).join('\n')
+    const allNotes = interventions.map((i, idx) => `Reporte ${idx + 1}: ${i.notes}`).join('\n')
     
     try {
       const result = await serviceNoteSummaryGenerator({ notes: allNotes })
@@ -250,13 +250,17 @@ export default function RequestDetailPage() {
   }
 
   const checkWarehouseStock = (desc: string) => {
-    if (!inventoryItems) return null
+    if (!inventoryItems || !desc) return null
     const search = desc.toUpperCase()
-    return inventoryItems.find(i => search.includes(i.description.toUpperCase()) || i.description.toUpperCase().includes(search))
+    return inventoryItems.find(i => 
+      (i.description && search.includes(i.description.toUpperCase())) || 
+      (i.description && i.description.toUpperCase().includes(search))
+    )
   }
 
-  const totalLabor = localRequest.interventions.reduce((sum, i) => sum + i.laborCost, 0)
-  const totalExpenses = localRequest.interventions.flatMap(i => i.detailedExpenses).reduce((sum, e) => sum + e.amount, 0)
+  const interventions = localRequest.interventions || []
+  const totalLabor = interventions.reduce((sum, i) => sum + (i.laborCost || 0), 0)
+  const totalExpenses = interventions.flatMap(i => i.detailedExpenses || []).reduce((sum, e) => sum + (e.amount || 0), 0)
   const totalSuggested = totalLabor + totalExpenses
 
   return (
@@ -270,7 +274,7 @@ export default function RequestDetailPage() {
             <div className="flex items-center gap-3">
               {canEdit ? (
                 <Input 
-                  value={localRequest.claimNumber} 
+                  value={localRequest.claimNumber || ""} 
                   onChange={(e) => handleUpdateField('claimNumber', e.target.value.toUpperCase())}
                   className="w-40 font-black h-8 text-primary uppercase"
                 />
@@ -312,7 +316,6 @@ export default function RequestDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-12">
         <div className="lg:col-span-8 space-y-6">
-          {/* Cliente Information */}
           <Card className="border-l-4 border-l-primary shadow-sm">
             <CardHeader className="pb-3 border-b bg-slate-50/50">
               <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Información del Cliente</CardTitle>
@@ -321,7 +324,7 @@ export default function RequestDetailPage() {
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase">Nombre Asegurado</Label>
                 <Input 
-                  value={localRequest.insuredName} 
+                  value={localRequest.insuredName || ""} 
                   onChange={(e) => handleUpdateField('insuredName', e.target.value)}
                   disabled={!canEdit}
                   className="font-bold"
@@ -330,7 +333,7 @@ export default function RequestDetailPage() {
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase">Teléfono</Label>
                 <Input 
-                  value={localRequest.phoneNumber} 
+                  value={localRequest.phoneNumber || ""} 
                   onChange={(e) => handleUpdateField('phoneNumber', e.target.value)}
                   disabled={!canEdit}
                 />
@@ -338,7 +341,7 @@ export default function RequestDetailPage() {
               <div className="space-y-2 md:col-span-2">
                 <Label className="text-[10px] font-black uppercase">Dirección de Visita</Label>
                 <Input 
-                  value={localRequest.address} 
+                  value={localRequest.address || ""} 
                   onChange={(e) => handleUpdateField('address', e.target.value)}
                   disabled={!canEdit}
                 />
@@ -346,7 +349,6 @@ export default function RequestDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Interventions History */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-black uppercase tracking-tighter flex items-center gap-2">
@@ -460,7 +462,7 @@ export default function RequestDetailPage() {
                             </span>
                           </div>
                           <div className="flex items-center gap-4">
-                            <span className="text-xs font-mono font-black text-slate-800">${exp.amount.toLocaleString()}</span>
+                            <span className="text-xs font-mono font-black text-slate-800">${(exp.amount || 0).toLocaleString()}</span>
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleRemoveExpense(exp.id)}>
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -478,7 +480,7 @@ export default function RequestDetailPage() {
             )}
 
             <div className="space-y-4">
-              {localRequest.interventions.length > 0 ? [...localRequest.interventions].map((item, index) => {
+              {interventions.length > 0 ? [...interventions].map((item, index) => {
                 const reportTitle = index === 0 ? "Reporte inicial" : `Reporte #${index + 1}`
                 return (
                   <Card key={item.id} className="overflow-hidden border-none shadow-md group">
@@ -504,7 +506,7 @@ export default function RequestDetailPage() {
                         "{item.notes}"
                       </p>
                       
-                      {item.detailedExpenses.length > 0 && (
+                      {item.detailedExpenses && item.detailedExpenses.length > 0 && (
                         <div className="grid gap-2">
                           {item.detailedExpenses.map(exp => {
                             const stock = checkWarehouseStock(exp.description)
@@ -514,10 +516,10 @@ export default function RequestDetailPage() {
                                   <div className="flex flex-col">
                                     <span className="text-[10px] font-black uppercase text-slate-800">{exp.description}</span>
                                     <span className="text-[9px] font-bold text-muted-foreground">
-                                      {exp.quantity} {exp.unit} x ${exp.unitValue?.toLocaleString() || (exp.amount / (exp.quantity || 1)).toLocaleString()}
+                                      {exp.quantity} {exp.unit} x ${exp.unitValue?.toLocaleString() || ((exp.amount || 0) / (exp.quantity || 1)).toLocaleString()}
                                     </span>
                                   </div>
-                                  <span className="text-xs font-mono font-black text-slate-800">${exp.amount.toLocaleString()}</span>
+                                  <span className="text-xs font-mono font-black text-slate-800">${(exp.amount || 0).toLocaleString()}</span>
                                 </div>
                                 {stock && (
                                   <Alert className="bg-blue-50 border-blue-200 py-1.5 px-3">
@@ -538,11 +540,11 @@ export default function RequestDetailPage() {
                       <div className="flex justify-end pt-3 border-t text-[10px] font-black uppercase tracking-widest text-slate-500 gap-6">
                         <div className="flex flex-col items-end">
                           <span className="opacity-50">Mano de Obra</span>
-                          <span className="text-slate-800">${item.laborCost.toLocaleString()}</span>
+                          <span className="text-slate-800">${(item.laborCost || 0).toLocaleString()}</span>
                         </div>
                         <div className="flex flex-col items-end">
                           <span className="opacity-50">Total Reporte</span>
-                          <span className="text-primary text-sm font-black">${(item.laborCost + item.detailedExpenses.reduce((s,e) => s+e.amount, 0)).toLocaleString()}</span>
+                          <span className="text-primary text-sm font-black">${((item.laborCost || 0) + (item.detailedExpenses || []).reduce((s,e) => s+(e.amount || 0), 0)).toLocaleString()}</span>
                         </div>
                       </div>
                     </CardContent>
@@ -559,7 +561,6 @@ export default function RequestDetailPage() {
         </div>
 
         <div className="lg:col-span-4 space-y-6">
-          {/* Financials & Billing */}
           <Card className="shadow-lg border-t-8 border-t-primary overflow-hidden sticky top-24">
             <CardHeader className="bg-slate-50/50 border-b">
               <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
@@ -588,7 +589,7 @@ export default function RequestDetailPage() {
                       <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-primary" />
                       <Input 
                         type="number" 
-                        value={localRequest.approvedAmount} 
+                        value={localRequest.approvedAmount || 0} 
                         onChange={(e) => handleUpdateField('approvedAmount', Number(e.target.value))}
                         className="pl-10 h-14 text-2xl font-mono font-black border-primary bg-primary/5 focus-visible:ring-primary shadow-lg"
                         placeholder="0"
@@ -601,7 +602,7 @@ export default function RequestDetailPage() {
                     <Textarea 
                       placeholder="Indique si hay glosas, descuentos o notas especiales..." 
                       className="text-xs font-medium border-orange-200 min-h-[100px]"
-                      value={localRequest.accountingNotes}
+                      value={localRequest.accountingNotes || ""}
                       onChange={(e) => handleUpdateField('accountingNotes', e.target.value)}
                     />
                   </div>
@@ -638,7 +639,7 @@ export default function RequestDetailPage() {
                 <Textarea 
                   className="bg-white/10 border-white/20 text-white placeholder:text-white/40 text-xs min-h-[120px] font-medium leading-relaxed"
                   placeholder="Redacte aquí el resumen técnico formal que se enviará a la aseguradora..."
-                  value={localRequest.report}
+                  value={localRequest.report || ""}
                   onChange={(e) => handleUpdateField('report', e.target.value)}
                   disabled={!canEdit}
                 />
