@@ -20,7 +20,9 @@ import {
   CheckCircle2,
   Wallet,
   RefreshCw,
-  ArrowRight
+  ArrowRight,
+  Save,
+  Lock
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -89,8 +91,9 @@ export default function RequestDetailPage() {
   const isAccounting = profile?.roleId === 'Contabilidad'
   const isCustomerService = profile?.roleId === 'Servicio al Cliente'
   
-  const canEditGeneral = isAdmin || isCustomerService
-  const canEditAccounting = isAdmin || isAccounting
+  // Definición clara de permisos por sección
+  const canEditReport = isAdmin || isCustomerService
+  const canEditFinancials = isAdmin || isAccounting
   const canSeeFinancials = isAdmin || isAccounting || isCustomerService
 
   const allNotes = localRequest.interventions.map(i => `[${i.type} - ${MOCK_TECHNICIANS.find(t => t.id === i.technicianId)?.name}]: ${i.notes}`).join('\n')
@@ -101,7 +104,7 @@ export default function RequestDetailPage() {
   const totalSuggested = totalLabor + totalUsedExpenses
 
   const handleGenerateSummary = async () => {
-    if (!canEditGeneral) return;
+    if (!canEditReport) return;
     setIsSummarizing(true)
     try {
       const result = await serviceNoteSummaryGenerator({ notes: allNotes })
@@ -127,7 +130,7 @@ export default function RequestDetailPage() {
         updatedAt: new Date().toISOString()
       }
       await setDoc(doc(db, 'service_requests', id as string), dataToSave, { merge: true })
-      toast({ title: "Cambios Guardados", description: "El expediente ha sido actualizado en la nube." })
+      toast({ title: "Cambios Guardados", description: "El expediente ha sido actualizado correctamente." })
     } catch (error) {
       toast({ variant: "destructive", title: "Error al guardar", description: "No se pudieron persistir los cambios." })
     } finally {
@@ -136,12 +139,13 @@ export default function RequestDetailPage() {
   }
 
   const handleUpdateBilling = async () => {
-    if (!isAdmin && !isAccounting || !db) return;
+    if (!canEditFinancials || !db) return;
     setIsSaving(true)
     try {
       await updateDoc(doc(db, 'service_requests', id as string), {
         approvedAmount: approvedAmount,
         requestedAmount: requestedAmount || totalSuggested,
+        accountingNotes: accountingNotes,
         billingStatus: 'ready_to_bill',
         updatedAt: new Date().toISOString()
       })
@@ -176,11 +180,16 @@ export default function RequestDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          {(isAdmin || isCustomerService) && (
+          {canEditReport && (
             <Button className="gap-2 bg-green-600 hover:bg-green-700 font-bold shadow-lg" onClick={handleSaveAll} disabled={isSaving}>
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} 
-              Finalizar y Guardar
+              Finalizar y Guardar Reporte
             </Button>
+          )}
+          {isAccounting && (
+             <Button className="gap-2 bg-primary font-bold shadow-lg" onClick={handleUpdateBilling} disabled={isSaving}>
+                <Save className="h-4 w-4" /> Guardar Notas Contables
+             </Button>
           )}
         </div>
       </div>
@@ -266,14 +275,18 @@ export default function RequestDetailPage() {
                 <div>
                   <CardTitle className="text-lg font-black text-green-700 uppercase">Reporte Técnico Formal</CardTitle>
                 </div>
-                {canEditGeneral && (
+                {canEditReport ? (
                   <Button size="sm" variant="outline" className="gap-2 font-bold" onClick={handleGenerateSummary} disabled={isSummarizing}>
                     <Sparkles className="h-4 w-4" /> Consolidar con IA
                   </Button>
+                ) : (
+                   <Badge variant="outline" className="gap-1 font-bold bg-slate-100 text-slate-500 border-slate-200">
+                      <Lock className="h-3 w-3" /> Solo Lectura
+                   </Badge>
                 )}
               </CardHeader>
               <CardContent>
-                {canEditGeneral ? (
+                {canEditReport ? (
                   <Textarea 
                     placeholder="Redacte aquí el reporte para la asistencia..."
                     className="min-h-[150px] text-sm font-medium"
@@ -303,7 +316,7 @@ export default function RequestDetailPage() {
                     className="min-h-[100px] text-sm font-medium border-orange-200 focus-visible:ring-orange-500"
                     value={accountingNotes}
                     onChange={(e) => setAccountingNotes(e.target.value)}
-                    disabled={!canEditAccounting}
+                    disabled={!canEditFinancials}
                   />
                 </CardContent>
               </Card>
@@ -312,7 +325,7 @@ export default function RequestDetailPage() {
         </div>
 
         <div className="space-y-6">
-          {(isAdmin || isAccounting) && (
+          {canEditFinancials && (
             <Card className="shadow-lg border-t-8 border-t-primary sticky top-24 overflow-hidden">
               <CardHeader className="bg-slate-50/50 border-b">
                 <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
@@ -366,10 +379,6 @@ export default function RequestDetailPage() {
                     ACTUALIZAR COBRO
                   </Button>
                 </div>
-                
-                <p className="text-[9px] font-bold text-muted-foreground italic text-center px-4">
-                  El valor inicial tachado se activará en el historial financiero tras guardar.
-                </p>
               </CardContent>
             </Card>
           )}
