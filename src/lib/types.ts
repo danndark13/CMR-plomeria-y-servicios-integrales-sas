@@ -15,6 +15,15 @@ export type BillingStatus = 'pending' | 'ready_to_bill' | 'billed' | 'paid';
 
 export type ExpenseCategory = 'material' | 'transporte' | 'otros';
 
+export interface AuditEntry {
+  id: string;
+  userId: string;
+  userName: string;
+  action: string;
+  timestamp: string;
+  details: string;
+}
+
 export interface Expense {
   id: string;
   amount: number;
@@ -104,6 +113,9 @@ export interface ServiceRequest {
   approvedAmount?: number;  // Lo que la asistencia aprueba pagar
   billingStatus: BillingStatus;
   invoiceNumber?: string;
+  
+  // Auditoría
+  auditLogs?: AuditEntry[];
   
   createdAt: string;
   updatedAt: string;

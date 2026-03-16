@@ -1,10 +1,9 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS, MOCK_COMPANIES } from "@/lib/mock-data"
-import { ServiceRequest, BillingStatus, ExpenseCategory, Technician, Advance } from "@/lib/types"
+import { ServiceRequest, BillingStatus, ExpenseCategory, Technician, Advance, AuditEntry } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -38,7 +37,9 @@ import {
   Trash2,
   ShieldAlert,
   History,
-  Lock
+  Lock,
+  Activity,
+  Clock
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -49,12 +50,12 @@ import { cn } from "@/lib/utils"
 // Simulación de usuario actual (Cambiar para probar roles)
 type AppRole = 'Admin' | 'Contabilidad' | 'Atención al Cliente';
 const CURRENT_USER_ROLE: AppRole = 'Atención al Cliente'; 
+const CURRENT_USER_NAME = 'Usuario Demo';
 
 export default function RequestDetailPage() {
   const { id } = useParams()
   const router = useRouter()
   const [request, setRequest] = useState<ServiceRequest | null>(null)
-  const [summary, setSummary] = useState("")
   const [report, setReport] = useState("")
   const [isSummarizing, setIsSummarizing] = useState(false)
   
@@ -62,6 +63,7 @@ export default function RequestDetailPage() {
   const [requestedAmount, setRequestedAmount] = useState<number>(0)
   const [approvedAmount, setApprovedAmount] = useState<number>(0)
   const [billingStatus, setBillingStatus] = useState<BillingStatus>('pending')
+  const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([])
   
   const [isAddingAdvance, setIsAddingAdvance] = useState(false)
   const [newAdvanceAmount, setNewAdvanceAmount] = useState("")
@@ -87,11 +89,11 @@ export default function RequestDetailPage() {
     const found = MOCK_REQUESTS.find(r => r.id === id)
     if (found) {
       setRequest(found)
-      setSummary(found.summary || "")
       setReport(found.report || "")
       setRequestedAmount(found.requestedAmount || 0)
       setApprovedAmount(found.approvedAmount || 0)
       setBillingStatus(found.billingStatus || 'pending')
+      setAuditLogs(found.auditLogs || [])
     }
   }, [id])
 
@@ -116,9 +118,6 @@ export default function RequestDetailPage() {
   const totalUsedExpenses = request.interventions.reduce((sum, i) => 
     sum + i.detailedExpenses.filter(e => !e.isUnused).reduce((s, e) => s + e.amount, 0), 0
   )
-  const totalInInventory = request.interventions.reduce((sum, i) => 
-    sum + i.detailedExpenses.filter(e => e.isUnused).reduce((s, e) => s + e.amount, 0), 0
-  )
   const totalAdvances = request.advances?.reduce((sum, a) => sum + a.amount, 0) || 0
   const totalOperative = totalLabor + totalUsedExpenses
 
@@ -131,7 +130,7 @@ export default function RequestDetailPage() {
     setIsSummarizing(true)
     try {
       const result = await serviceNoteSummaryGenerator({ notes: allNotes })
-      setSummary(result.summary)
+      setReport(prev => prev ? prev + "\n\n" + result.summary : result.summary)
       toast({ title: "Resumen generado", description: "La IA ha consolidado las intervenciones exitosamente." })
     } catch (error) {
       toast({ title: "Error", description: "No se pudo generar el resumen con IA.", variant: "destructive" })
@@ -149,8 +148,7 @@ export default function RequestDetailPage() {
 
     const tech = MOCK_TECHNICIANS.find(t => t.id === intervention.technicianId)
     const isInInventory = tech?.inventory?.some(item => 
-      newExpense.description.toLowerCase().includes(item.description.toLowerCase()) ||
-      item.description.toLowerCase().includes(newExpense.description.toLowerCase())
+      newExpense.description.toLowerCase().includes(item.description.toLowerCase())
     )
 
     if (isInInventory && !newExpense.isApprovedExtra) {
@@ -185,7 +183,19 @@ export default function RequestDetailPage() {
 
   const handleSaveBilling = () => {
     if (!isAdmin && !isAccounting) return;
-    toast({ title: "Cambios Guardados", description: "Se han actualizado los valores de facturación." })
+    
+    // Simular registro en bitácora
+    const newEntry: AuditEntry = {
+      id: Math.random().toString(36).substr(2, 9),
+      userId: 'user-id',
+      userName: CURRENT_USER_NAME,
+      action: 'Ajuste de Facturación',
+      timestamp: new Date().toISOString(),
+      details: `Cambio de valores. Cobro: $${requestedAmount}. Aprobado: $${approvedAmount}. Estado: ${billingStatus}.`
+    }
+    
+    setAuditLogs([newEntry, ...auditLogs])
+    toast({ title: "Cambios Guardados", description: "Se han actualizado los valores y registrado en la bitácora." })
   }
 
   const getBillingStatusBadge = (status: BillingStatus) => {
@@ -225,7 +235,7 @@ export default function RequestDetailPage() {
         <div className="flex items-center gap-2">
           {(isAdmin || isAccounting) && (
             <Button variant="outline" className="gap-2">
-              <Receipt className="h-4 w-4" /> Facturar
+              <Receipt className="h-4 w-4" /> Generar Factura
             </Button>
           )}
           {canEdit && (
@@ -238,13 +248,12 @@ export default function RequestDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          {/* Alerta de bloqueo para Atención al Cliente */}
           {isInAccountingProcess && isCustomerService && (
             <Card className="bg-destructive/10 border-destructive/20 text-destructive p-4 flex items-center gap-3">
               <Lock className="h-5 w-5 shrink-0" />
               <div className="text-sm">
                 <p className="font-bold">Servicio en Contabilidad</p>
-                <p className="opacity-80">Este expediente ya está en proceso de cobro. No se permiten ediciones ni visualización de costos detallados.</p>
+                <p className="opacity-80">Este expediente ya está siendo procesado por el área financiera. La edición y visualización de costos está restringida.</p>
               </div>
             </Card>
           )}
@@ -292,82 +301,10 @@ export default function RequestDetailPage() {
             </Card>
           </div>
 
-          <Card className="shadow-md border-t-4 border-t-yellow-500 bg-yellow-50/30">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-lg flex items-center gap-2 text-yellow-800 font-bold">
-                    <HandCoins className="h-5 w-5" />
-                    Anticipos a Técnicos
-                  </CardTitle>
-                  <CardDescription>Adelantos registrados para este expediente.</CardDescription>
-                </div>
-                {canEdit && (
-                  <Button size="sm" onClick={() => setIsAddingAdvance(true)} className="bg-yellow-600 hover:bg-yellow-700">
-                    <Plus className="h-4 w-4 mr-2" /> Nuevo Anticipo
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {isAddingAdvance && canEdit && (
-                <div className="p-4 border rounded-lg bg-white space-y-4 animate-in fade-in zoom-in-95">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Monto del Anticipo</Label>
-                      <div className="relative">
-                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input 
-                          type="number" 
-                          placeholder="0.00" 
-                          className="pl-9"
-                          value={newAdvanceAmount}
-                          onChange={(e) => setNewAdvanceAmount(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Motivo</Label>
-                      <Input 
-                        placeholder="Ej. Gasolina, Peajes..." 
-                        value={newAdvanceReason}
-                        onChange={(e) => setNewAdvanceReason(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={handleAddAdvance} className="flex-1">Confirmar Anticipo</Button>
-                    <Button size="sm" variant="ghost" onClick={() => setIsAddingAdvance(false)}>Cancelar</Button>
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                {request.advances && request.advances.length > 0 ? (
-                  request.advances.map((adv) => (
-                    <div key={adv.id} className="flex items-center justify-between p-3 bg-white border rounded shadow-sm">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-bold">{adv.reason}</span>
-                        <span className="text-[10px] text-muted-foreground">{new Date(adv.date).toLocaleDateString()}</span>
-                      </div>
-                      <span className="font-mono font-bold text-destructive">-${adv.amount.toLocaleString()}</span>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-center text-muted-foreground py-4 italic">No se han registrado anticipos para este servicio.</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="flex items-center justify-between mb-2">
-             <h2 className="text-xl font-bold flex items-center gap-2">
-               <Wrench className="h-5 w-5 text-primary" />
-               Bitácora e Intervenciones
-             </h2>
-          </div>
-
           <div className="space-y-6">
+            <h2 className="text-xl font-bold flex items-center gap-2">
+               <Wrench className="h-5 w-5 text-primary" /> Bitácora Operativa
+            </h2>
             {request.interventions.map((intervention) => {
               const tech = MOCK_TECHNICIANS.find(t => t.id === intervention.technicianId)
               return (
@@ -385,7 +322,7 @@ export default function RequestDetailPage() {
                       </div>
                       {canSeeFinancials && (
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold text-muted-foreground">Mano de Obra:</span>
+                          <span className="text-[10px] font-bold text-muted-foreground">Costo:</span>
                           <span className="text-xs font-mono font-bold">${intervention.laborCost.toLocaleString()}</span>
                         </div>
                       )}
@@ -395,85 +332,48 @@ export default function RequestDetailPage() {
                     <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap italic">
                       "{intervention.notes}"
                     </p>
-                    
-                    {/* Sección de Gastos solo visible si tiene permisos */}
                     {canSeeFinancials && (
                       <div className="space-y-3 pt-2 border-t border-dashed">
                         <div className="flex items-center justify-between">
-                          <Label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Gastos y Materiales</Label>
+                          <Label className="text-[10px] font-bold uppercase text-muted-foreground">Gastos Registrados</Label>
                           {canEdit && (
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="h-6 text-[10px] gap-1 text-primary hover:bg-primary/5"
-                              onClick={() => setActiveInterventionId(activeInterventionId === intervention.id ? null : intervention.id)}
-                            >
-                              <Plus className="h-3 w-3" /> Añadir Gasto
+                            <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1 text-primary" onClick={() => setActiveInterventionId(intervention.id)}>
+                              <Plus className="h-3 w-3" /> Añadir Material
                             </Button>
                           )}
                         </div>
-
                         {activeInterventionId === intervention.id && canEdit && (
-                          <div className="p-4 border rounded-md bg-muted/20 space-y-4 animate-in slide-in-from-top-2">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                <Label className="text-xs">Descripción del Material</Label>
-                                <Input 
-                                  placeholder="Ej. Cemento..." 
-                                  className="h-9 text-sm"
-                                  value={newExpense.description}
-                                  onChange={(e) => setNewExpense({...newExpense, description: e.target.value})}
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label className="text-xs">Monto</Label>
-                                <Input 
-                                  type="number" 
-                                  placeholder="0" 
-                                  className="h-9 text-sm"
-                                  value={newExpense.amount}
-                                  onChange={(e) => setNewExpense({...newExpense, amount: e.target.value})}
-                                />
-                              </div>
+                          <div className="p-3 border rounded-md bg-muted/20 space-y-3 animate-in fade-in">
+                            <div className="grid grid-cols-2 gap-3">
+                              <Input placeholder="Descripción" className="h-8 text-xs" value={newExpense.description} onChange={(e) => setNewExpense({...newExpense, description: e.target.value})} />
+                              <Input placeholder="Monto" type="number" className="h-8 text-xs" value={newExpense.amount} onChange={(e) => setNewExpense({...newExpense, amount: e.target.value})} />
                             </div>
-                            <div className="flex items-center justify-between gap-3 p-3 bg-white rounded border border-dashed">
-                               <div className="flex items-center space-x-2">
-                                 <Switch 
-                                   id="isApprovedExtra" 
-                                   checked={newExpense.isApprovedExtra}
-                                   onCheckedChange={(v) => setNewExpense({...newExpense, isApprovedExtra: v})}
-                                 />
-                                 <Label htmlFor="isApprovedExtra" className="text-xs font-bold text-orange-600">Gasto Extra Aprobado</Label>
+                            <div className="flex items-center justify-between">
+                               <div className="flex items-center gap-2">
+                                 <Switch checked={newExpense.isApprovedExtra} onCheckedChange={(v) => setNewExpense({...newExpense, isApprovedExtra: v})} />
+                                 <Label className="text-[10px] font-bold text-orange-600">Aprobación Extra</Label>
                                </div>
-                               <Button size="sm" className="h-8 text-xs" onClick={() => handleAddExpense(intervention)}>Guardar</Button>
+                               <div className="flex gap-2">
+                                 <Button size="sm" className="h-7 text-xs" onClick={() => handleAddExpense(intervention)}>Guardar</Button>
+                                 <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setActiveInterventionId(null)}>Cancelar</Button>
+                               </div>
                             </div>
                           </div>
                         )}
-
                         <div className="space-y-2">
-                          {intervention.detailedExpenses.length > 0 ? (
-                            intervention.detailedExpenses.map((exp) => (
-                              <div key={exp.id} className={cn(
-                                "flex flex-col p-2 rounded text-xs border",
-                                exp.isUnused ? "bg-orange-50/50 border-orange-200" : "bg-white"
-                              )}>
-                                <div className="flex items-center justify-between">
-                                  <div className="flex flex-col">
-                                    <span className="font-medium">{exp.description}</span>
-                                    {exp.isUnused && <span className="text-[9px] font-bold text-orange-600">Inventario</span>}
-                                  </div>
-                                  <span className="font-mono font-bold">${exp.amount.toLocaleString()}</span>
-                                </div>
-                                {exp.isApprovedExtra && (
-                                  <div className="mt-1 flex items-center gap-1.5 text-[8px] font-bold text-blue-700">
-                                    <History className="h-2 w-2" /> APROBADO POR: {exp.approvedByUserId}
-                                  </div>
-                                )}
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-[10px] text-muted-foreground italic text-center py-2">Sin gastos registrados.</p>
-                          )}
+                          {intervention.detailedExpenses.map((exp) => (
+                            <div key={exp.id} className={cn("flex flex-col p-2 rounded text-[11px] border bg-white shadow-sm", exp.isUnused && "bg-orange-50/30")}>
+                               <div className="flex justify-between items-center">
+                                 <span className="font-medium">{exp.description} {exp.isUnused && <Badge className="text-[8px] bg-orange-100 text-orange-800 ml-1">Inventario</Badge>}</span>
+                                 <span className="font-mono font-bold">${exp.amount.toLocaleString()}</span>
+                               </div>
+                               {exp.isApprovedExtra && (
+                                 <div className="mt-1 flex items-center gap-1 text-[8px] text-blue-700 font-bold">
+                                   <ShieldAlert className="h-2 w-2" /> APROBADO: {exp.approvedByUserId}
+                                 </div>
+                               )}
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
@@ -487,61 +387,94 @@ export default function RequestDetailPage() {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-lg flex items-center gap-2 text-green-700">
-                  <FileText className="h-5 w-5" />
-                  Reporte Final Consolidado
+                  <FileText className="h-5 w-5" /> Reporte Final Formal
                 </CardTitle>
-                <CardDescription>Documentación formal para la asistencia.</CardDescription>
+                <CardDescription>Documentación consolidada para la asistencia.</CardDescription>
               </div>
               {canEdit && (
                 <Button size="sm" variant="outline" className="gap-2" onClick={handleGenerateSummary} disabled={isSummarizing}>
                   {isSummarizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                  IA: Consolidar
+                  Consolidar con IA
                 </Button>
               )}
             </CardHeader>
             <CardContent>
               <Textarea 
                 placeholder="Redacte aquí el reporte formal..."
-                className="min-h-[150px]"
+                className="min-h-[150px] text-sm"
                 value={report}
                 onChange={(e) => setReport(e.target.value)}
                 disabled={!canEdit}
               />
               {canEdit && (
-                <Button className="mt-4 gap-2 w-full md:w-auto">
-                  <Save className="h-4 w-4" /> Guardar Reporte
+                <Button className="mt-4 gap-2">
+                  <Save className="h-4 w-4" /> Guardar Reporte Final
                 </Button>
               )}
             </CardContent>
           </Card>
+
+          {/* BITÁCORA DE AUDITORÍA: SOLO ADMIN Y CONTABILIDAD */}
+          {(isAdmin || isAccounting) && (
+            <Card className="border-t-4 border-t-slate-800 bg-slate-50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-md flex items-center gap-2">
+                  <Activity className="h-4 w-4" /> Bitácora de Auditoría Financiera
+                </CardTitle>
+                <CardDescription>Registro histórico de cambios en valores y estados de cobro.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  {auditLogs.length > 0 ? (
+                    auditLogs.map((log) => (
+                      <div key={log.id} className="flex gap-3 items-start border-l-2 border-slate-300 pl-4 py-1">
+                        <Clock className="h-3 w-3 text-slate-400 mt-1 shrink-0" />
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-bold text-slate-700">{log.userName}</span>
+                            <span className="text-[10px] text-slate-400">{new Date(log.timestamp).toLocaleString()}</span>
+                          </div>
+                          <p className="text-[11px] font-medium text-slate-600">{log.action}</p>
+                          <p className="text-[10px] text-slate-500 italic bg-white p-1.5 rounded border border-slate-200">
+                            {log.details}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-center text-muted-foreground italic py-4">No hay registros de auditoría aún.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
-        {/* PANEL LATERAL FINANCIERO: RESTRICCIONES SEGÚN ROL Y ESTADO */}
         <div className="flex flex-col gap-6">
           {canSeeFinancials && (
             <>
               <Card className="bg-primary text-primary-foreground overflow-hidden shadow-xl">
-                <div className="bg-white/10 p-4 border-b border-white/20 flex justify-between items-center">
+                <div className="bg-white/10 p-4 flex justify-between items-center border-b border-white/20">
                    <CardTitle className="text-xs font-bold uppercase tracking-widest opacity-80">Caja y Operatividad</CardTitle>
-                   <Receipt className="h-4 w-4 opacity-50" />
+                   <Calculator className="h-4 w-4 opacity-50" />
                 </div>
                 <CardContent className="p-6 space-y-4">
                   <div className="space-y-3">
                     <div className="flex justify-between text-xs">
-                      <span className="opacity-70">Mano de Obra (Total):</span>
+                      <span className="opacity-70">Mano de Obra Total:</span>
                       <span className="font-mono font-bold">${totalLabor.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-xs">
-                      <span className="opacity-70">Gastos Materiales (Usados):</span>
+                      <span className="opacity-70">Gastos Usados:</span>
                       <span className="font-mono font-bold">${totalUsedExpenses.toLocaleString()}</span>
                     </div>
-                    <div className="flex justify-between text-xs text-red-300">
-                      <span className="opacity-70">Anticipos Entregados:</span>
-                      <span className="font-mono font-bold">-${totalAdvances.toLocaleString()}</span>
+                    <div className="flex justify-between text-xs text-red-300 font-bold">
+                      <span className="opacity-70 text-white">Anticipos:</span>
+                      <span>-${totalAdvances.toLocaleString()}</span>
                     </div>
                     <Separator className="bg-white/20" />
                     <div className="space-y-1">
-                       <p className="text-[10px] opacity-60 font-bold">COSTO OPERATIVO ACTUAL</p>
+                       <p className="text-[10px] opacity-60 font-bold uppercase">Costo Real del Servicio</p>
                        <p className="text-3xl font-mono font-black">${(totalLabor + totalUsedExpenses).toLocaleString()}</p>
                     </div>
                   </div>
@@ -552,39 +485,35 @@ export default function RequestDetailPage() {
                 <Card className="shadow-md border-t-4 border-t-accent bg-accent/5">
                   <CardHeader className="pb-3">
                      <CardTitle className="text-sm font-bold flex items-center gap-2">
-                       <Calculator className="h-4 w-4 text-accent" /> Conciliación Facturación
+                       <Receipt className="h-4 w-4 text-accent" /> Gestión de Cobro (Ajustes)
                      </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                      <div className="space-y-1">
-                       <Label className="text-[10px] text-muted-foreground uppercase">Valor Solicitado</Label>
-                       <Input 
-                         type="number" 
-                         className="h-8 font-mono" 
-                         value={requestedAmount}
-                         onChange={(e) => setRequestedAmount(Number(e.target.value))}
-                       />
+                       <Label className="text-[10px] text-muted-foreground">VALOR COBRADO (Solicitado)</Label>
+                       <Input type="number" className="h-8 font-mono" value={requestedAmount} onChange={(e) => setRequestedAmount(Number(e.target.value))} />
                      </div>
                      <div className="space-y-1">
-                       <Label className="text-[10px] text-muted-foreground uppercase">Valor Aprobado Asistencia</Label>
-                       <Input 
-                         type="number" 
-                         className="h-8 font-mono border-green-500" 
-                         value={approvedAmount}
-                         onChange={(e) => setApprovedAmount(Number(e.target.value))}
-                       />
+                       <Label className="text-[10px] text-muted-foreground">VALOR APROBADO (Asistencia)</Label>
+                       <Input type="number" className="h-8 font-mono border-green-500" value={approvedAmount} onChange={(e) => setApprovedAmount(Number(e.target.value))} />
                      </div>
-                     <div className="space-y-1">
-                        <Label className="text-[10px] text-muted-foreground uppercase">Margen Bruto</Label>
-                        <div className={cn(
-                          "h-8 px-3 flex items-center rounded-md font-mono font-bold text-sm",
-                          (approvedAmount - totalOperative) >= 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-                        )}>
+                     <div className="space-y-2">
+                        <Label className="text-[10px] text-muted-foreground">ESTADO DE FACTURACIÓN</Label>
+                        <select className="w-full h-8 rounded-md border text-xs px-2" value={billingStatus} onChange={(e) => setBillingStatus(e.target.value as BillingStatus)}>
+                           <option value="pending">Pendiente Conciliar</option>
+                           <option value="ready_to_bill">Listo para Facturar</option>
+                           <option value="billed">Facturado</option>
+                           <option value="paid">Pagado</option>
+                        </select>
+                     </div>
+                     <div className="space-y-1 pt-2">
+                        <Label className="text-[10px] text-muted-foreground font-bold">MARGEN BRUTO AJUSTADO</Label>
+                        <div className={cn("h-8 px-3 flex items-center rounded-md font-mono font-bold text-sm", (approvedAmount - totalOperative) >= 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
                           ${(approvedAmount - totalOperative).toLocaleString()}
                         </div>
                      </div>
-                     <Button className="w-full h-8 text-xs gap-2 bg-accent hover:bg-accent/90" onClick={handleSaveBilling}>
-                       <Save className="h-4 w-4" /> Guardar Ajustes
+                     <Button className="w-full h-9 gap-2 bg-accent hover:bg-accent/90" onClick={handleSaveBilling}>
+                       <Save className="h-4 w-4" /> Guardar y Registrar
                      </Button>
                   </CardContent>
                 </Card>
@@ -592,20 +521,56 @@ export default function RequestDetailPage() {
             </>
           )}
 
+          <Card className="border-l-4 border-l-yellow-500">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-bold flex items-center justify-between">
+                <span>Anticipos</span>
+                <HandCoins className="h-4 w-4 text-yellow-600" />
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+               {isAddingAdvance && (
+                 <div className="p-3 border rounded bg-yellow-50/50 space-y-2 animate-in fade-in">
+                    <Input placeholder="Monto" type="number" className="h-8 text-xs" value={newAdvanceAmount} onChange={(e) => setNewAdvanceAmount(e.target.value)} />
+                    <Input placeholder="Motivo" className="h-8 text-xs" value={newAdvanceReason} onChange={(e) => setNewAdvanceReason(e.target.value)} />
+                    <div className="flex gap-2">
+                      <Button size="sm" className="h-7 text-[10px] flex-1" onClick={handleAddAdvance}>Registrar</Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-[10px]" onClick={() => setIsAddingAdvance(false)}>X</Button>
+                    </div>
+                 </div>
+               )}
+               <div className="space-y-2">
+                 {request.advances?.map(adv => (
+                   <div key={adv.id} className="flex justify-between items-center text-[11px] p-2 bg-white border rounded shadow-sm">
+                      <div className="flex flex-col">
+                        <span className="font-bold">{adv.reason}</span>
+                        <span className="text-[9px] text-muted-foreground">{new Date(adv.date).toLocaleDateString()}</span>
+                      </div>
+                      <span className="font-mono font-bold text-destructive">-${adv.amount.toLocaleString()}</span>
+                   </div>
+                 ))}
+                 {canEdit && !isAddingAdvance && (
+                   <Button variant="outline" className="w-full h-7 text-[10px] border-dashed" onClick={() => setIsAddingAdvance(true)}>
+                     <Plus className="h-3 w-3 mr-1" /> Nuevo Anticipo
+                   </Button>
+                 )}
+               </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-md flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-primary" /> Asistencia
+                <Building2 className="h-4 w-4 text-primary" /> Asistencia y Cuenta
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-3 bg-muted/50 rounded-lg border border-dashed border-primary/20">
+            <CardContent className="space-y-3">
+              <div className="p-3 bg-primary/5 rounded border border-primary/10">
                 <p className="text-sm font-bold text-primary">{company?.name}</p>
-                <p className="text-xs text-muted-foreground">Cuenta: {request.accountName}</p>
+                <p className="text-[11px] text-muted-foreground">Canal: {request.accountName}</p>
               </div>
-              <div className="text-xs text-muted-foreground">
-                <p className="font-bold">Creado el:</p>
-                <p>{new Date(request.createdAt).toLocaleString()}</p>
+              <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                <Clock className="h-3 w-3" /> Creado el {new Date(request.createdAt).toLocaleString()}
               </div>
             </CardContent>
           </Card>

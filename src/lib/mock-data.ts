@@ -83,6 +83,16 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
     billingStatus: 'pending',
     requestedAmount: 180000,
     approvedAmount: 165000,
+    auditLogs: [
+      {
+        id: 'log1',
+        userId: 'admin-1',
+        userName: 'Andrés Castro',
+        action: 'Actualización Financiera',
+        timestamp: new Date(today.getTime() - 3600000).toISOString(),
+        details: 'Cambio de Valor Solicitado: $150k -> $180k. Valor Aprobado: $165k.'
+      }
+    ],
     createdAt: new Date(today.getTime() - 172800000).toISOString(),
     updatedAt: today.toISOString(),
   },
