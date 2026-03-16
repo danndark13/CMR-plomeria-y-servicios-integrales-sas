@@ -14,6 +14,13 @@ export const MOCK_TECHNICIANS: Technician[] = [
   { id: 't4', name: 'Mario Diaz', specialties: ['Trabajo en Alturas', 'Vidriería'], activeTasks: 3 },
 ];
 
+// Helper to get dates relative to today
+const today = new Date();
+const tomorrow = new Date(today);
+tomorrow.setDate(today.getDate() + 1);
+const nextWeek = new Date(today);
+nextWeek.setDate(today.getDate() + 7);
+
 export const MOCK_REQUESTS: ServiceRequest[] = [
   {
     id: 'REQ-001',
@@ -31,8 +38,8 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
         id: 'v1',
         technicianId: 't1',
         type: 'Diagnóstico',
-        date: new Date(Date.now() - 86400000).toISOString(),
-        notes: 'Se realizó visita técnica inicial. Se identifica que la fuga proviene del sello de la brida. Se requiere cambio de empaque.',
+        date: new Date(today.getTime() - 86400000).toISOString(),
+        notes: 'Se realizó visita técnica inicial. Se identifica que la fuga proviene del sello de la brida.',
         laborCost: 45000,
         expenses: 5000
       },
@@ -40,14 +47,14 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
         id: 'v2',
         technicianId: 't4',
         type: 'Reparación',
-        date: new Date(Date.now() - 3600000).toISOString(),
-        notes: 'Se procede con el cambio de brida y sello de cera. Pruebas de descarga sin filtraciones.',
+        date: today.toISOString(), // Hoy
+        notes: 'Programado para cambio de sellos hoy.',
         laborCost: 65000,
         expenses: 12000
       }
     ],
-    createdAt: new Date(Date.now() - 172800000).toISOString(),
-    updatedAt: new Date(Date.now() - 3600000).toISOString(),
+    createdAt: new Date(today.getTime() - 172800000).toISOString(),
+    updatedAt: today.toISOString(),
   },
   {
     id: 'REQ-002',
@@ -64,14 +71,39 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
       {
         id: 'v3',
         technicianId: 't2',
-        type: 'Diagnóstico',
-        date: new Date(Date.now() - 3600000).toISOString(),
-        notes: 'Se revisa caja de breakers. Hay sobrecarga en el circuito 4 por electrodomésticos.',
+        type: 'Reparación',
+        date: tomorrow.toISOString(), // Mañana
+        notes: 'Visita programada para revisión de cableado.',
         laborCost: 40000,
         expenses: 0
       }
     ],
-    createdAt: new Date(Date.now() - 7200000).toISOString(),
-    updatedAt: new Date(Date.now() - 7200000).toISOString(),
+    createdAt: new Date(today.getTime() - 7200000).toISOString(),
+    updatedAt: new Date(today.getTime() - 7200000).toISOString(),
+  },
+  {
+    id: 'REQ-003',
+    category: 'Cerrajería',
+    companyId: '3',
+    accountName: 'Davivienda',
+    status: 'pending',
+    insuredName: 'Marta Lucia',
+    claimNumber: 'EXP-552233',
+    address: 'Av. Jimenez #4-12',
+    phoneNumber: '320 444 5566',
+    description: 'Apertura de puerta principal por olvido de llaves.',
+    interventions: [
+      {
+        id: 'v4',
+        technicianId: 't3',
+        type: 'Diagnóstico',
+        date: nextWeek.toISOString(), // Próxima semana
+        notes: 'Programado para mantenimiento preventivo de cerraduras.',
+        laborCost: 35000,
+        expenses: 0
+      }
+    ],
+    createdAt: today.toISOString(),
+    updatedAt: today.toISOString(),
   }
 ];

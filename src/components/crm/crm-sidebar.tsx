@@ -9,7 +9,9 @@ import {
   Users, 
   Settings,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  CalendarDays,
+  Bell
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -24,16 +26,26 @@ import {
   SidebarGroupLabel,
   SidebarSeparator
 } from "@/components/ui/sidebar"
-
-const menuItems = [
-  { title: "Dashboard", icon: LayoutDashboard, href: "/" },
-  { title: "Servicios", icon: ClipboardList, href: "/requests" },
-  { title: "Empresas", icon: Briefcase, href: "/companies" },
-  { title: "Técnicos", icon: Users, href: "/technicians" },
-]
+import { MOCK_REQUESTS } from "@/lib/mock-data"
+import { Badge } from "@/components/ui/badge"
 
 export function CRMSidebar() {
   const pathname = usePathname()
+  
+  // Count interventions for today
+  const today = new Date().toLocaleDateString()
+  const todayCount = MOCK_REQUESTS.reduce((acc, req) => {
+    const hasToday = req.interventions.some(i => new Date(i.date).toLocaleDateString() === today)
+    return hasToday ? acc + 1 : acc
+  }, 0)
+
+  const menuItems = [
+    { title: "Dashboard", icon: LayoutDashboard, href: "/" },
+    { title: "Servicios", icon: ClipboardList, href: "/requests" },
+    { title: "Calendario", icon: CalendarDays, href: "/calendar", badge: todayCount > 0 ? todayCount : null },
+    { title: "Empresas", icon: Briefcase, href: "/companies" },
+    { title: "Técnicos", icon: Users, href: "/technicians" },
+  ]
 
   return (
     <Sidebar variant="sidebar" collapsible="icon">
@@ -73,7 +85,12 @@ export function CRMSidebar() {
                   <Link href={item.href}>
                     <item.icon className="h-5 w-5" />
                     <span>{item.title}</span>
-                    {pathname === item.href && (
+                    {item.badge && (
+                      <Badge className="ml-auto bg-accent text-accent-foreground h-5 w-5 flex items-center justify-center p-0 rounded-full animate-pulse">
+                        {item.badge}
+                      </Badge>
+                    )}
+                    {pathname === item.href && !item.badge && (
                       <ChevronRight className="ml-auto h-4 w-4" />
                     )}
                   </Link>
