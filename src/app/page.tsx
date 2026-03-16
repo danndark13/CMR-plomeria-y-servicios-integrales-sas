@@ -18,14 +18,18 @@ import {
   CalendarDays,
   ArrowUpRight,
   MapPin,
-  User
+  User,
+  AlertCircle,
+  BellRing,
+  AlertTriangle
 } from "lucide-react"
-import { MOCK_REQUESTS, MOCK_COMPANIES, MOCK_TECHNICIANS } from "@/lib/mock-data"
+import { MOCK_REQUESTS, MOCK_COMPANIES, MOCK_TECHNICIANS, MOCK_REMINDERS } from "@/lib/mock-data"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils"
 
 const statusData = [
   { name: 'Pendiente', count: MOCK_REQUESTS.filter(r => r.status === 'pending').length, color: '#f59e0b' },
@@ -51,13 +55,18 @@ export default function DashboardPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-primary">Panel de Control</h1>
-          <p className="text-muted-foreground">Resumen operativo del día de hoy.</p>
+          <p className="text-muted-foreground">Resumen operativo y alertas prioritarias.</p>
         </div>
-        <Link href="/calendar">
-          <Button variant="outline" className="gap-2 border-primary text-primary hover:bg-primary/5">
-            <CalendarDays className="h-4 w-4" /> Ver Calendario Completo
+        <div className="flex gap-2">
+          <Link href="/calendar">
+            <Button variant="outline" className="gap-2 border-primary text-primary hover:bg-primary/5">
+              <CalendarDays className="h-4 w-4" /> Calendario
+            </Button>
+          </Link>
+          <Button className="gap-2">
+            <BellRing className="h-4 w-4" /> {MOCK_REMINDERS.length} Alertas
           </Button>
-        </Link>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -104,55 +113,85 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-12">
-        {/* Agenda del día */}
-        <Card className="lg:col-span-4 border-accent/20 bg-accent/5">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <CalendarDays className="h-5 w-5 text-accent" />
-              Agenda de Hoy
-            </CardTitle>
-            <Badge variant="secondary" className="bg-accent/20 text-accent-foreground">
-              {todayStr}
-            </Badge>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {todayVisits.length > 0 ? (
-                todayVisits.map((visit) => {
-                  const tech = MOCK_TECHNICIANS.find(t => t.id === visit.technicianId)
-                  return (
-                    <div key={visit.id} className="p-3 bg-white rounded-lg border shadow-sm space-y-2">
-                      <div className="flex justify-between items-start">
-                        <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">{visit.request.claimNumber}</span>
-                        <span className="text-xs font-mono font-bold text-accent">
-                          {new Date(visit.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                      <p className="text-sm font-bold truncate">{visit.request.insuredName}</p>
-                      <div className="flex flex-col gap-1 text-[11px] text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <User className="h-3 w-3" /> {tech?.name}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3" /> {visit.request.address}
-                        </div>
-                      </div>
-                      <Link href={`/requests/${visit.request.id}`}>
-                        <Button variant="ghost" size="sm" className="w-full h-7 text-[11px] mt-1 hover:bg-accent/10 text-accent">
-                          Ver Servicio
-                        </Button>
-                      </Link>
-                    </div>
-                  )
-                })
-              ) : (
-                <div className="py-10 text-center text-muted-foreground">
-                  <p className="text-sm">No hay visitas para hoy.</p>
+        {/* Panel de Alertas y Recordatorios */}
+        <div className="lg:col-span-4 flex flex-col gap-6">
+          <Card className="border-destructive/20 bg-destructive/5">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-destructive" />
+                Alertas Críticas
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {MOCK_REMINDERS.filter(r => r.type === 'critical' || r.type === 'warning').map((reminder) => (
+                <div key={reminder.id} className={cn(
+                  "p-3 rounded-lg border flex gap-3 items-start",
+                  reminder.type === 'critical' ? "bg-destructive/10 border-destructive/20" : "bg-yellow-50 border-yellow-200"
+                )}>
+                  {reminder.type === 'critical' ? <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" /> : <AlertTriangle className="h-4 w-4 text-yellow-600 shrink-0 mt-0.5" />}
+                  <div className="flex-1">
+                    <p className="text-xs font-bold uppercase">{reminder.title}</p>
+                    <p className="text-[11px] text-muted-foreground leading-tight">{reminder.description}</p>
+                    {reminder.technicianId && (
+                      <Badge variant="outline" className="mt-2 text-[9px] h-4">
+                        Técnico: {MOCK_TECHNICIANS.find(t => t.id === reminder.technicianId)?.name}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card className="border-accent/20 bg-accent/5">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <CalendarDays className="h-5 w-5 text-accent" />
+                Agenda de Hoy
+              </CardTitle>
+              <Badge variant="secondary" className="bg-accent/20 text-accent-foreground">
+                {todayStr}
+              </Badge>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {todayVisits.length > 0 ? (
+                  todayVisits.map((visit) => {
+                    const tech = MOCK_TECHNICIANS.find(t => t.id === visit.technicianId)
+                    return (
+                      <div key={visit.id} className="p-3 bg-white rounded-lg border shadow-sm space-y-2">
+                        <div className="flex justify-between items-start">
+                          <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">{visit.request.claimNumber}</span>
+                          <span className="text-xs font-mono font-bold text-accent">
+                            {new Date(visit.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p className="text-sm font-bold truncate">{visit.request.insuredName}</p>
+                        <div className="flex flex-col gap-1 text-[11px] text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <User className="h-3 w-3" /> {tech?.name}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3" /> {visit.request.address}
+                          </div>
+                        </div>
+                        <Link href={`/requests/${visit.request.id}`}>
+                          <Button variant="ghost" size="sm" className="w-full h-7 text-[11px] mt-1 hover:bg-accent/10 text-accent">
+                            Ver Servicio
+                          </Button>
+                        </Link>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <div className="py-10 text-center text-muted-foreground">
+                    <p className="text-sm">No hay visitas para hoy.</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Gráfico y Servicios Recientes */}
         <div className="lg:col-span-8 flex flex-col gap-6">

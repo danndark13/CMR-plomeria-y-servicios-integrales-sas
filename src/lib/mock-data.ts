@@ -1,4 +1,4 @@
-import { AssistanceCompany, Technician, ServiceRequest } from './types';
+import { AssistanceCompany, Technician, ServiceRequest, Reminder } from './types';
 
 export const MOCK_COMPANIES: AssistanceCompany[] = [
   { id: '1', name: 'IKE Asistencia', accounts: ['Coomeva', 'HDI', 'Banco de Bogotá', 'Sura'] },
@@ -8,7 +8,7 @@ export const MOCK_COMPANIES: AssistanceCompany[] = [
 ];
 
 export const MOCK_TECHNICIANS: Technician[] = [
-  { id: 't1', name: 'Juan Perez', specialties: ['Plomería', 'Destaponamiento'], activeTasks: 2 },
+  { id: 't1', name: 'Juan Perez', specialties: ['Plomería', 'Destaponamiento'], activeTasks: 4 },
   { id: 't2', name: 'Carlos Ruiz', specialties: ['Electricidad', 'Instalación'], activeTasks: 1 },
   { id: 't3', name: 'Luis Gomez', specialties: ['Cerrajería'], activeTasks: 0 },
   { id: 't4', name: 'Mario Diaz', specialties: ['Trabajo en Alturas', 'Vidriería'], activeTasks: 3 },
@@ -47,7 +47,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
         id: 'v2',
         technicianId: 't4',
         type: 'Reparación',
-        date: today.toISOString(), // Hoy
+        date: today.toISOString(),
         notes: 'Programado para cambio de sellos hoy.',
         laborCost: 65000,
         expenses: 12000
@@ -72,7 +72,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
         id: 'v3',
         technicianId: 't2',
         type: 'Reparación',
-        date: tomorrow.toISOString(), // Mañana
+        date: tomorrow.toISOString(),
         notes: 'Visita programada para revisión de cableado.',
         laborCost: 40000,
         expenses: 0
@@ -97,7 +97,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
         id: 'v4',
         technicianId: 't3',
         type: 'Diagnóstico',
-        date: nextWeek.toISOString(), // Próxima semana
+        date: nextWeek.toISOString(),
         notes: 'Programado para mantenimiento preventivo de cerraduras.',
         laborCost: 35000,
         expenses: 0
@@ -105,5 +105,32 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
     ],
     createdAt: today.toISOString(),
     updatedAt: today.toISOString(),
+  }
+];
+
+export const MOCK_REMINDERS: Reminder[] = [
+  {
+    id: 'r1',
+    type: 'critical',
+    title: 'Alta Carga de Trabajo',
+    description: 'Juan Perez tiene 4 servicios activos. Considerar reasignación.',
+    technicianId: 't1',
+    createdAt: today.toISOString(),
+  },
+  {
+    id: 'r2',
+    type: 'warning',
+    title: 'Reporte Pendiente',
+    description: 'Expediente EXP-998822 lleva 2 días sin reporte final.',
+    requestId: 'REQ-001',
+    createdAt: today.toISOString(),
+  },
+  {
+    id: 'r3',
+    type: 'info',
+    title: 'Próxima Visita',
+    description: 'Visita técnica de Carlos Ruiz inicia en 30 minutos.',
+    technicianId: 't2',
+    createdAt: today.toISOString(),
   }
 ];

@@ -34,6 +34,16 @@ export interface Technician {
   activeTasks: number;
 }
 
+export interface Reminder {
+  id: string;
+  type: 'warning' | 'info' | 'critical';
+  title: string;
+  description: string;
+  technicianId?: string;
+  requestId?: string;
+  createdAt: string;
+}
+
 export interface ServiceRequest {
   id: string;
   category: ServiceCategory;
