@@ -15,7 +15,6 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
   ArrowLeft, 
-  Sparkles, 
   Loader2,
   Save,
   Warehouse,
@@ -34,7 +33,6 @@ import {
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
-import { serviceNoteSummaryGenerator } from "@/ai/flows/service-note-summary-generator"
 import { toast } from "@/hooks/use-toast"
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase'
 import { doc, setDoc, updateDoc, collection } from 'firebase/firestore'
@@ -51,7 +49,6 @@ export default function RequestDetailPage() {
   
   const [localRequest, setLocalRequest] = useState<ServiceRequest | null>(null)
   const [isSaving, setIsSaving] = useState(false)
-  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
   
   const [showAddEntry, setShowAddEntry] = useState(false)
   const [showScheduleVisit, setShowScheduleVisit] = useState(false)
@@ -314,7 +311,6 @@ export default function RequestDetailPage() {
       claimNumber: localRequest.claimNumber,
       address: localRequest.address,
       phoneNumber: localRequest.phoneNumber,
-      report: localRequest.report || "",
       status: localRequest.status,
       updatedAt: new Date().toISOString()
     }
@@ -330,27 +326,6 @@ export default function RequestDetailPage() {
         errorEmitter.emit("permission-error", permissionError)
       })
       .finally(() => setIsSaving(false))
-  }
-
-  const handleGenerateSummary = async () => {
-    const interventions = localRequest.interventions || []
-    if (!interventions.length) {
-      toast({ variant: "destructive", title: "Sin datos", description: "No hay reportes técnicos para resumir." })
-      return
-    }
-
-    setIsGeneratingSummary(true)
-    const allNotes = interventions.map((i, idx) => `Reporte ${idx + 1}: ${i.notes}`).join('\n')
-    
-    try {
-      const result = await serviceNoteSummaryGenerator({ notes: allNotes })
-      handleUpdateField('report', result.summary)
-      toast({ title: "Resumen Generado", description: "La IA ha consolidado los reportes técnicos." })
-    } catch (error) {
-      toast({ variant: "destructive", title: "Error de IA", description: "No se pudo generar el resumen." })
-    } finally {
-      setIsGeneratingSummary(false)
-    }
   }
 
   const checkWarehouseStock = (desc: string) => {
@@ -760,29 +735,6 @@ export default function RequestDetailPage() {
         </div>
 
         <div className="lg:col-span-4 space-y-6">
-          <Card className="bg-blue-600 text-white shadow-xl overflow-hidden relative">
-             <div className="absolute top-0 right-0 p-2 opacity-10">
-                <Sparkles className="h-12 w-12" />
-             </div>
-             <CardHeader className="pb-2 relative z-10">
-                <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
-                   <FileText className="h-4 w-4" /> Reporte Formal de Asistencia
-                </CardTitle>
-             </CardHeader>
-             <CardContent className="space-y-4 relative z-10">
-                <Textarea 
-                  className="bg-white/10 border-white/20 text-white placeholder:text-white/40 text-xs min-h-[120px] font-medium leading-relaxed"
-                  placeholder="Redacte aquí el resumen técnico formal que se enviará a la aseguradora..."
-                  value={localRequest.report || ""}
-                  onChange={(e) => handleUpdateField('report', e.target.value)}
-                  disabled={!canEdit}
-                />
-                <Button variant="outline" className="w-full bg-white/10 hover:bg-white/20 border-white/30 text-white font-black text-[10px] uppercase h-10 gap-2" onClick={handleGenerateSummary} disabled={!canEdit || isGeneratingSummary}>
-                   {isGeneratingSummary ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Sparkles className="h-4 w-4" /> Consolidar Reportes con IA</>}
-                </Button>
-             </CardContent>
-          </Card>
-
           <Card className="shadow-lg border-t-4 border-t-primary bg-slate-50">
             <CardHeader className="pb-2">
               <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado de Conciliación</CardTitle>
