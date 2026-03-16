@@ -22,6 +22,8 @@ export interface Expense {
   category: ExpenseCategory;
   isUnused: boolean; // Si es true, queda en inventario y no suma al costo del servicio
   isApprovedExtra?: boolean; // Si es true, permite duplicar material que ya está en inventario
+  approvedByUserId?: string; // ID del usuario que aprobó el gasto extra
+  approvedAt?: string;      // Fecha de la aprobación
 }
 
 export interface InventoryItem {

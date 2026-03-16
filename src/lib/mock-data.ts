@@ -57,7 +57,16 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
         notes: 'Programado para cambio de sellos hoy.',
         laborCost: 65000,
         detailedExpenses: [
-          { id: 'e2', amount: 12000, description: 'Kit de Sellos Brida', category: 'material', isUnused: false },
+          { 
+            id: 'e2', 
+            amount: 12000, 
+            description: 'Kit de Sellos Brida', 
+            category: 'material', 
+            isUnused: false,
+            isApprovedExtra: true,
+            approvedByUserId: 'Andrés Castro (Admin)',
+            approvedAt: new Date(today.getTime() - 3600000).toISOString()
+          },
           { id: 'e3', amount: 8000, description: 'Pegante PVC', category: 'material', isUnused: true }
         ]
       }

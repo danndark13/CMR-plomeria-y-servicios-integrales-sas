@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS, MOCK_COMPANIES } from "@/lib/mock-data"
-import { ServiceRequest, BillingStatus, ExpenseCategory, Technician } from "@/lib/types"
+import { ServiceRequest, BillingStatus, ExpenseCategory, Technician, Advance } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -35,7 +35,8 @@ import {
   Package,
   Truck,
   Trash2,
-  ShieldAlert
+  ShieldAlert,
+  History
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -142,13 +143,30 @@ export default function RequestDetailPage() {
       return
     }
 
+    // Registro de auditoría si es extra
+    const auditInfo = newExpense.isApprovedExtra ? {
+      approvedByUserId: 'admin-01', // Mock user
+      approvedAt: new Date().toISOString()
+    } : {}
+
     toast({ 
       title: "Gasto Registrado", 
-      description: `${newExpense.description} por $${newExpense.amount} añadido.${newExpense.isApprovedExtra ? ' (Aprobado como Extra)' : ''}` 
+      description: `${newExpense.description} por $${newExpense.amount} añadido.${newExpense.isApprovedExtra ? ' (Historial de auditoría generado)' : ''}` 
     })
     
     setActiveInterventionId(null)
     setNewExpense({ amount: "", description: "", category: "material", isUnused: false, isApprovedExtra: false })
+  }
+
+  const handleAddAdvance = () => {
+    if (!newAdvanceAmount || !newAdvanceReason) {
+      toast({ title: "Error", description: "Monto y motivo son obligatorios.", variant: "destructive" })
+      return
+    }
+    toast({ title: "Anticipo Registrado", description: `Se han adelantado $${newAdvanceAmount} al técnico.` })
+    setIsAddingAdvance(false)
+    setNewAdvanceAmount("")
+    setNewAdvanceReason("")
   }
 
   const handleSaveBilling = () => {
@@ -406,25 +424,35 @@ export default function RequestDetailPage() {
                         {intervention.detailedExpenses.length > 0 ? (
                           intervention.detailedExpenses.map((exp) => (
                             <div key={exp.id} className={cn(
-                              "flex items-center justify-between p-2 rounded text-xs border",
+                              "flex flex-col p-2 rounded text-xs border",
                               exp.isUnused ? "bg-orange-50/50 border-orange-200 border-dashed" : "bg-white border-muted"
                             )}>
-                              <div className="flex items-center gap-2">
-                                {exp.isUnused ? <Package className="h-3 w-3 text-orange-500" /> : <Truck className="h-3 w-3 text-muted-foreground" />}
-                                <div className="flex flex-col">
-                                  <span className="font-medium">{exp.description}</span>
-                                  {exp.isUnused && <span className="text-[9px] font-bold text-orange-600 uppercase">Queda en Inventario Técnico</span>}
-                                  {exp.isApprovedExtra && <span className="text-[8px] font-bold text-blue-600 uppercase flex items-center gap-1"><ShieldAlert className="h-2 w-2" /> Aprobado como Extra</span>}
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  {exp.isUnused ? <Package className="h-3 w-3 text-orange-500" /> : <Truck className="h-3 w-3 text-muted-foreground" />}
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{exp.description}</span>
+                                    {exp.isUnused && <span className="text-[9px] font-bold text-orange-600 uppercase">Queda en Inventario Técnico</span>}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <span className={cn("font-mono font-bold", exp.isUnused ? "text-orange-600" : "text-foreground")}>
+                                    ${exp.amount.toLocaleString()}
+                                  </span>
+                                  <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive">
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-3">
-                                <span className={cn("font-mono font-bold", exp.isUnused ? "text-orange-600" : "text-foreground")}>
-                                  ${exp.amount.toLocaleString()}
-                                </span>
-                                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive">
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </div>
+                              
+                              {exp.isApprovedExtra && (
+                                <div className="mt-2 p-1.5 bg-blue-50 border border-blue-100 rounded flex items-center gap-2">
+                                   <History className="h-3 w-3 text-blue-600" />
+                                   <span className="text-[9px] font-bold text-blue-700 uppercase">
+                                     Extra Aprobado por: {exp.approvedByUserId} el {new Date(exp.approvedAt!).toLocaleDateString()}
+                                   </span>
+                                </div>
+                              )}
                             </div>
                           ))
                         ) : (

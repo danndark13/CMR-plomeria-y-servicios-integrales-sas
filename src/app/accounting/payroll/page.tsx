@@ -17,11 +17,14 @@ import {
   HandCoins,
   Package,
   Wrench,
-  AlertCircle
+  AlertCircle,
+  ShieldAlert,
+  History
 } from "lucide-react"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS, MOCK_COMPANIES } from "@/lib/mock-data"
 import Link from "next/link"
 import { toast } from "@/hooks/use-toast"
+import { cn } from "@/lib/utils"
 
 export default function PayrollPage() {
   const [selectedTech, setSelectedTech] = useState<string>("all")
@@ -142,7 +145,7 @@ export default function PayrollPage() {
             <Wallet className="h-5 w-5 text-primary" />
             Liquidación Detallada por Técnico
           </CardTitle>
-          <CardDescription>Determine si los gastos se cargan al servicio o pasan al inventario del técnico.</CardDescription>
+          <CardDescription>Audite los gastos extra y determine el cobro final.</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -151,7 +154,7 @@ export default function PayrollPage() {
                 <TableRow>
                   <TableHead>Fecha / Técnico</TableHead>
                   <TableHead>Expediente / Asistencia</TableHead>
-                  <TableHead>Gestión de Materiales (Contador)</TableHead>
+                  <TableHead>Gestión de Materiales y Auditoría</TableHead>
                   <TableHead className="text-right">M. de Obra</TableHead>
                   <TableHead className="text-right">Neto</TableHead>
                   <TableHead></TableHead>
@@ -178,21 +181,36 @@ export default function PayrollPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="space-y-2 max-w-[300px]">
+                        <div className="space-y-2 max-w-[400px]">
                           {item.detailedExpenses.map(exp => (
-                            <div key={exp.id} className="flex items-center justify-between p-2 rounded bg-white border text-[10px]">
-                              <div className="flex flex-col">
-                                <span className="font-bold">{exp.description}</span>
-                                <span className="text-muted-foreground">${exp.amount.toLocaleString()}</span>
+                            <div key={exp.id} className={cn(
+                              "flex flex-col p-2 rounded bg-white border text-[10px]",
+                              exp.isApprovedExtra ? "border-blue-200 bg-blue-50/20" : ""
+                            )}>
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex flex-col">
+                                  <span className="font-bold flex items-center gap-1">
+                                    {exp.description} 
+                                    {exp.isApprovedExtra && <ShieldAlert className="h-2.5 w-2.5 text-blue-600" />}
+                                  </span>
+                                  <span className="text-muted-foreground">${exp.amount.toLocaleString()}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Label className="text-[9px]">{exp.isUnused ? 'Inventario' : 'Cobrar'}</Label>
+                                  <Switch 
+                                    size="sm"
+                                    checked={!exp.isUnused}
+                                    onCheckedChange={(v) => handleToggleInventory(exp.id, !v)}
+                                  />
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <Label className="text-[9px]">{exp.isUnused ? 'Inventario' : 'Cobrar'}</Label>
-                                <Switch 
-                                  size="sm"
-                                  checked={!exp.isUnused}
-                                  onCheckedChange={(v) => handleToggleInventory(exp.id, !v)}
-                                />
-                              </div>
+                              
+                              {exp.isApprovedExtra && (
+                                <div className="mt-1 flex items-center gap-1.5 p-1 bg-blue-100/50 rounded text-[8px] font-bold text-blue-700">
+                                  <History className="h-2 w-2" />
+                                  APROBACIÓN EXTRA: {exp.approvedByUserId} • {new Date(exp.approvedAt!).toLocaleDateString()}
+                                </div>
+                              )}
                             </div>
                           ))}
                           {item.detailedExpenses.length === 0 && <span className="text-muted-foreground italic text-xs">Sin materiales</span>}
