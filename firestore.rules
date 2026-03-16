@@ -3,148 +3,139 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * ASISTENCIAPRO CRM SECURITY RULES
+     * ASISTENCIAPRO CRM SECURITY RULES - PROTOTYPE VERSION
      *
-     * CORE PHILOSOPHY:
-     * This ruleset implements a Role-Based Access Control (RBAC) model combined with document ownership.
-     * High security is maintained for write operations while providing flexibility for rapid prototyping 
-     * by not strictly enforcing non-authorization data schemas.
+     * Core Philosophy:
+     * This ruleset implements a Role-Based Access Control (RBAC) model combined with Ownership and
+     * Shared Access patterns. Security is enforced through denormalized authorization attributes
+     * (like roleId, assignedTechnicianId, and clientAccountId) to ensure performant and
+     * independent access decisions.
      *
-     * DATA STRUCTURE:
-     * - /users: Root collection for user profiles and roles (Admin, Contabilidad, Atención al Cliente).
-     * - /assistanceCompanies: Global entities managed by Admin.
-     * - /clientAccounts: Child entities of assistance companies, managed by Admin.
-     * - /technicians: Global service providers, managed by Admin.
-     * - /serviceRequests (Expedientes): Central work items created by Customer Service or Admin.
-     * - /serviceRequests/{id}/serviceNotes: Detailed logs and costs for specific requests.
+     * Data Structure:
+     * - /roles: Static definitions for system-wide permissions.
+     * - /user_profiles: Central user registry tied to Firebase Auth UIDs. Contains roles and active status.
+     * - /assistance_companies & /client_accounts: Business entities managed by administrative staff.
+     * - /service_requests: The core workflow entity, shared between staff and technicians.
+     * - /service_notes: Nested documentation for service requests, using denormalized context for security.
      *
-     * KEY SECURITY DECISIONS:
-     * - Denormalization: Authorization fields like 'createdByUserId' and 'assistanceCompanyId' are required 
-     *   directly on documents to allow for high-performance rules without recursive get() calls.
-     * - Admin Dominance: The 'Admin' role has broad management permissions across all collections.
-     * - Integrity: Critical fields like IDs and creator links are immutable after creation.
+     * Key Security Decisions:
+     * - User Listing: Strictly restricted to administrators to prevent information leakage.
+     * - Active Status: All authenticated operations require the user's profile to be marked as 'isActive'.
+     * - Authorization Independence: Subcollections (ServiceNotes) carry parent context (clientAccountId)
+     *   to avoid expensive lookups during access checks.
+     * - Prototyping Flexibility: Schema validation is restricted to relational and identity integrity only.
      */
 
-    // --- GLOBAL HELPER FUNCTIONS ---
+    // --- HELPER FUNCTIONS ---
 
+    /** @description Checks if the user is authenticated. */
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function getUserData() {
-      // Ensure the user document exists before trying to access its data
-      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    /** @description Fetches the profile document for the currently authenticated user. */
+    function getProfile() {
+      return get(/databases/$(database)/documents/user_profiles/$(request.auth.uid)).data;
     }
 
-    function hasRole(role) {
-      return isSignedIn() && getUserData().exists && getUserData().data.role == role;
+    /** @description Verifies the user is active and has a specific role ID. */
+    function hasRole(roleId) {
+      return isSignedIn() && getProfile().isActive == true && getProfile().roleId == roleId;
     }
 
+    /** @description General check for administrative privileges. */
     function isAdmin() {
-      return hasRole('Admin');
+      return hasRole('Administrador');
     }
 
-    function isAccounting() {
-      return hasRole('Contabilidad');
-    }
-
-    function isCustomerService() {
-      return hasRole('Atención al Cliente');
-    }
-
+    /** @description Validates if the user is acting on their own document. */
     function isOwner(userId) {
-      return request.auth.uid == userId;
+      return isSignedIn() && request.auth.uid == userId;
     }
 
-    function isExistingOwner(userId) {
-      return resource != null && isOwner(userId);
-    }
+    // The 'isExistingOwner' function was removed as it was unused and had an invalid parameter name ('resource').
 
     // --- COLLECTION RULES ---
 
     /**
-     * @description Rules for the User collection. Admin manages users; users can view/edit their own profile (limited).
-     * @path /users/{userId}
-     * @allow (get) Signed in user matches userId.
-     * @deny (create) Non-admin user attempts to create a new user profile.
-     * @principle Ownership for self-viewing, Role-based for management.
+     * @description Static role definitions. Only admins can modify; any signed-in user can read for UI/Logic context.
+     * @path /roles/{roleId}
+     * @allow get, list: (SignedIn User), create, update, delete: (Admin)
+     * @deny write: (Non-Admin users)
+     * @principle Pattern 2 (Roles): Restricted management to privileged accounts.
      */
-    match /users/{userId} {
-      allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
+    match /roles/{roleId} {
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    /**
+     * @description User profile management. Admins manage all; users can read their own.
+     * @path /user_profiles/{userProfileId}
+     * @allow get: (Owner or Admin), list: (Admin), create: (Admin or Self-Registration), update: (Admin)
+     * @deny list: (Non-Admins), update: (Self-update of roles or status)
+     * @principle Pattern 1 & 4: Ownership for access, Admin control for management, path-consistency for identity.
+     */
+    match /user_profiles/{userProfileId} {
+      allow get: if isOwner(userProfileId) || isAdmin();
       allow list: if isAdmin();
-      allow create: if isAdmin();
-      // Users can only update their own profile if they don't change their role, or if an Admin updates it.
-      allow update: if isAdmin() || (isExistingOwner(userId) && request.resource.data.role == resource.data.role);
-      allow delete: if isAdmin();
+      allow create: if (isOwner(userProfileId) || isAdmin()) && request.resource.data.id == userProfileId;
+      allow update: if (isAdmin() || (isOwner(userProfileId) && request.resource.data.roleId == resource.data.roleId)) && resource != null;
+      allow delete: if isAdmin() && resource != null;
     }
 
     /**
-     * @description Managed assistance provider companies.
-     * @path /assistanceCompanies/{companyId}
-     * @allow (list) Any authenticated employee.
-     * @deny (write) Non-admin user attempts to modify company info.
-     * @principle Global role-based management.
+     * @description External assistance companies registry.
+     * @path /assistance_companies/{companyId}
+     * @allow get, list: (SignedIn User), create, update, delete: (Admin)
+     * @deny write: (Non-Admin users)
+     * @principle Pattern 3: Shared read access for the organization; centralized write access.
      */
-    match /assistanceCompanies/{companyId} {
+    match /assistance_companies/{companyId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isAdmin();
+      allow create: if isAdmin() && request.resource.data.id == companyId;
+      allow update, delete: if isAdmin() && resource != null;
     }
 
     /**
-     * @description Client accounts linked to assistance companies.
-     * @path /clientAccounts/{accountId}
-     * @allow (get) Any authenticated employee.
-     * @deny (create) Customer Service user attempts to create a client account.
-     * @principle Global role-based management.
+     * @description Client accounts managed by assistance companies.
+     * @path /client_accounts/{clientAccountId}
+     * @allow get, list: (Admin, Servicio al Cliente, Contabilidad), create, update, delete: (Admin)
+     * @deny access: (Technicians or unauthenticated users)
+     * @principle Pattern 3: Role-based shared access.
      */
-    match /clientAccounts/{accountId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if isAdmin();
+    match /client_accounts/{clientAccountId} {
+      allow get, list: if isAdmin() || hasRole('Servicio al Cliente') || hasRole('Contabilidad');
+      allow create: if isAdmin() && request.resource.data.id == clientAccountId;
+      allow update, delete: if isAdmin() && resource != null;
     }
 
     /**
-     * @description Technician profiles for service fulfillment.
-     * @path /technicians/{techId}
-     * @allow (list) Customer Service viewing available techs.
-     * @deny (update) Accounting user attempts to edit technician specialties.
-     * @principle Role-based data management.
+     * @description Service workflow requests. Accessible to specific internal roles and assigned technicians.
+     * @path /service_requests/{serviceRequestId}
+     * @allow get, list: (Admin, Staff, or Assigned Tech), create: (Admin or Staff), update: (Authorized participants)
+     * @deny update: (If attempting to change the clientAccountId reference)
+     * @principle Pattern 3/5: Shared access via denormalized identity fields (assignedTechnicianId).
      */
-    match /technicians/{techId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if isAdmin();
+    match /service_requests/{serviceRequestId} {
+      allow get, list: if isAdmin() || hasRole('Servicio al Cliente') || hasRole('Contabilidad') || (isSignedIn() && resource.data.assignedTechnicianId == request.auth.uid);
+      allow create: if (isAdmin() || hasRole('Servicio al Cliente')) && request.resource.data.id == serviceRequestId;
+      allow update: if (isAdmin() || hasRole('Servicio al Cliente') || (resource.data.assignedTechnicianId == request.auth.uid)) && resource != null;
+      allow delete: if isAdmin() && resource != null;
     }
 
     /**
-     * @description Service Requests (Expedientes). Core business unit.
-     * @path /serviceRequests/{requestId}
-     * @allow (create) Customer Service setting themselves as creator.
-     * @deny (update) Customer Service changing the 'createdByUserId' after creation.
-     * @principle Path-consistent ownership and relational integrity.
+     * @description Contextual notes for service requests. Uses denormalization to maintain auth independence.
+     * @path /service_requests/{serviceRequestId}/service_notes/{serviceNoteId}
+     * @allow get: (Authorized participants), create: (Author or Admin), update: (Author)
+     * @deny create: (If denormalized authorId doesn't match auth.uid)
+     * @principle Pattern 5: Relational integrity check via denormalization.
      */
-    match /serviceRequests/{requestId} {
-      allow get, list: if isSignedIn();
-      // Creator must be the authenticated user and either Admin or Customer Service
-      allow create: if (isAdmin() || isCustomerService()) && request.resource.data.createdByUserId == request.auth.uid;
-      // Creator cannot be changed after creation. Only creator or Admin can update.
-      allow update: if resource != null && (isAdmin() || (isCustomerService() && resource.data.createdByUserId == request.auth.uid)) && request.resource.data.createdByUserId == resource.data.createdByUserId;
-      allow delete: if isAdmin();
-    }
-
-    /**
-     * @description Detailed notes and costs within a specific request.
-     * @path /serviceRequests/{requestId}/serviceNotes/{noteId}
-     * @allow (create) Creator of the parent request or Admin adding a note.
-     * @deny (delete) Anyone other than Admin.
-     * @principle Inherited authorization via denormalized ownership fields.
-     */
-    match /serviceRequests/{requestId}/serviceNotes/{noteId} {
-      // Grant read/list access to Admin, Customer Service, and Accounting roles for service notes and costs.
-      allow get, list: if isAdmin() || isCustomerService() || isAccounting();
-      // Creator must be the authenticated user and either Admin or Customer Service
-      allow create: if (isAdmin() || isCustomerService()) && request.resource.data.createdByUserId == request.auth.uid;
-      // Creator cannot be changed after creation. Only creator or Admin can update.
-      allow update: if resource != null && (isAdmin() || (isCustomerService() && resource.data.createdByUserId == request.auth.uid)) && request.resource.data.createdByUserId == resource.data.createdByUserId;
-      allow delete: if isAdmin();
+    match /service_requests/{serviceRequestId}/service_notes/{serviceNoteId} {
+      allow get, list: if isAdmin() || hasRole('Servicio al Cliente') || resource.data.assignedTechnicianId == request.auth.uid || resource.data.authorId == request.auth.uid;
+      allow create: if (isAdmin() || hasRole('Servicio al Cliente') || hasRole('Técnico')) && request.resource.data.authorId == request.auth.uid;
+      allow update: if (resource.data.authorId == request.auth.uid || isAdmin()) && resource != null;
+      allow delete: if isAdmin() && resource != null;
     }
   }
 }

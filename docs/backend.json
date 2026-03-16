@@ -1,59 +1,85 @@
 {
   "entities": {
-    "User": {
+    "Role": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "User",
+      "title": "Role",
       "type": "object",
-      "description": "Represents a user of the AsistenciaPro CRM application with a specific role and access level.",
+      "description": "Defines the different roles users can have within the AsistenciaPro CRM system, controlling their permissions and access.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the User entity."
+          "description": "Unique identifier for the Role entity."
         },
         "name": {
           "type": "string",
-          "description": "The full name of the user."
+          "description": "The name of the role (e.g., 'Administrador', 'Contabilidad', 'Servicio al Cliente', 'Técnico')."
         },
-        "email": {
+        "description": {
           "type": "string",
-          "description": "The email address of the user, used for communication (authentication handled externally).",
-          "format": "email"
-        },
-        "role": {
-          "type": "string",
-          "description": "The role of the user within the CRM system, defining their permissions and access.",
-          "enum": ["Admin", "Contabilidad", "Atención al Cliente"]
-        },
-        "isActive": {
-          "type": "boolean",
-          "description": "Indicates whether the user account is currently active or deactivated."
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp when the user account was created.",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "description": "Timestamp when the user account was last updated.",
-          "format": "date-time"
+          "description": "A detailed description of the role's responsibilities or permissions."
         }
       },
       "required": [
         "id",
         "name",
+        "description"
+      ]
+    },
+    "UserProfile": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "UserProfile",
+      "type": "object",
+      "description": "Represents a user account within the CRM system, used for login and assigning responsibilities. Does not store authentication credentials.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the UserProfile entity."
+        },
+        "username": {
+          "type": "string",
+          "description": "A unique identifier for the user, often used as a login name (e.g., ADMIN01, CON01, SER01). This is distinct from the primary key 'id'."
+        },
+        "firstName": {
+          "type": "string",
+          "description": "The first name of the user."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "The last name of the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the user.",
+          "format": "email"
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "The contact phone number of the user."
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Indicates whether the user account is active or deactivated."
+        },
+        "roleId": {
+          "type": "string",
+          "description": "Reference to the Role entity that defines this user's permissions. (Relationship: Role 1:N UserProfile)"
+        }
+      },
+      "required": [
+        "id",
+        "username",
+        "firstName",
+        "lastName",
         "email",
-        "role",
         "isActive",
-        "createdAt",
-        "updatedAt"
+        "roleId"
       ]
     },
     "AssistanceCompany": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "AssistanceCompany",
       "type": "object",
-      "description": "Represents a top-level assistance provider company (e.g., IKE Asistencia, IGS) that manages various client accounts.",
+      "description": "Represents a third-party assistance company (e.g., IKE Asistencia, IGS) that partners with AsistenciaPro CRM to manage services.",
       "properties": {
         "id": {
           "type": "string",
@@ -63,31 +89,30 @@
           "type": "string",
           "description": "The official name of the assistance company."
         },
-        "description": {
+        "contactPerson": {
           "type": "string",
-          "description": "A brief description or overview of the assistance company."
+          "description": "The primary contact person at the assistance company."
         },
         "contactEmail": {
           "type": "string",
-          "description": "Primary contact email for the assistance company.",
+          "description": "The email address for the primary contact person.",
           "format": "email"
         },
         "contactPhone": {
           "type": "string",
-          "description": "Primary contact phone number for the assistance company."
+          "description": "The phone number for the primary contact person."
         }
       },
       "required": [
         "id",
-        "name",
-        "description"
+        "name"
       ]
     },
     "ClientAccount": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "ClientAccount",
       "type": "object",
-      "description": "Represents a specific client account managed by an Assistance Company (e.g., Coomeva, HDI, Banco de Bogotá).",
+      "description": "Represents a specific client account managed by an Assistance Company (e.g., Coomeva, HDI) for which services are provided.",
       "properties": {
         "id": {
           "type": "string",
@@ -95,7 +120,7 @@
         },
         "name": {
           "type": "string",
-          "description": "The name of the client account."
+          "description": "The name of the client account (e.g., Coomeva, HDI, Banco de Bogotá)."
         },
         "assistanceCompanyId": {
           "type": "string",
@@ -103,16 +128,16 @@
         },
         "contactPerson": {
           "type": "string",
-          "description": "The name of the primary contact person for this client account."
+          "description": "The primary contact person for this client account."
         },
         "contactEmail": {
           "type": "string",
-          "description": "Primary contact email for the client account.",
+          "description": "The email address for the primary contact of the client account.",
           "format": "email"
         },
         "contactPhone": {
           "type": "string",
-          "description": "Primary contact phone number for the client account."
+          "description": "The phone number for the primary contact of the client account."
         }
       },
       "required": [
@@ -121,200 +146,214 @@
         "assistanceCompanyId"
       ]
     },
-    "Technician": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Technician",
-      "type": "object",
-      "description": "Represents a technician capable of performing various services for clients.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Technician entity."
-        },
-        "name": {
-          "type": "string",
-          "description": "The full name of the technician."
-        },
-        "contactEmail": {
-          "type": "string",
-          "description": "Contact email for the technician.",
-          "format": "email"
-        },
-        "contactPhone": {
-          "type": "string",
-          "description": "Contact phone number for the technician."
-        },
-        "specialties": {
-          "type": "array",
-          "description": "A list of service types the technician is specialized in (e.g., 'Plumbing', 'Electricity').",
-          "items": {
-            "type": "string"
-          }
-        }
-      },
-      "required": [
-        "id",
-        "name"
-      ]
-    },
     "ServiceRequest": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "ServiceRequest",
       "type": "object",
-      "description": "Represents a request for a specific service (e.g., plumbing, electricity) from a client account. Often referred to as an 'expediente'.",
+      "description": "Represents a specific request for a service (e.g., plumbing, electricity) from a Client Account, tracking its lifecycle.",
       "properties": {
         "id": {
           "type": "string",
           "description": "Unique identifier for the ServiceRequest entity."
         },
-        "serviceType": {
-          "type": "string",
-          "description": "The type of service requested.",
-          "enum": ["Plomería", "Electricidad", "Cerrajería", "Vidriería", "Trabajo en Alturas", "Instalación", "Destaponamiento"]
-        },
-        "description": {
-          "type": "string",
-          "description": "A detailed description of the service request and issue."
-        },
-        "status": {
-          "type": "string",
-          "description": "The current status of the service request.",
-          "enum": ["pending", "assigned", "in_progress", "completed", "cancelled"]
-        },
-        "priority": {
-          "type": "string",
-          "description": "The priority level of the service request.",
-          "enum": ["low", "medium", "high", "critical"]
-        },
         "clientAccountId": {
           "type": "string",
           "description": "Reference to the ClientAccount for whom the service is requested. (Relationship: ClientAccount 1:N ServiceRequest)"
         },
+        "serviceType": {
+          "type": "string",
+          "description": "The type of service requested (e.g., 'Plomería', 'Electricidad', 'Cerrajería', 'Vidriería')."
+        },
+        "description": {
+          "type": "string",
+          "description": "A detailed description of the service required by the client."
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the service request (e.g., 'Pendiente', 'Asignado', 'En Progreso', 'Completado', 'Cancelado')."
+        },
         "requestedDateTime": {
           "type": "string",
-          "description": "The date and time when the service was requested by the client.",
+          "description": "The date and time when the service request was initially created.",
           "format": "date-time"
         },
-        "totalCost": {
-          "type": "number",
-          "description": "The total cost associated with this service request, used for productivity reports."
-        },
-        "createdByUserId": {
+        "assignedTechnicianId": {
           "type": "string",
-          "description": "Reference to the User (Customer Service role) who created this service request. (Relationship: User 1:N ServiceRequest)"
+          "description": "Reference to the UserProfile (technician role) assigned to handle this service request. (Relationship: UserProfile 1:N ServiceRequest)"
         },
-        "createdAt": {
+        "scheduledDateTime": {
           "type": "string",
-          "description": "Timestamp when the service request record was created.",
+          "description": "The date and time when the service is scheduled to be performed.",
           "format": "date-time"
         },
-        "updatedAt": {
+        "completionDateTime": {
           "type": "string",
-          "description": "Timestamp when the service request record was last updated.",
+          "description": "The date and time when the service request was marked as completed.",
+          "format": "date-time"
+        },
+        "address": {
+          "type": "string",
+          "description": "The physical address where the service is to be rendered."
+        },
+        "clientReferenceNumber": {
+          "type": "string",
+          "description": "An optional reference number provided by the client or assistance company for this service request."
+        }
+      },
+      "required": [
+        "id",
+        "clientAccountId",
+        "serviceType",
+        "description",
+        "status",
+        "requestedDateTime",
+        "address"
+      ]
+    },
+    "ServiceNote": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ServiceNote",
+      "type": "object",
+      "description": "Captures detailed notes and potentially an AI-generated summary related to a specific service request.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the ServiceNote entity."
+        },
+        "serviceRequestId": {
+          "type": "string",
+          "description": "Reference to the ServiceRequest this note is associated with. (Relationship: ServiceRequest 1:N ServiceNote)"
+        },
+        "authorId": {
+          "type": "string",
+          "description": "Reference to the UserProfile who created this service note. (Relationship: UserProfile 1:N ServiceNote)"
+        },
+        "noteContent": {
+          "type": "string",
+          "description": "The detailed textual content of the service note, documenting observations or actions."
+        },
+        "summary": {
+          "type": "string",
+          "description": "An automatically generated concise summary of the note content, typically generated by AI."
+        },
+        "createdDateTime": {
+          "type": "string",
+          "description": "The date and time when the service note was created.",
           "format": "date-time"
         }
       },
       "required": [
         "id",
-        "serviceType",
-        "description",
-        "status",
-        "priority",
-        "clientAccountId",
-        "requestedDateTime",
-        "createdByUserId",
-        "createdAt",
-        "updatedAt"
+        "serviceRequestId",
+        "authorId",
+        "noteContent",
+        "createdDateTime"
       ]
     }
   },
   "auth": {
     "providers": [
-      "password"
+      "password",
+      "anonymous"
     ]
   },
   "firestore": {
     "structure": [
       {
-        "path": "/users/{userId}",
+        "path": "/roles/{roleId}",
         "definition": {
-          "entityName": "User",
+          "entityName": "Role",
           "schema": {
-            "$ref": "#/backend/entities/User"
+            "$ref": "#/backend/entities/Role"
           },
-          "description": "Stores individual user profiles and their assigned roles (Admin, Contabilidad, Atención al Cliente).",
+          "description": "Defines static roles within the CRM system. Only administrators can manage this collection."
+        }
+      },
+      {
+        "path": "/user_profiles/{userProfileId}",
+        "definition": {
+          "entityName": "UserProfile",
+          "schema": {
+            "$ref": "#/backend/entities/UserProfile"
+          },
+          "description": "Stores individual user profiles. The `userProfileId` should correspond to the Firebase Authentication `uid`. Contains `roleId` for DBAC and `isActive` for account status. Administrators can manage all profiles; users can read their own profile. This document serves as the primary source for a user's role in security rules (e.g., `get(/user_profiles/$(request.auth.uid)).data.roleId`).",
           "params": [
             {
-              "name": "userId",
-              "description": "The unique identifier of the user."
+              "name": "userProfileId",
+              "description": "The unique ID of the user profile, matching the Firebase Authentication UID."
             }
           ]
         }
       },
       {
-        "path": "/assistanceCompanies/{assistanceCompanyId}",
+        "path": "/assistance_companies/{assistanceCompanyId}",
         "definition": {
           "entityName": "AssistanceCompany",
           "schema": {
             "$ref": "#/backend/entities/AssistanceCompany"
           },
-          "description": "Stores top-level assistance provider companies.",
+          "description": "Manages external assistance companies. Primarily managed by administrators, readable by relevant CRM users.",
           "params": [
             {
               "name": "assistanceCompanyId",
-              "description": "The unique identifier of the assistance company."
+              "description": "The unique ID of the assistance company."
             }
           ]
         }
       },
       {
-        "path": "/clientAccounts/{clientAccountId}",
+        "path": "/client_accounts/{clientAccountId}",
         "definition": {
           "entityName": "ClientAccount",
           "schema": {
             "$ref": "#/backend/entities/ClientAccount"
           },
-          "description": "Stores client accounts managed by specific assistance companies.",
+          "description": "Manages client accounts for various assistance companies. Includes `assistanceCompanyId` as a foreign key. Accessible by administrators, 'Servicio al Cliente', and 'Contabilidad' roles as per business logic.",
           "params": [
             {
               "name": "clientAccountId",
-              "description": "The unique identifier of the client account."
+              "description": "The unique ID of the client account."
             }
           ]
         }
       },
       {
-        "path": "/technicians/{technicianId}",
-        "definition": {
-          "entityName": "Technician",
-          "schema": {
-            "$ref": "#/backend/entities/Technician"
-          },
-          "description": "Stores profiles of technicians.",
-          "params": [
-            {
-              "name": "technicianId",
-              "description": "The unique identifier of the technician."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/serviceRequests/{serviceRequestId}",
+        "path": "/service_requests/{serviceRequestId}",
         "definition": {
           "entityName": "ServiceRequest",
           "schema": {
             "$ref": "#/backend/entities/ServiceRequest"
           },
-          "description": "Central collection for all service requests ('expedientes').",
+          "description": "Manages individual service requests. `clientAccountId` and `assignedTechnicianId` are denormalized into each document for efficient querying (QAPs) and Authorization Independence. This allows rules to check user permissions directly on the request document (e.g., if the user is the assigned technician or associated with the client account) without `get()` calls to parent entities.",
           "params": [
             {
               "name": "serviceRequestId",
-              "description": "The unique identifier of the service request."
+              "description": "The unique ID of the service request."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/service_requests/{serviceRequestId}/service_notes/{serviceNoteId}",
+        "definition": {
+          "entityName": "ServiceNote",
+          "schema": {
+            "$ref": "#/backend/entities/ServiceNote"
+          },
+          "description": "Stores detailed service notes for a specific service request. It is a subcollection of `service_requests`. `serviceRequestId`, `authorId`, `clientAccountId` (copied from parent ServiceRequest), and `assignedTechnicianId` (copied from parent ServiceRequest) are explicitly denormalized into each note document for Authorization Independence and efficient access control. This allows rules to operate without `get()` calls to parent documents to determine access rights.",
+          "params": [
+            {
+              "name": "serviceRequestId",
+              "description": "The ID of the parent service request."
+            },
+            {
+              "name": "serviceNoteId",
+              "description": "The ID of the service note."
             }
           ]
         }
       }
-    ]
+    ],
+    "reasoning": "The Firestore data structure for AsistenciaPro CRM prioritizes Authorization Independence and Query-as-Authorization Primitives (QAPs) by strategically denormalizing key authorization attributes. This approach minimizes the need for `get()` calls in security rules, enhancing rule clarity, debuggability, and ensuring atomic operations. The structure adheres to the principle of Structural Segregation, where documents within a collection share a homogeneous security posture, simplifying rule sets.\n\n**Authorization Independence and Denormalization Strategy:**\n\n1.  **User Profiles (`/user_profiles/{userProfileId}`):** This top-level collection holds individual user profiles. Each `UserProfile` document is keyed by the Firebase Authentication `uid`, making it a self-referential authorization context. The `roleId` and `isActive` fields within this document are crucial for Database Access Control (DBAC). Rules will directly read `get(/user_profiles/$(request.auth.uid)).data.roleId` to determine the current user's permissions, which is an accepted pattern for current user's self-data without violating atomicity.\n\n2.  **Service Requests (`/service_requests/{serviceRequestId}`):** This collection is top-level rather than a subcollection of `ClientAccount`. This decision is critical for Authorization Independence and QAPs. Each `ServiceRequest` document explicitly includes `clientAccountId` and `assignedTechnicianId`. These fields are denormalized from their conceptual parent entities (`ClientAccount` and `UserProfile`) to allow authorization rules to check these attributes directly on the `ServiceRequest` document itself, without needing `get()` calls to the `ClientAccount` or `UserProfile` documents to verify permissions. For example, a technician's access can be checked by `request.resource.data.assignedTechnicianId == request.auth.uid` directly on the request document.\n\n3.  **Service Notes (`/service_requests/{serviceRequestId}/service_notes/{serviceNoteId}`):** As a subcollection of `ServiceRequest`, `ServiceNote` documents also implement significant denormalization. In addition to `serviceRequestId` and `authorId` (which are inherent to the entity), each `ServiceNote` document *must* explicitly copy `clientAccountId` and `assignedTechnicianId` from its parent `ServiceRequest` document at the time of creation. This denormalization ensures that security rules for `ServiceNote` can operate entirely on the `ServiceNote` document's data without performing a `get()` call to its parent `ServiceRequest` or any other related entity, fully achieving Authorization Independence for nested data.\n\n**QAPs (Query-as-Authorization Primitives) Support:**\n\n*   **`service_requests`:** The top-level design with denormalized `clientAccountId` and `assignedTechnicianId` directly supports efficient and secure `list` queries. For instance:\n    *   Technicians can query for `db.collection('service_requests').where('assignedTechnicianId', '==', request.auth.uid)` to see only their assigned requests.\n    *   Service agents can query `db.collection('service_requests').where('clientAccountId', '==', someClientId)`.\n    *   Admins can list all service requests.\n    Security rules can directly enforce these filters based on the `request.auth.uid` and the denormalized fields.\n\n*   **`service_requests/{serviceRequestId}/service_notes`:** With `clientAccountId` and `assignedTechnicianId` denormalized into `ServiceNote` documents, rules for listing notes within a specific service request can enforce that only authorized users (e.g., the assigned technician, the note author, or an admin/service rep) can read them, based on the note's own fields, without needing to inspect the parent `ServiceRequest` document via `get()`.\n\n**Structural Segregation and Access Modeling:**\n\n*   **Global Roles (`/roles/{roleId}`):** A simple, flat collection for static role definitions, managed exclusively by administrators.\n*   **Assistance Companies (`/assistance_companies/{assistanceCompanyId}`):** A top-level collection for all companies. Access is role-based (admins for management, others for read), maintaining a uniform security posture.\n*   **Client Accounts (`/client_accounts/{clientAccountId}`):** Also a top-level collection. It contains `assistanceCompanyId` as a foreign key. Access is primarily role-based, simplifying rules as no `get()` on `AssistanceCompany` is needed for `ClientAccount` authorization, aligning with the principle that `assistanceCompanyId` is a data reference, not an authorization parent.\n\nOverall, this design provides a highly secure, scalable, and debuggable Firestore structure that strictly follows the core design principles and mandates by leveraging denormalization for authorization independence and structuring collections to enable QAPs."
   }
 }
