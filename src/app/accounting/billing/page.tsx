@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState } from "react"
@@ -16,7 +15,8 @@ import {
   ArrowLeft,
   FileText,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  CheckCircle2
 } from "lucide-react"
 import { MOCK_REQUESTS, MOCK_COMPANIES } from "@/lib/mock-data"
 import { toast } from "@/hooks/use-toast"
@@ -25,6 +25,7 @@ import Link from "next/link"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase"
 import { collection } from "firebase/firestore"
+import { StatusBadge } from "@/components/crm/status-badge"
 
 export default function BillingReportPage() {
   const db = useFirestore()
@@ -53,12 +54,13 @@ export default function BillingReportPage() {
   const handleExportExcel = () => {
     if (!selectedCompany) return
 
-    const headers = ["Expediente", "Asegurado", "Tipo de Servicio", "Cuenta", "Valor Final a Cobrar"]
+    const headers = ["Expediente", "Asegurado", "Tipo de Servicio", "Cuenta", "Estado", "Valor Final a Cobrar"]
     const rows = filteredRequests.map(req => [
       req.claimNumber,
       req.insuredName,
       req.category,
       req.accountName,
+      req.status,
       req.approvedAmount || req.requestedAmount || 0
     ])
 
@@ -71,7 +73,7 @@ export default function BillingReportPage() {
     const link = document.createElement("a")
     const url = URL.createObjectURL(blob)
     link.setAttribute("href", url)
-    link.setAttribute("download", `Cobros_${selectedCompany.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`)
+    link.setAttribute("download", `Facturacion_${selectedCompany.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`)
     link.style.visibility = 'hidden'
     document.body.appendChild(link)
     link.click()
@@ -79,7 +81,7 @@ export default function BillingReportPage() {
 
     toast({
       title: "Reporte Generado",
-      description: `Se ha descargado el archivo de cobros para ${selectedCompany.name}.`
+      description: `Se ha descargado el archivo de facturación para ${selectedCompany.name}.`
     })
   }
 
@@ -89,31 +91,38 @@ export default function BillingReportPage() {
     return (
       <div className="flex flex-col gap-8">
         <div>
-          <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">Facturación por Asistencia</h1>
-          <p className="text-muted-foreground font-medium">Seleccione una aseguradora para gestionar sus cobros y descargar reportes.</p>
+          <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">Módulo de Facturación</h1>
+          <p className="text-muted-foreground font-medium">Seleccione una aseguradora para procesar los servicios finalizados.</p>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {MOCK_COMPANIES.map((company) => (
-            <Card 
-              key={company.id} 
-              className="hover:shadow-xl transition-all cursor-pointer group border-l-4 border-l-primary"
-              onClick={() => setSelectedCompanyId(company.id)}
-            >
-              <CardHeader className="pb-4">
-                <div className="h-12 w-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-                  <Building2 className="h-6 w-6" />
-                </div>
-                <CardTitle className="text-lg uppercase font-black">{company.name}</CardTitle>
-                <CardDescription>{allRequests.filter(r => r.companyId === company.id).length} expedientes listos</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button variant="ghost" className="w-full justify-between text-xs font-bold p-0 group-hover:text-primary">
-                  Ingresar a Cobros <ChevronRight className="h-4 w-4" />
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+          {MOCK_COMPANIES.map((company) => {
+            const companyRequests = allRequests.filter(r => r.companyId === company.id)
+            const completedCount = companyRequests.filter(r => r.status === 'completed').length
+            
+            return (
+              <Card 
+                key={company.id} 
+                className="hover:shadow-xl transition-all cursor-pointer group border-l-4 border-l-primary"
+                onClick={() => setSelectedCompanyId(company.id)}
+              >
+                <CardHeader className="pb-4">
+                  <div className="h-12 w-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                    <Building2 className="h-6 w-6" />
+                  </div>
+                  <CardTitle className="text-lg uppercase font-black">{company.name}</CardTitle>
+                  <CardDescription className="flex items-center gap-2">
+                    <span className="font-bold text-primary">{completedCount}</span> Listos para facturar
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button variant="ghost" className="w-full justify-between text-xs font-bold p-0 group-hover:text-primary">
+                    Gestionar Cobros <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       </div>
     )
@@ -128,11 +137,11 @@ export default function BillingReportPage() {
           </Button>
           <div>
             <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">{selectedCompany.name}</h1>
-            <p className="text-muted-foreground font-medium">Gestión financiera y desglose de cobros por expediente.</p>
+            <p className="text-muted-foreground font-medium">Conciliación de valores para facturación electrónica.</p>
           </div>
         </div>
         <Button onClick={handleExportExcel} className="gap-2 bg-green-600 hover:bg-green-700 font-bold shadow-lg h-12">
-          <FileSpreadsheet className="h-5 w-5" /> Descargar Excel de Cobros
+          <FileSpreadsheet className="h-5 w-5" /> Descargar Planilla de Facturación
         </Button>
       </div>
 
@@ -151,7 +160,7 @@ export default function BillingReportPage() {
       <Card className="overflow-hidden border-t-4 border-t-primary shadow-xl">
         <CardHeader className="bg-slate-50/80 border-b">
           <CardTitle className="text-sm font-black flex items-center gap-2 uppercase tracking-wider">
-            <Receipt className="h-4 w-4 text-primary" /> Historial de Conciliación Financiera
+            <Receipt className="h-4 w-4 text-primary" /> Servicios para Conciliación
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -159,9 +168,9 @@ export default function BillingReportPage() {
             <TableHeader>
               <TableRow className="bg-muted/30">
                 <TableHead className="font-black uppercase text-[10px]">Expediente</TableHead>
-                <TableHead className="font-black uppercase text-[10px]">Asegurado / Cuenta</TableHead>
+                <TableHead className="font-black uppercase text-[10px]">Asegurado / Estado</TableHead>
                 <TableHead className="font-black uppercase text-[10px]">Reporte Técnico</TableHead>
-                <TableHead className="text-right font-black uppercase text-[10px]">Conciliación</TableHead>
+                <TableHead className="text-right font-black uppercase text-[10px]">Liquidación Final</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
@@ -180,16 +189,20 @@ export default function BillingReportPage() {
                 const initialSuggested = req.requestedAmount || (totalLabor + totalExpenses)
                 const finalAmount = req.approvedAmount || 0
                 const isConciliated = finalAmount > 0
+                const isFinalizado = req.status === 'completed'
 
                 return (
-                  <TableRow key={req.id} className="hover:bg-primary/5 transition-colors">
-                    <TableCell>
-                      <span className="font-mono font-black text-primary">{req.claimNumber}</span>
-                    </TableCell>
+                  <TableRow key={req.id} className={cn("hover:bg-primary/5 transition-colors", isFinalizado ? "bg-green-50/30" : "")}>
                     <TableCell>
                       <div className="flex flex-col">
+                        <span className="font-mono font-black text-primary">{req.claimNumber}</span>
+                        {isFinalizado && <Badge className="w-fit h-4 text-[8px] bg-green-600 font-black">LISTO</Badge>}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
                         <span className="font-bold text-slate-800 text-sm">{req.insuredName}</span>
-                        <span className="text-[10px] text-muted-foreground uppercase">{req.accountName}</span>
+                        <StatusBadge status={req.status as any} />
                       </div>
                     </TableCell>
                     <TableCell>
@@ -198,12 +211,12 @@ export default function BillingReportPage() {
                           <TooltipTrigger asChild>
                             <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 cursor-help bg-slate-100 px-2 py-1 rounded max-w-[150px] truncate">
                               <FileText className="h-3 w-3 text-primary shrink-0" />
-                              {req.report || req.summary || "Sin reporte"}
+                              {req.report || "Sin reporte final"}
                             </div>
                           </TooltipTrigger>
                           <TooltipContent className="max-w-[300px] p-4 text-xs">
                             <p className="font-black uppercase mb-2 border-b pb-1">Reporte Consolidado</p>
-                            <p>{req.report || req.summary || "No hay un reporte final cargado todavía."}</p>
+                            <p>{req.report || "No hay un reporte final cargado todavía."}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -230,7 +243,7 @@ export default function BillingReportPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Link href={`/requests/${req.id}?mode=accounting`}>
+                      <Link href={`/requests/${req.id}`}>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-primary">
                           <ChevronRight className="h-5 w-5" />
                         </Button>

@@ -1,10 +1,9 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS, MOCK_COMPANIES } from "@/lib/mock-data"
-import { ServiceRequest, Expense, TechnicianIntervention, InterventionType, ExpenseCategory } from "@/lib/types"
+import { ServiceRequest, Expense, TechnicianIntervention, InterventionType, ExpenseCategory, ServiceStatus } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -34,7 +33,8 @@ import {
   Trash2,
   User,
   MapPin,
-  ClipboardList
+  ClipboardList,
+  X
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -55,6 +55,7 @@ export default function RequestDetailPage() {
   
   const [localRequest, setLocalRequest] = useState<ServiceRequest | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
   
   // Form States for adding new intervention
   const [showAddEntry, setShowAddEntry] = useState(false)
@@ -92,7 +93,7 @@ export default function RequestDetailPage() {
       setLocalRequest(firestoreRequest as any)
     } else if (isRequestLoading === false) {
       const found = MOCK_REQUESTS.find(r => r.id === id || r.claimNumber === id)
-      if (found) setLocalRequest(found)
+      if (found) setLocalRequest(found as any)
     }
   }, [firestoreRequest, id, isRequestLoading])
 
@@ -112,9 +113,9 @@ export default function RequestDetailPage() {
   )
 
   const isAdmin = profile?.roleId === 'Administrador'
-  const isAccounting = profile?.roleId === 'Contabilidad'
+  const isGerente = profile?.username === 'GERENTE'
   const isCustomerService = profile?.roleId === 'Servicio al Cliente'
-  const canEdit = isAdmin || isCustomerService
+  const canEdit = isAdmin || isGerente || isCustomerService
 
   const handleUpdateField = (field: keyof ServiceRequest, value: any) => {
     if (!canEdit) return
@@ -199,6 +200,7 @@ export default function RequestDetailPage() {
       requestedAmount: localRequest.requestedAmount,
       approvedAmount: localRequest.approvedAmount,
       accountingNotes: localRequest.accountingNotes,
+      status: localRequest.status,
       updatedAt: new Date().toISOString()
     }
 
@@ -213,6 +215,26 @@ export default function RequestDetailPage() {
         errorEmitter.emit("permission-error", permissionError)
       })
       .finally(() => setIsSaving(false))
+  }
+
+  const handleGenerateSummary = async () => {
+    if (!localRequest.interventions.length) {
+      toast({ variant: "destructive", title: "Sin datos", description: "No hay reportes técnicos para resumir." })
+      return
+    }
+
+    setIsGeneratingSummary(true)
+    const allNotes = localRequest.interventions.map((i, idx) => `Reporte ${idx + 1}: ${i.notes}`).join('\n')
+    
+    try {
+      const result = await serviceNoteSummaryGenerator({ notes: allNotes })
+      handleUpdateField('report', result.summary)
+      toast({ title: "Resumen Generado", description: "La IA ha consolidado los reportes técnicos." })
+    } catch (error) {
+      toast({ variant: "destructive", title: "Error de IA", description: "No se pudo generar el resumen." })
+    } finally {
+      setIsGeneratingSummary(false)
+    }
   }
 
   const checkWarehouseStock = (desc: string) => {
@@ -243,7 +265,24 @@ export default function RequestDetailPage() {
               ) : (
                 <h1 className="text-2xl font-black text-primary uppercase">{localRequest.claimNumber}</h1>
               )}
-              <StatusBadge status={localRequest.status} />
+              
+              <Select 
+                value={localRequest.status} 
+                onValueChange={(v) => handleUpdateField('status', v as ServiceStatus)}
+                disabled={!canEdit}
+              >
+                <SelectTrigger className="w-[140px] h-8 font-bold text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pendiente</SelectItem>
+                  <SelectItem value="assigned">Programado</SelectItem>
+                  <SelectItem value="in_progress">En Proceso</SelectItem>
+                  <SelectItem value="warranty">Garantía</SelectItem>
+                  <SelectItem value="cancelled">Cancelado</SelectItem>
+                  <SelectItem value="completed">Finalizado</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
               <CategoryIcon category={localRequest.category} className="h-3 w-3" /> {localRequest.category}
@@ -388,65 +427,69 @@ export default function RequestDetailPage() {
             )}
 
             <div className="space-y-4">
-              {localRequest.interventions.length > 0 ? [...localRequest.interventions].reverse().map((item) => (
-                <Card key={item.id} className="overflow-hidden border-none shadow-md group">
-                  <CardHeader className="bg-slate-50 py-3 flex flex-row items-center justify-between border-b">
-                    <div className="flex items-center gap-3">
-                      <Badge className="bg-primary/10 text-primary font-black uppercase text-[9px]">{item.type}</Badge>
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-black uppercase text-slate-400">
-                          {new Date(item.date).toLocaleDateString()} {new Date(item.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        <span className="text-[10px] font-bold text-primary uppercase">
+              {localRequest.interventions.length > 0 ? [...localRequest.interventions].map((item, index) => {
+                const reportTitle = index === 0 ? "Reporte inicial" : `Reporte #${index + 1}`
+                return (
+                  <Card key={item.id} className="overflow-hidden border-none shadow-md group">
+                    <CardHeader className="bg-slate-50 py-3 flex flex-row items-center justify-between border-b">
+                      <div className="flex items-center gap-3">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-black uppercase text-primary tracking-tight">{reportTitle}</span>
+                          <span className="text-[10px] font-black uppercase text-slate-400">
+                            {new Date(item.date).toLocaleDateString()} {new Date(item.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <Badge className="bg-primary/10 text-primary font-black uppercase text-[9px] h-fit">{item.type}</Badge>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[9px] font-black text-slate-400 uppercase italic">Autor: {item.authorName || "Sistema"}</span>
+                        <div className="text-[9px] font-bold text-slate-600 uppercase">
                           Técnico: {MOCK_TECHNICIANS.find(t => t.id === item.technicianId)?.name || 'N/A'}
-                        </span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-[9px] font-black text-slate-400 uppercase italic">Autor: {item.authorName || "Sistema"}</span>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pt-4 space-y-4">
-                    <p className="text-sm text-slate-700 leading-relaxed italic border-l-4 border-slate-200 pl-4">
-                      "{item.notes}"
-                    </p>
-                    
-                    {item.detailedExpenses.length > 0 && (
-                      <div className="grid gap-2">
-                        {item.detailedExpenses.map(exp => {
-                          const stock = checkWarehouseStock(exp.description)
-                          return (
-                            <div key={exp.id} className="flex flex-col gap-2 p-3 bg-slate-50 rounded-lg border">
-                              <div className="flex justify-between items-center">
-                                <span className="text-xs font-bold uppercase">{exp.description}</span>
-                                <span className="text-xs font-mono font-black">${exp.amount.toLocaleString()}</span>
+                    </CardHeader>
+                    <CardContent className="pt-4 space-y-4">
+                      <p className="text-sm text-slate-700 leading-relaxed italic border-l-4 border-slate-200 pl-4">
+                        "{item.notes}"
+                      </p>
+                      
+                      {item.detailedExpenses.length > 0 && (
+                        <div className="grid gap-2">
+                          {item.detailedExpenses.map(exp => {
+                            const stock = checkWarehouseStock(exp.description)
+                            return (
+                              <div key={exp.id} className="flex flex-col gap-2 p-3 bg-slate-50 rounded-lg border">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs font-bold uppercase">{exp.description}</span>
+                                  <span className="text-xs font-mono font-black">${exp.amount.toLocaleString()}</span>
+                                </div>
+                                {stock && (
+                                  <Alert className="bg-blue-50 border-blue-200 py-1.5 px-3">
+                                    <div className="flex items-center gap-2">
+                                      <Warehouse className="h-3 w-3 text-blue-600" />
+                                      <p className="text-[10px] font-bold text-blue-800">
+                                        STOCK DISPONIBLE: En bodega hay {stock.quantity} de "{stock.description}"
+                                      </p>
+                                    </div>
+                                  </Alert>
+                                )}
                               </div>
-                              {stock && (
-                                <Alert className="bg-blue-50 border-blue-200 py-1.5 px-3">
-                                  <div className="flex items-center gap-2">
-                                    <Warehouse className="h-3 w-3 text-blue-600" />
-                                    <p className="text-[10px] font-bold text-blue-800">
-                                      STOCK DISPONIBLE: En bodega hay {stock.quantity} de "{stock.description}"
-                                    </p>
-                                  </div>
-                                </Alert>
-                              )}
-                            </div>
-                          )
-                        })}
+                            )
+                          })}
+                        </div>
+                      )}
+                      
+                      <div className="flex justify-end pt-2 border-t text-[10px] font-bold text-slate-500 gap-4">
+                        <span>Mano de Obra: ${item.laborCost.toLocaleString()}</span>
+                        <span className="text-primary">Subtotal: ${(item.laborCost + item.detailedExpenses.reduce((s,e) => s+e.amount, 0)).toLocaleString()}</span>
                       </div>
-                    )}
-                    
-                    <div className="flex justify-end pt-2 border-t text-[10px] font-bold text-slate-500 gap-4">
-                      <span>Mano de Obra: ${item.laborCost.toLocaleString()}</span>
-                      <span className="text-primary">Subtotal: ${(item.laborCost + item.detailedExpenses.reduce((s,e) => s+e.amount, 0)).toLocaleString()}</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              )) : (
+                    </CardContent>
+                  </Card>
+                )
+              }).reverse() : (
                 <div className="py-20 text-center border-2 border-dashed rounded-xl">
                   <ClipboardList className="h-12 w-12 text-slate-200 mx-auto mb-4" />
-                  <p className="text-sm font-bold text-slate-400">No hay intervenciones registradas</p>
+                  <p className="text-sm font-bold text-slate-400">No hay reportes registrados</p>
                 </div>
               )}
             </div>
@@ -473,7 +516,7 @@ export default function RequestDetailPage() {
                 </div>
               </div>
 
-              {(isAdmin || isAccounting) && (
+              {canEdit && (
                 <div className="space-y-4 animate-in fade-in">
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-primary">Valor de Cobro (Aprobado)</Label>
@@ -499,7 +542,7 @@ export default function RequestDetailPage() {
                   </div>
 
                   <Button className="w-full h-12 font-black shadow-xl uppercase tracking-widest" onClick={handleSaveMainInfo} disabled={isSaving}>
-                    CONCILIAR VALORES
+                    {localRequest.status === 'completed' ? 'CERRAR Y ENVIAR A FACTURACIÓN' : 'CONCILIAR VALORES'}
                   </Button>
                 </div>
               )}
@@ -520,19 +563,19 @@ export default function RequestDetailPage() {
           <Card className="bg-blue-600 text-white shadow-xl">
              <CardHeader className="pb-2">
                 <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
-                   <Info className="h-4 w-4" /> Reporte para Asistencia
+                   <Info className="h-4 w-4" /> Reporte Formal para Asistencia
                 </CardTitle>
              </CardHeader>
              <CardContent className="space-y-4">
                 <Textarea 
                   className="bg-white/10 border-white/20 text-white placeholder:text-white/40 text-xs min-h-[100px] font-medium"
-                  placeholder="Redacte aquí el resumen técnico formal que se enviará a la aseguradora..."
+                  placeholder="Redacte aquí el resumen técnico formal..."
                   value={localRequest.report}
                   onChange={(e) => handleUpdateField('report', e.target.value)}
                   disabled={!canEdit}
                 />
-                <Button variant="outline" className="w-full bg-white/10 hover:bg-white/20 border-white/30 text-white font-bold text-xs gap-2" onClick={handleGenerateSummary} disabled={!canEdit}>
-                   <Sparkles className="h-3.5 w-3.5" /> Generar con IA (Flash)
+                <Button variant="outline" className="w-full bg-white/10 hover:bg-white/20 border-white/30 text-white font-bold text-xs gap-2" onClick={handleGenerateSummary} disabled={!canEdit || isGeneratingSummary}>
+                   {isGeneratingSummary ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Generar con IA (Flash)
                 </Button>
              </CardContent>
           </Card>
