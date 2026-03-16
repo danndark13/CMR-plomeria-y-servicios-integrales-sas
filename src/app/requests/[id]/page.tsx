@@ -4,22 +4,19 @@
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS } from "@/lib/mock-data"
-import { ServiceRequest, Expense, TechnicianIntervention, InterventionType, ExpenseCategory, ServiceStatus, UnitOfMeasure, ScheduledVisit } from "@/lib/types"
+import { ServiceRequest, Expense, TechnicianIntervention, InterventionType, ServiceStatus, UnitOfMeasure, ScheduledVisit, ExpenseCategory } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Alert } from "@/components/ui/alert"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
   ArrowLeft, 
   Sparkles, 
   Loader2,
-  DollarSign,
-  RefreshCw,
   Save,
   Warehouse,
   AlertCircle,
@@ -33,8 +30,7 @@ import {
   Clock,
   CheckCircle2,
   PackageCheck,
-  PackageX,
-  User as UserIcon
+  PackageX
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -148,11 +144,10 @@ export default function RequestDetailPage() {
   )
 
   const isAdmin = profile?.roleId === 'Administrador'
-  const isGerente = profile?.username === 'GERENTE'
   const isAccounting = profile?.roleId === 'Contabilidad'
   const isCustomerService = profile?.roleId === 'Servicio al Cliente'
   const isCompleted = localRequest.status === 'completed'
-  const isPrivilegedRole = isAdmin || isGerente || isAccounting
+  const isPrivilegedRole = isAdmin || isAccounting
   const canEdit = isPrivilegedRole || (isCustomerService && !isCompleted)
 
   const handleUpdateField = (field: keyof ServiceRequest, value: any) => {
@@ -320,9 +315,6 @@ export default function RequestDetailPage() {
       address: localRequest.address,
       phoneNumber: localRequest.phoneNumber,
       report: localRequest.report || "",
-      requestedAmount: localRequest.requestedAmount || 0,
-      approvedAmount: localRequest.approvedAmount || 0,
-      accountingNotes: localRequest.accountingNotes || "",
       status: localRequest.status,
       updatedAt: new Date().toISOString()
     }
@@ -371,14 +363,6 @@ export default function RequestDetailPage() {
   }
 
   const interventions = localRequest.interventions || []
-  const totalLabor = interventions.reduce((sum, i) => sum + (i.laborCost || 0), 0)
-  
-  // Lógica: Solo sumar gastos que NO estén marcados como 'isUnused'
-  const totalExpenses = interventions.flatMap(i => i.detailedExpenses || [])
-    .filter(e => !e.isUnused)
-    .reduce((sum, e) => sum + (e.amount || 0), 0)
-    
-  const totalSuggested = totalLabor + totalExpenses
 
   return (
     <div className="flex flex-col gap-6 max-w-7xl mx-auto">
@@ -399,7 +383,23 @@ export default function RequestDetailPage() {
                 <h1 className="text-2xl font-black text-primary uppercase">{localRequest.claimNumber}</h1>
               )}
               
-              <StatusBadge status={localRequest.status} />
+              {canEdit ? (
+                <Select value={localRequest.status} onValueChange={(v) => handleUpdateField('status', v as ServiceStatus)}>
+                  <SelectTrigger className="w-[140px] h-8 font-black uppercase text-[10px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pendiente</SelectItem>
+                    <SelectItem value="assigned">Programado</SelectItem>
+                    <SelectItem value="in_progress">En Proceso</SelectItem>
+                    <SelectItem value="completed">Finalizado</SelectItem>
+                    <SelectItem value="warranty">Garantía</SelectItem>
+                    <SelectItem value="cancelled">Cancelado</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <StatusBadge status={localRequest.status} />
+              )}
             </div>
             <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
               <CategoryIcon category={localRequest.category} className="h-3 w-3" /> {localRequest.category}
@@ -760,70 +760,6 @@ export default function RequestDetailPage() {
         </div>
 
         <div className="lg:col-span-4 space-y-6">
-          <Card className="shadow-lg border-t-8 border-t-primary overflow-hidden sticky top-24">
-            <CardHeader className="bg-slate-50/50 border-b">
-              <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
-                <DollarSign className="h-4 w-4 text-primary" /> Módulo Financiero
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6 space-y-6">
-              <div className="space-y-3">
-                <div className="flex justify-between text-[10px] font-black uppercase text-slate-500 tracking-tighter">
-                  <span>Sugerido (M.O + Insumos Usados)</span>
-                  <Badge variant="outline" className="text-[9px] border-primary/20 bg-primary/5 text-primary">Pre-Liquidado</Badge>
-                </div>
-                <div className="p-4 bg-slate-900 rounded-xl flex items-center justify-between text-white shadow-2xl border-b-4 border-primary">
-                  <span className="text-3xl font-mono font-black">${totalSuggested.toLocaleString()}</span>
-                  <div className="h-10 w-10 rounded-full bg-white/10 flex items-center justify-center">
-                    <RefreshCw className="h-5 w-5 opacity-40 animate-pulse" />
-                  </div>
-                </div>
-                <p className="text-[9px] text-muted-foreground italic text-center">
-                  * No se incluyen materiales marcados como "En Stock".
-                </p>
-              </div>
-
-              {canEdit && (
-                <div className="space-y-4 animate-in fade-in">
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Valor de Cobro (Aprobado)</Label>
-                    <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-primary" />
-                      <Input 
-                        type="number" 
-                        value={localRequest.approvedAmount || 0} 
-                        onChange={(e) => handleUpdateField('approvedAmount', Number(e.target.value))}
-                        className="pl-10 h-14 text-2xl font-mono font-black border-primary bg-primary/5 focus-visible:ring-primary shadow-lg"
-                        placeholder="0"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase tracking-widest">Notas de Conciliación</Label>
-                    <Textarea 
-                      placeholder="Indique si hay glosas, descuentos o notas especiales..." 
-                      className="text-xs font-medium border-orange-200 min-h-[100px]"
-                      value={localRequest.accountingNotes || ""}
-                      onChange={(e) => handleUpdateField('accountingNotes', e.target.value)}
-                    />
-                  </div>
-
-                  <Button className="w-full h-14 font-black shadow-xl uppercase tracking-widest text-sm" onClick={handleSaveMainInfo} disabled={isSaving}>
-                    {localRequest.status === 'completed' ? 'CERRAR Y ENVIAR A FACTURACIÓN' : 'GUARDAR CONCILIACIÓN'}
-                  </Button>
-                </div>
-              )}
-
-              {!canEdit && isCompleted && (
-                <div className="p-4 bg-muted rounded-xl border border-dashed text-center">
-                   <p className="text-[10px] font-black uppercase text-muted-foreground">Valores Conciliados por Contabilidad</p>
-                   <p className="text-2xl font-black text-slate-800 mt-2">${(localRequest.approvedAmount || 0).toLocaleString()}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
           <Card className="bg-blue-600 text-white shadow-xl overflow-hidden relative">
              <div className="absolute top-0 right-0 p-2 opacity-10">
                 <Sparkles className="h-12 w-12" />
@@ -845,6 +781,32 @@ export default function RequestDetailPage() {
                    {isGeneratingSummary ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Sparkles className="h-4 w-4" /> Consolidar Reportes con IA</>}
                 </Button>
              </CardContent>
+          </Card>
+
+          <Card className="shadow-lg border-t-4 border-t-primary bg-slate-50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado de Conciliación</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-bold uppercase text-slate-500">Valores Finales:</span>
+                  <Badge variant="outline" className="text-[10px] uppercase font-black border-primary/20 text-primary">
+                    {localRequest.billingStatus === 'validated' ? 'CONCILIADO' : 'PENDIENTE CONCILIACIÓN'}
+                  </Badge>
+                </div>
+                {localRequest.approvedAmount ? (
+                  <div className="p-4 bg-white rounded-lg border shadow-inner">
+                    <p className="text-[9px] font-black uppercase text-slate-400">Valor Aprobado</p>
+                    <p className="text-xl font-black text-slate-800">${localRequest.approvedAmount.toLocaleString()}</p>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-slate-100 rounded-lg border border-dashed text-center">
+                    <p className="text-[10px] font-bold text-slate-400 italic">Cifras exclusivas del módulo contable</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
           </Card>
         </div>
       </div>

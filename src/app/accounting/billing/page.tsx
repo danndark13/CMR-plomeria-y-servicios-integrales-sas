@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from "react"
@@ -8,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { 
   Receipt, 
   Search, 
@@ -17,12 +19,11 @@ import {
   ArrowLeft,
   FileText,
   Loader2,
-  CheckCircle2,
   Calculator,
   Save,
   Clock,
   Briefcase,
-  Layers
+  DollarSign
 } from "lucide-react"
 import { MOCK_REQUESTS, MOCK_COMPANIES } from "@/lib/mock-data"
 import { toast } from "@/hooks/use-toast"
@@ -78,18 +79,22 @@ export default function BillingReportPage() {
     const formData = new FormData(e.currentTarget)
     const invoiceNumber = (formData.get("invoiceNumber") as string).toUpperCase()
     const billingConsecutive = (formData.get("billingConsecutive") as string).toUpperCase()
+    const approvedAmount = Number(formData.get("approvedAmount"))
+    const accountingNotes = formData.get("accountingNotes") as string
 
     const docRef = doc(db, "service_requests", validatingRequest.id)
     const updatedData = {
       billingStatus: 'validated' as BillingStatus,
       invoiceNumber,
       billingConsecutive,
+      approvedAmount,
+      accountingNotes,
       updatedAt: new Date().toISOString()
     }
 
     updateDoc(docRef, updatedData)
       .then(() => {
-        toast({ title: "Factura Registrada", description: `Expediente ${validatingRequest.claimNumber} validado correctamente.` })
+        toast({ title: "Conciliación Exitosa", description: `Expediente ${validatingRequest.claimNumber} validado correctamente.` })
         setValidatingRequest(null)
       })
       .catch((error) => {
@@ -99,20 +104,26 @@ export default function BillingReportPage() {
       .finally(() => setIsProcessing(false))
   }
 
+  const calculateSuggested = (req: ServiceRequest) => {
+    const labor = (req.interventions || []).reduce((s, i) => s + (i.laborCost || 0), 0)
+    const materials = (req.interventions || []).flatMap(i => i.detailedExpenses || [])
+      .filter(e => !e.isUnused)
+      .reduce((s, e) => s + (e.amount || 0), 0)
+    return labor + materials
+  }
+
   const handleExportExcel = () => {
     if (!selectedCompany) return
     
-    // Header based on user provided Excel image
     const titleRow = ["PLOMERÍA Y SERVICIOS INTEGRALES RYS SAS", "", "", "", ""]
     const headers = ["EXPEDIENTE", "ASEGURADO", "CUENTA", "TIPO DE SERVICIO", "VALOR"]
     
-    // We export pre-validated requests (the ones pending conciliation)
     const rows = preValidatedRequests.map(req => [
       req.claimNumber,
       req.insuredName.toUpperCase(),
       req.accountName.toUpperCase(),
       req.category.toUpperCase(),
-      req.approvedAmount || 0
+      req.approvedAmount || calculateSuggested(req)
     ])
 
     const csvContent = [
@@ -245,7 +256,7 @@ export default function BillingReportPage() {
                       <TableCell><span className="font-mono font-black text-primary">{req.claimNumber}</span></TableCell>
                       <TableCell><span className="font-bold text-sm">{req.insuredName}</span></TableCell>
                       <TableCell className="text-right font-mono text-xs text-slate-400">
-                        ${(req.requestedAmount || 0).toLocaleString()}
+                        ${calculateSuggested(req).toLocaleString()}
                       </TableCell>
                       <TableCell className="text-right">
                         <span className="font-mono font-black text-orange-600">
@@ -261,7 +272,7 @@ export default function BillingReportPage() {
                             className="h-8 font-black text-[10px] uppercase tracking-tighter bg-blue-600 hover:bg-blue-700 text-white"
                             onClick={() => setValidatingRequest(req)}
                           >
-                            VALIDAR CARGO
+                            CONCILIAR Y FACTURAR
                           </Button>
                         </div>
                       </TableCell>
@@ -351,38 +362,60 @@ export default function BillingReportPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog for Validating Billing */}
+      {/* Dialog for Validating Billing and Conciliation */}
       <Dialog open={!!validatingRequest} onOpenChange={(v) => !v && setValidatingRequest(null)}>
-        <DialogContent className="sm:max-w-[450px]">
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-black uppercase tracking-tighter text-primary">Validar y Generar Factura</DialogTitle>
+            <DialogTitle className="text-2xl font-black uppercase tracking-tighter text-primary">Módulo de Conciliación</DialogTitle>
             <DialogDescription>
-              Confirme los datos de facturación para el expediente <strong className="text-primary">{validatingRequest?.claimNumber}</strong>.
+              Ajuste el valor final y registre la factura para el expediente <strong className="text-primary">{validatingRequest?.claimNumber}</strong>.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleValidateBilling} className="space-y-6 pt-4">
-            <div className="p-4 bg-slate-50 rounded-lg border border-dashed mb-4">
-              <div className="flex justify-between items-center text-sm">
-                <span className="font-bold text-slate-600">Valor Final Acordado:</span>
-                <span className="font-black text-lg text-primary">${(validatingRequest?.approvedAmount || 0).toLocaleString()}</span>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-3 bg-slate-50 rounded-lg border border-dashed">
+                <p className="text-[9px] font-black uppercase text-slate-400">Costo Sugerido</p>
+                <p className="text-sm font-black text-slate-600">${validatingRequest ? calculateSuggested(validatingRequest).toLocaleString() : 0}</p>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-blue-600">Valor Aprobado (Cobro)</Label>
+                <div className="relative">
+                  <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-blue-600" />
+                  <Input 
+                    name="approvedAmount" 
+                    type="number" 
+                    defaultValue={validatingRequest?.approvedAmount || (validatingRequest ? calculateSuggested(validatingRequest) : 0)} 
+                    className="pl-7 font-black border-blue-200 bg-blue-50/50"
+                    required 
+                  />
+                </div>
               </div>
             </div>
+
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase tracking-widest">N° Factura Electrónica</Label>
-                <div className="relative">
-                  <Receipt className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input name="invoiceNumber" placeholder="Ej. FE-1025" required className="pl-10 font-bold uppercase" />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase tracking-widest">N° Factura Electrónica</Label>
+                  <div className="relative">
+                    <Receipt className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input name="invoiceNumber" placeholder="Ej. FE-1025" required className="pl-10 font-bold uppercase" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase tracking-widest">Consecutivo RYS</Label>
+                  <div className="relative">
+                    <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input name="billingConsecutive" placeholder="Ej. 2025-001" required className="pl-10 font-bold uppercase" />
+                  </div>
                 </div>
               </div>
+
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase tracking-widest">Consecutivo Interno RYS</Label>
-                <div className="relative">
-                  <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input name="billingConsecutive" placeholder="Ej. 2025-001" required className="pl-10 font-bold uppercase" />
-                </div>
+                <Label className="text-[10px] font-black uppercase tracking-widest">Notas de Conciliación</Label>
+                <Textarea name="accountingNotes" placeholder="Descuentos, glosas o acuerdos especiales..." className="text-xs" />
               </div>
             </div>
+
             <DialogFooter className="gap-2">
               <Button type="button" variant="outline" onClick={() => setValidatingRequest(null)} disabled={isProcessing} className="font-bold">CANCELAR</Button>
               <Button type="submit" disabled={isProcessing} className="font-black gap-2 shadow-lg h-12 bg-green-600 hover:bg-green-700">
