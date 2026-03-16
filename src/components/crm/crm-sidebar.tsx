@@ -13,7 +13,8 @@ import {
   CalendarDays,
   BarChart3,
   UserCog,
-  Receipt
+  Receipt,
+  Wallet
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -52,6 +53,7 @@ export function CRMSidebar() {
 
   const accountingItems = [
     { title: "Facturación", icon: Receipt, href: "/accounting/billing" },
+    { title: "Nómina Técnicos", icon: Wallet, href: "/accounting/payroll" },
   ]
 
   const adminItems = [
