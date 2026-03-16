@@ -10,39 +10,78 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ShieldCheck, Lock, User, Loader2 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
+import { getAuth, signInAnonymously } from "firebase/auth"
+import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore"
+import { useFirebase } from "@/firebase"
 
 export default function LoginPage() {
   const router = useRouter()
+  const { auth, firestore } = useFirebase()
   const [isLoading, setIsLoading] = useState(false)
   const [userId, setUserId] = useState("")
   const [password, setPassword] = useState("")
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
 
-    // Simulación de autenticación con contraseña asignada: RYS2025
-    setTimeout(() => {
+    // Validación de contraseña local para el prototipo
+    const isCorrectPassword = password === "RYS2025"
+    const rolePrefix = userId.toUpperCase().substring(0, 3)
+    const validPrefixes = ["ADM", "CON", "SER"]
+    
+    if (!validPrefixes.includes(rolePrefix) || !isCorrectPassword) {
+      toast({
+        variant: "destructive",
+        title: "Error de Acceso",
+        description: "ID de usuario o contraseña incorrectos. Use RYS2025.",
+      })
       setIsLoading(false)
-      const validIds = userId.startsWith("ADMIN") || userId.startsWith("CON") || userId.startsWith("SER")
-      const isCorrectPassword = password === "RYS2025"
+      return
+    }
 
-      if (validIds && isCorrectPassword) {
-        toast({
-          title: "Sesión Iniciada",
-          description: `Bienvenido al sistema, Daniel Céspedes (${userId}).`,
-        })
-        router.push("/")
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error de Acceso",
-          description: !isCorrectPassword && validIds 
-            ? "Contraseña incorrecta para este ID." 
-            : "ID de usuario o contraseña incorrectos.",
-        })
-      }
-    }, 1500)
+    try {
+      // 1. Iniciamos sesión en Firebase Auth (Anónimo para el prototipo con IDs personalizados)
+      const userCredential = await signInAnonymously(auth)
+      const user = userCredential.user
+
+      // 2. Determinamos el rol basado en el ID ingresado
+      let roleId = "Servicio al Cliente"
+      if (rolePrefix === "ADM") roleId = "Administrador"
+      if (rolePrefix === "CON") roleId = "Contabilidad"
+
+      // 3. Verificamos/Creamos el perfil en Firestore vinculado al UID
+      const profileRef = doc(firestore, "user_profiles", user.uid)
+      const profileSnap = await getDoc(profileRef)
+
+      // Siempre actualizamos o creamos para asegurar que los datos de Daniel estén presentes
+      await setDoc(profileRef, {
+        id: user.uid,
+        username: userId.toUpperCase(),
+        firstName: "Daniel",
+        lastName: "Cespedes",
+        email: "danielcorecspds@gmail.com",
+        phoneNumber: "3167533657",
+        roleId: roleId,
+        isActive: true,
+        cedula: "1110564748"
+      }, { merge: true })
+
+      toast({
+        title: "Sesión Iniciada",
+        description: `Bienvenido Daniel Céspedes (${userId.toUpperCase()}).`,
+      })
+      
+      router.push("/")
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error de Conexión",
+        description: "No se pudo sincronizar el perfil con la base de datos.",
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -71,10 +110,10 @@ export default function LoginPage() {
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input 
                     id="userId" 
-                    placeholder="Ej. ADMIN01, SER01..." 
+                    placeholder="Ej. ADMIN01, SER01, CON01" 
                     className="pl-10"
                     value={userId}
-                    onChange={(e) => setUserId(e.target.value.toUpperCase())}
+                    onChange={(e) => setUserId(e.target.value)}
                     required 
                   />
                 </div>
@@ -93,7 +132,7 @@ export default function LoginPage() {
                     required 
                   />
                 </div>
-                <p className="text-[10px] text-muted-foreground italic">Pista para pruebas: RYS2025</p>
+                <p className="text-[10px] text-muted-foreground italic">Contraseña asignada: RYS2025</p>
               </div>
               <div className="flex items-center space-x-2">
                 <Checkbox id="remember" />
