@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState } from "react"
@@ -158,7 +157,6 @@ export default function BillingReportPage() {
                 <TableHead className="font-black uppercase text-[10px]">Expediente</TableHead>
                 <TableHead className="font-black uppercase text-[10px]">Asegurado / Cuenta</TableHead>
                 <TableHead className="font-black uppercase text-[10px]">Reporte Técnico</TableHead>
-                <TableHead className="font-black uppercase text-[10px]">Desglose Sugerido</TableHead>
                 <TableHead className="text-right font-black uppercase text-[10px]">Conciliación</TableHead>
                 <TableHead></TableHead>
               </TableRow>
@@ -166,7 +164,7 @@ export default function BillingReportPage() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-40 text-center">
+                  <TableCell colSpan={5} className="h-40 text-center">
                     <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary/20" />
                   </TableCell>
                 </TableRow>
@@ -205,18 +203,6 @@ export default function BillingReportPage() {
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-1">
-                        <div className="flex justify-between items-center text-[9px] gap-4">
-                          <span className="text-muted-foreground uppercase">M. Obra:</span>
-                          <span className="font-bold text-slate-700">${totalLabor.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-[9px] gap-4">
-                          <span className="text-muted-foreground uppercase">Gastos:</span>
-                          <span className="font-bold text-slate-700">${totalExpenses.toLocaleString()}</span>
-                        </div>
-                      </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex flex-col items-end">
