@@ -1,11 +1,10 @@
 
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { 
   Receipt, 
@@ -15,8 +14,8 @@ import {
   ChevronRight,
   ArrowLeft,
   FileText,
-  DollarSign,
-  Loader2
+  Loader2,
+  AlertCircle
 } from "lucide-react"
 import { MOCK_REQUESTS, MOCK_COMPANIES } from "@/lib/mock-data"
 import { toast } from "@/hooks/use-toast"
@@ -38,7 +37,6 @@ export default function BillingReportPage() {
 
   const { data: firestoreRequests, isLoading } = useCollection(requestsQuery)
 
-  // Fusionamos los datos de Firestore con los Mocks para tener siempre data visible
   const allRequests = firestoreRequests ? [...firestoreRequests, ...MOCK_REQUESTS.filter(mr => !firestoreRequests.find(fr => fr.claimNumber === mr.claimNumber))] : MOCK_REQUESTS
 
   const selectedCompany = MOCK_COMPANIES.find(c => c.id === selectedCompanyId)
@@ -159,7 +157,7 @@ export default function BillingReportPage() {
                 <TableHead className="font-black uppercase text-[10px]">Expediente</TableHead>
                 <TableHead className="font-black uppercase text-[10px]">Asegurado / Cuenta</TableHead>
                 <TableHead className="font-black uppercase text-[10px]">Reporte Técnico</TableHead>
-                <TableHead className="font-black uppercase text-[10px]">Desglose de Cobro</TableHead>
+                <TableHead className="font-black uppercase text-[10px]">Desglose Sugerido</TableHead>
                 <TableHead className="text-right font-black uppercase text-[10px]">Conciliación</TableHead>
                 <TableHead></TableHead>
               </TableRow>
@@ -175,8 +173,10 @@ export default function BillingReportPage() {
                 const totalLabor = (req.interventions || []).reduce((sum, i) => sum + i.laborCost, 0)
                 const expensesBreakdown = (req.interventions || []).flatMap(i => (i.detailedExpenses || []).filter(e => !e.isUnused))
                 const totalExpenses = expensesBreakdown.reduce((s, e) => s + e.amount, 0)
-                const finalAmount = req.approvedAmount || req.requestedAmount || 0
-                const hasBeenConciliated = !!req.approvedAmount && req.approvedAmount !== req.requestedAmount
+                
+                const initialSuggested = req.requestedAmount || (totalLabor + totalExpenses)
+                const finalAmount = req.approvedAmount || 0
+                const isConciliated = finalAmount > 0
 
                 return (
                   <TableRow key={req.id} className="hover:bg-primary/5 transition-colors">
@@ -208,7 +208,7 @@ export default function BillingReportPage() {
                     <TableCell>
                       <div className="flex flex-col gap-1">
                         <div className="flex justify-between items-center text-[9px] gap-4">
-                          <span className="text-muted-foreground uppercase">M. de Obra:</span>
+                          <span className="text-muted-foreground uppercase">M. Obra:</span>
                           <span className="font-bold text-slate-700">${totalLabor.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between items-center text-[9px] gap-4">
@@ -219,17 +219,23 @@ export default function BillingReportPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex flex-col items-end">
-                        {hasBeenConciliated && (
-                          <span className="text-xs font-mono text-slate-400 line-through decoration-red-500/50">
-                            ${(req.requestedAmount || 0).toLocaleString()}
-                          </span>
+                        {isConciliated ? (
+                          <>
+                            <span className="text-xs font-mono text-slate-400 line-through decoration-red-500/50 decoration-2">
+                              ${initialSuggested.toLocaleString()}
+                            </span>
+                            <span className="font-mono font-black text-base text-green-600">
+                              ${finalAmount.toLocaleString()}
+                            </span>
+                          </>
+                        ) : (
+                          <div className="flex flex-col items-end gap-1">
+                             <span className="text-[10px] font-mono font-bold text-primary opacity-60">Sugerido: ${initialSuggested.toLocaleString()}</span>
+                             <Badge variant="outline" className="text-[9px] font-black uppercase text-red-500 border-red-200 bg-red-50 py-0.5">
+                                <AlertCircle className="h-2 w-2 mr-1" /> Definir valor a cobrar
+                             </Badge>
+                          </div>
                         )}
-                        <span className={cn(
-                          "font-mono font-black text-base",
-                          hasBeenConciliated ? "text-green-600" : "text-primary"
-                        )}>
-                          ${finalAmount.toLocaleString()}
-                        </span>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
