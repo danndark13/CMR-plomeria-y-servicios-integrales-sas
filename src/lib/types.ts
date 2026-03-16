@@ -7,7 +7,8 @@ export type ServiceCategory =
   | 'Vidriería' 
   | 'Trabajo en Alturas' 
   | 'Instalación' 
-  | 'Destaponamiento';
+  | 'Destaponamiento'
+  | 'Impermeabilización';
 
 export type InterventionType = 'Diagnóstico' | 'Reparación' | 'Seguimiento' | 'Finalización' | 'Garantía' | 'Visita Programada';
 

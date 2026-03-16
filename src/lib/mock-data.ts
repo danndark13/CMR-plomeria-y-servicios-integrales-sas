@@ -2,8 +2,8 @@ import { AssistanceCompany, Technician, ServiceRequest, Reminder } from './types
 
 export const MOCK_COMPANIES: AssistanceCompany[] = [
   { id: '1', name: 'IKE Asistencia', accounts: ['Coomeva', 'HDI', 'Banco de Bogotá', 'Sura'] },
-  { id: '2', name: 'IGS', accounts: ['Allianz', 'Axa Colpatria', 'Mapfre'] },
-  { id: '3', name: 'Mawdy', accounts: ['Davivienda', 'BBVA'] },
+  { id: '2', name: 'IGS', accounts: ['Allianz', 'Axa Colpatria', 'Mapfre', 'BBVA'] },
+  { id: '3', name: 'Mawdy', accounts: ['Davivienda', 'Sura', 'Bolivar'] },
   { id: '4', name: 'Assisprex', accounts: ['Generali', 'Liberty Seguros'] },
 ];
 
@@ -96,8 +96,8 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
   {
     id: 'REQ-002',
     category: 'Electricidad',
-    companyId: '1',
-    accountName: 'HDI',
+    companyId: '2',
+    accountName: 'Allianz',
     status: 'assigned',
     insuredName: 'Roberto Gomez',
     claimNumber: 'EXP-774411',

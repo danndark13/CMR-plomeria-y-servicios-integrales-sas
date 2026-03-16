@@ -101,23 +101,34 @@ export default function BillingReportPage() {
 
   const handleExportExcel = () => {
     if (!selectedCompany) return
-    const headers = ["Expediente", "Asegurado", "Cuenta", "Estado Fact.", "N° Factura", "Consecutivo", "Valor Aprobado"]
-    const rows = filteredRequests.map(req => [
+    
+    // Header based on user provided Excel image
+    const titleRow = ["PLOMERÍA Y SERVICIOS INTEGRALES RYS SAS", "", "", "", ""]
+    const headers = ["EXPEDIENTE", "ASEGURADO", "CUENTA", "TIPO DE SERVICIO", "VALOR"]
+    
+    // We export pre-validated requests (the ones pending conciliation)
+    const rows = preValidatedRequests.map(req => [
       req.claimNumber,
-      req.insuredName,
-      req.accountName,
-      req.billingStatus,
-      req.invoiceNumber || "N/A",
-      req.billingConsecutive || "N/A",
+      req.insuredName.toUpperCase(),
+      req.accountName.toUpperCase(),
+      req.category.toUpperCase(),
       req.approvedAmount || 0
     ])
-    const csvContent = [headers.join(","), ...rows.map(e => e.join(","))].join("\n")
+
+    const csvContent = [
+      titleRow.join(","),
+      headers.join(","),
+      ...rows.map(e => e.join(","))
+    ].join("\n")
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.download = `Facturacion_${selectedCompany.name.replace(/\s+/g, '_')}.csv`
+    link.download = `Prevalidado_${selectedCompany.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`
     link.click()
+    
+    toast({ title: "Excel Generado", description: "El reporte de prevalidado se ha descargado correctamente." })
   }
 
   const isLoadingTotal = isUserLoading || isRequestsLoading
@@ -176,7 +187,7 @@ export default function BillingReportPage() {
           </div>
         </div>
         <Button onClick={handleExportExcel} className="gap-2 bg-green-600 hover:bg-green-700 font-bold shadow-lg h-12">
-          <FileSpreadsheet className="h-5 w-5" /> Exportar Reporte Contable
+          <FileSpreadsheet className="h-5 w-5" /> Exportar Excel Prevalidado
         </Button>
       </div>
 
