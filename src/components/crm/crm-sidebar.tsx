@@ -11,7 +11,8 @@ import {
   ChevronRight,
   ShieldCheck,
   CalendarDays,
-  Bell
+  BarChart3,
+  UserCog
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -32,22 +33,25 @@ import { Badge } from "@/components/ui/badge"
 export function CRMSidebar() {
   const pathname = usePathname()
   
-  // Count interventions for today
   const today = new Date().toLocaleDateString()
   const todayCount = MOCK_REQUESTS.reduce((acc, req) => {
     const hasToday = req.interventions.some(i => new Date(i.date).toLocaleDateString() === today)
     return hasToday ? acc + 1 : acc
   }, 0)
 
-  // Count critical alerts
   const criticalCount = MOCK_REMINDERS.filter(r => r.type === 'critical' || r.type === 'warning').length
 
-  const menuItems = [
+  const mainItems = [
     { title: "Dashboard", icon: LayoutDashboard, href: "/", badge: criticalCount > 0 ? criticalCount : null, badgeColor: "bg-destructive text-destructive-foreground" },
     { title: "Servicios", icon: ClipboardList, href: "/requests" },
     { title: "Calendario", icon: CalendarDays, href: "/calendar", badge: todayCount > 0 ? todayCount : null, badgeColor: "bg-accent text-accent-foreground" },
     { title: "Empresas", icon: Briefcase, href: "/companies" },
     { title: "Técnicos", icon: Users, href: "/technicians" },
+  ]
+
+  const adminItems = [
+    { title: "Usuarios", icon: UserCog, href: "/admin/users" },
+    { title: "Productividad", icon: BarChart3, href: "/admin/reports" },
   ]
 
   return (
@@ -69,10 +73,10 @@ export function CRMSidebar() {
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel className="px-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Menú Principal
+            Operación
           </SidebarGroupLabel>
           <SidebarMenu className="px-2 mt-2">
-            {menuItems.map((item) => (
+            {mainItems.map((item) => (
               <SidebarMenuItem key={item.href}>
                 <SidebarMenuButton
                   asChild
@@ -93,9 +97,34 @@ export function CRMSidebar() {
                         {item.badge}
                       </Badge>
                     )}
-                    {pathname === item.href && !item.badge && (
-                      <ChevronRight className="ml-auto h-4 w-4" />
-                    )}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="px-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Administración
+          </SidebarGroupLabel>
+          <SidebarMenu className="px-2 mt-2">
+            {adminItems.map((item) => (
+              <SidebarMenuItem key={item.href}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname === item.href}
+                  tooltip={item.title}
+                  className={cn(
+                    "relative flex items-center gap-3 rounded-md px-3 py-2 transition-all duration-200",
+                    pathname === item.href 
+                      ? "bg-primary/10 text-primary font-semibold" 
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  )}
+                >
+                  <Link href={item.href}>
+                    <item.icon className="h-5 w-5" />
+                    <span>{item.title}</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -118,7 +147,7 @@ export function CRMSidebar() {
             AD
           </div>
           <div className="flex flex-col overflow-hidden">
-            <span className="truncate text-sm font-semibold">Admin Panel</span>
+            <span className="truncate text-sm font-semibold">Administrador</span>
             <span className="truncate text-xs text-muted-foreground">admin@asistenciapro.com</span>
           </div>
         </div>

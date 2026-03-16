@@ -22,10 +22,7 @@
         "role": {
           "type": "string",
           "description": "The role of the user within the CRM system, defining their permissions and access.",
-          "format": "enum",
-          "items": {
-            "type": "string"
-          }
+          "enum": ["Admin", "Contabilidad", "Atención al Cliente"]
         },
         "isActive": {
           "type": "boolean",
@@ -173,10 +170,7 @@
         "serviceType": {
           "type": "string",
           "description": "The type of service requested.",
-          "format": "enum",
-          "items": {
-            "type": "string"
-          }
+          "enum": ["Plomería", "Electricidad", "Cerrajería", "Vidriería", "Trabajo en Alturas", "Instalación", "Destaponamiento"]
         },
         "description": {
           "type": "string",
@@ -185,40 +179,20 @@
         "status": {
           "type": "string",
           "description": "The current status of the service request.",
-          "format": "enum",
-          "items": {
-            "type": "string"
-          }
+          "enum": ["pending", "assigned", "in_progress", "completed", "cancelled"]
         },
         "priority": {
           "type": "string",
           "description": "The priority level of the service request.",
-          "format": "enum",
-          "items": {
-            "type": "string"
-          }
+          "enum": ["low", "medium", "high", "critical"]
         },
         "clientAccountId": {
           "type": "string",
           "description": "Reference to the ClientAccount for whom the service is requested. (Relationship: ClientAccount 1:N ServiceRequest)"
         },
-        "assignedTechnicianId": {
-          "type": "string",
-          "description": "Reference to the Technician assigned to this service request, if any. (Relationship: Technician 1:N ServiceRequest)"
-        },
         "requestedDateTime": {
           "type": "string",
           "description": "The date and time when the service was requested by the client.",
-          "format": "date-time"
-        },
-        "scheduledDateTime": {
-          "type": "string",
-          "description": "The date and time when the service is scheduled to take place.",
-          "format": "date-time"
-        },
-        "completedDateTime": {
-          "type": "string",
-          "description": "The date and time when the service was completed.",
           "format": "date-time"
         },
         "totalCost": {
@@ -252,57 +226,11 @@
         "createdAt",
         "updatedAt"
       ]
-    },
-    "ServiceNote": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "ServiceNote",
-      "type": "object",
-      "description": "Detailed notes pertaining to a specific service request, including general observations, technical details, cost information, or AI-generated summaries.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the ServiceNote entity."
-        },
-        "serviceRequestId": {
-          "type": "string",
-          "description": "Reference to the ServiceRequest to which this note belongs. (Relationship: ServiceRequest 1:N ServiceNote)"
-        },
-        "content": {
-          "type": "string",
-          "description": "The actual detailed content of the service note."
-        },
-        "noteType": {
-          "type": "string",
-          "description": "The category or type of the note.",
-          "format": "enum",
-          "items": {
-            "type": "string"
-          }
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp when the note was created.",
-          "format": "date-time"
-        },
-        "createdByUserId": {
-          "type": "string",
-          "description": "Reference to the User who created this service note. (Relationship: User 1:N ServiceNote)"
-        }
-      },
-      "required": [
-        "id",
-        "serviceRequestId",
-        "content",
-        "noteType",
-        "createdAt",
-        "createdByUserId"
-      ]
     }
   },
   "auth": {
     "providers": [
-      "password",
-      "anonymous"
+      "password"
     ]
   },
   "firestore": {
@@ -314,7 +242,7 @@
           "schema": {
             "$ref": "#/backend/entities/User"
           },
-          "description": "Stores individual user profiles and their assigned roles (Admin, Contabilidad, Atención al Cliente). Ownership is path-based: `request.auth.uid` must match `userId` for profile modifications. User roles are used for broader access control across the application.",
+          "description": "Stores individual user profiles and their assigned roles (Admin, Contabilidad, Atención al Cliente).",
           "params": [
             {
               "name": "userId",
@@ -330,7 +258,7 @@
           "schema": {
             "$ref": "#/backend/entities/AssistanceCompany"
           },
-          "description": "Stores top-level assistance provider companies. Primarily managed by 'Admin' users.",
+          "description": "Stores top-level assistance provider companies.",
           "params": [
             {
               "name": "assistanceCompanyId",
@@ -346,7 +274,7 @@
           "schema": {
             "$ref": "#/backend/entities/ClientAccount"
           },
-          "description": "Stores client accounts managed by specific assistance companies. Includes denormalized 'assistanceCompanyId' for authorization independence. Managed by 'Admin' users.",
+          "description": "Stores client accounts managed by specific assistance companies.",
           "params": [
             {
               "name": "clientAccountId",
@@ -362,7 +290,7 @@
           "schema": {
             "$ref": "#/backend/entities/Technician"
           },
-          "description": "Stores profiles of technicians available to perform services. Primarily managed by 'Admin' users.",
+          "description": "Stores profiles of technicians.",
           "params": [
             {
               "name": "technicianId",
@@ -378,7 +306,7 @@
           "schema": {
             "$ref": "#/backend/entities/ServiceRequest"
           },
-          "description": "Central collection for all service requests ('expedientes'). Includes denormalized 'assistanceCompanyId' (from ClientAccount) and 'createdByUserId' for authorization independence and efficient querying for productivity reports. Access is determined by user role and these denormalized fields.",
+          "description": "Central collection for all service requests ('expedientes').",
           "params": [
             {
               "name": "serviceRequestId",
@@ -386,28 +314,7 @@
             }
           ]
         }
-      },
-      {
-        "path": "/serviceRequests/{serviceRequestId}/serviceNotes/{serviceNoteId}",
-        "definition": {
-          "entityName": "ServiceNote",
-          "schema": {
-            "$ref": "#/backend/entities/ServiceNote"
-          },
-          "description": "Detailed notes pertaining to a specific service request. Includes denormalized 'clientAccountId', 'assistanceCompanyId', and 'createdByUserId' from the parent ServiceRequest for full authorization independence, enabling atomic operations and simplifying security rules.",
-          "params": [
-            {
-              "name": "serviceRequestId",
-              "description": "The unique identifier of the parent service request."
-            },
-            {
-              "name": "serviceNoteId",
-              "description": "The unique identifier of the service note."
-            }
-          ]
-        }
       }
-    ],
-    "reasoning": "The Firestore data structure is designed to adhere to the core principles of Authorization Independence, Structural Segregation, DBAC, and QAPs, ensuring a secure, scalable, and debuggable CRM system. The structure prioritizes denormalization of authorization-relevant fields to eliminate `get()` calls in security rules, simplify rule logic, and enable atomic operations.\n\n**Authorization Independence via Denormalization:**\n*   Every `ServiceRequest` document will explicitly contain `assistanceCompanyId` (denormalized from its associated `ClientAccount`) and `createdByUserId`. This means that security rules evaluating access to a `ServiceRequest` document can determine authorization directly from the document's own fields, without needing to perform `get()` operations on the `/clientAccounts/{clientAccountId}` collection to ascertain its parent assistance company or the user who created it.\n*   Similarly, `ServiceNote` documents, residing as a subcollection of `ServiceRequest` (at `/serviceRequests/{serviceRequestId}/serviceNotes/{serviceNoteId}`), will also include denormalized fields: `clientAccountId`, `assistanceCompanyId`, and `createdByUserId`. This is a critical architectural decision. By mirroring these authorization contexts from the parent `ServiceRequest` into each `ServiceNote`, rules for `ServiceNote` documents can make authorization decisions (e.g., 'only users from this assistance company can read this note', or 'only the creator of the request/note can edit it') without any `get()` calls to the parent `ServiceRequest` document. This dramatically simplifies security rules, enhances performance by avoiding cross-document reads, and supports atomic writes (transactions or batched writes) across parent and child documents.\n\n**QAPs (Rules are not Filters):**\n*   **Structural Segregation:** Global entities like `AssistanceCompany` and `Technician` are placed in root collections (`/assistanceCompanies`, `/technicians`), implying a homogeneous security posture (e.g., primarily Admin access). This simplifies rule writing by ensuring all documents in such collections share the same general access requirements, making `list` operations straightforward for authorized roles.\n*   **Denormalized Authorization Fields for Efficient Queries:** For use cases like Administrator productivity reports, where an Admin needs to view all `ServiceRequest`s created by a specific 'Atención al Cliente' user, the `createdByUserId` field directly within the `ServiceRequest` document is crucial. An Admin can issue a query like `db.collection('serviceRequests').where('createdByUserId', '==', 'someUserUid')`. The security rules can then efficiently validate this query by checking the requester's role (Admin) and ensuring the query matches the authorized pattern, without filtering results on the server side. Similarly, an 'Atención al Cliente' user can easily `list` their own service requests using `db.collection('serviceRequests').where('createdByUserId', '==', request.auth.uid)`, which rules can validate directly against the document's fields and the `request.auth.uid`.\n*   **Role-Based Access (DBAC):** User roles are stored in the `role` field within the `/users/{userId}` documents. This enables rules to check `get(/users/$(request.auth.uid)).data.role` to determine the user's permissions, adhering to the DBAC principle and ensuring role information is consistently stored and accessed directly from the database.\n\nThis robust design ensures that security rules are concise, performant, and easy to debug, while supporting the specified application features like user management, service request tracking, and productivity reporting."
+    ]
   }
 }
