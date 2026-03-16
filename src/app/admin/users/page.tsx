@@ -14,6 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { toast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, doc, updateDoc, setDoc, query, orderBy } from "firebase/firestore"
+import { cn } from "@/lib/utils"
 
 export default function AdminUsersPage() {
   const db = useFirestore()
@@ -31,9 +32,9 @@ export default function AdminUsersPage() {
   const { data: users, isLoading } = useCollection(usersQuery)
 
   const filteredUsers = users?.filter(u => 
-    u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.lastName.toLowerCase().includes(searchTerm.toLowerCase())
+    u.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    u.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    u.lastName?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const handleSaveUser = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -41,13 +42,15 @@ export default function AdminUsersPage() {
     if (!db) return
 
     const formData = new FormData(e.currentTarget)
+    const username = (formData.get("username") as string || "").toUpperCase()
+    
     const userData = {
-      username: (formData.get("username") as string).toUpperCase(),
-      firstName: formData.get("firstName") as string,
-      lastName: formData.get("lastName") as string,
-      email: formData.get("email") as string,
-      phoneNumber: formData.get("phoneNumber") as string,
-      roleId: formData.get("roleId") as string,
+      username,
+      firstName: formData.get("firstName") as string || "",
+      lastName: formData.get("lastName") as string || "",
+      email: formData.get("email") as string || "",
+      phoneNumber: formData.get("phoneNumber") as string || "",
+      roleId: formData.get("roleId") as string || "Servicio al Cliente",
       isActive: true,
     }
 
