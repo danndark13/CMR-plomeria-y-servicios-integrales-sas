@@ -94,7 +94,9 @@ export default function RequestsPage() {
     return collection(db, "assistance_companies")
   }, [db, user])
   const { data: companies } = useCollection(companiesQuery)
-  const allCompanies = companies || MOCK_COMPANIES
+  
+  // Ensure we always have companies, falling back to mocks if DB is empty or loading
+  const allCompanies = (companies && companies.length > 0) ? companies : MOCK_COMPANIES
 
   const handleCreateService = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -274,7 +276,7 @@ export default function RequestsPage() {
                 <Label className="text-[10px] font-black uppercase tracking-widest">Empresa de Asistencia</Label>
                 <Select name="companyId" required>
                   <SelectTrigger className="font-bold">
-                    <SelectValue placeholder="Seleccionar aliando" />
+                    <SelectValue placeholder="Seleccionar aliado" />
                   </SelectTrigger>
                   <SelectContent>
                     {allCompanies.map(c => (
