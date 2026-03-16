@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ShieldCheck, Lock, User, Loader2 } from "lucide-react"
+import { ShieldCheck, Lock, User, Loader2, Info } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { signInAnonymously } from "firebase/auth"
 import { doc, setDoc } from "firebase/firestore"
@@ -41,17 +41,16 @@ export default function LoginPage() {
     }
 
     try {
-      // 1. Iniciar sesión anónima para obtener un UID único
+      // 1. Iniciar sesión anónima
       const userCredential = await signInAnonymously(auth)
       const user = userCredential.user
 
-      // 2. Determinar rol
+      // 2. Determinar rol según prefijo
       let roleId = "Servicio al Cliente"
       if (rolePrefix === "ADM") roleId = "Administrador"
       if (rolePrefix === "CON") roleId = "Contabilidad"
 
-      // 3. Crear o actualizar el perfil de Daniel para este ID específico
-      // Cada sesión anónima tendrá un UID diferente, permitiendo ver múltiples perfiles en Admin
+      // 3. Crear o actualizar el perfil de Daniel para este ID específico en Firestore
       const profileRef = doc(firestore, "user_profiles", user.uid)
       
       await setDoc(profileRef, {
@@ -101,17 +100,24 @@ export default function LoginPage() {
         <Card className="border-t-8 border-t-primary shadow-2xl overflow-hidden">
           <CardHeader className="bg-slate-50/50 border-b">
             <CardTitle className="text-xl font-bold">Identificación Corporativa</CardTitle>
-            <CardDescription>Ingrese su ID (ADMINxx, CONxx, SERxx) para continuar.</CardDescription>
+            <CardDescription>Ingrese su ID corporativo para activar su perfil.</CardDescription>
           </CardHeader>
           <form onSubmit={handleLogin}>
             <CardContent className="space-y-6 pt-6">
+              <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg flex items-start gap-3">
+                <Info className="h-4 w-4 text-primary mt-0.5" />
+                <div className="text-[10px] text-primary font-medium leading-tight">
+                  IDs de prueba: <strong>ADMIN01</strong>, <strong>CON01</strong>, <strong>SER01</strong><br/>
+                  Clave: <strong>RYS2025</strong>
+                </div>
+              </div>
               <div className="space-y-2">
-                <Label htmlFor="userId" className="text-[10px] uppercase font-black tracking-widest">Usuario o ID</Label>
+                <Label htmlFor="userId" className="text-[10px] uppercase font-black tracking-widest">ID de Usuario</Label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input 
                     id="userId" 
-                    placeholder="Ej. ADMIN01, SER01..." 
+                    placeholder="Ej. ADMIN01" 
                     className="pl-10 h-12 font-mono font-bold uppercase"
                     value={userId}
                     onChange={(e) => setUserId(e.target.value)}
@@ -120,7 +126,7 @@ export default function LoginPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password" title="Contraseña corporativa: RYS2025" className="text-[10px] uppercase font-black tracking-widest">Contraseña</Label>
+                <Label htmlFor="password" title="Clave: RYS2025" className="text-[10px] uppercase font-black tracking-widest">Contraseña</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input 
@@ -133,15 +139,6 @@ export default function LoginPage() {
                     required 
                   />
                 </div>
-              </div>
-              <div className="flex items-center space-x-2 pt-2">
-                <Checkbox id="remember" />
-                <label
-                  htmlFor="remember"
-                  className="text-sm font-bold leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer text-slate-600"
-                >
-                  Recordar mi sesión
-                </label>
               </div>
             </CardContent>
             <CardFooter className="bg-slate-50/50 border-t p-6">

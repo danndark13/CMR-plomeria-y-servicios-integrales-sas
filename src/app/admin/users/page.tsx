@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { UserPlus, Mail, Shield, MoreVertical, Key, Power, UserCog, Phone, Fingerprint, Loader2, Save, Search, CreditCard, X } from "lucide-react"
+import { UserPlus, Mail, Shield, MoreVertical, Key, Power, UserCog, Phone, Fingerprint, Loader2, Save, Search, CreditCard, X, AlertCircle } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { toast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
@@ -31,19 +31,22 @@ export default function AdminUsersPage() {
 
   const { data: users, isLoading } = useCollection(usersQuery)
 
-  const filteredUsers = users?.filter(u => 
-    u.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.cedula?.includes(searchTerm)
-  ).sort((a, b) => (a.username || "").localeCompare(b.username || ""))
+  const filteredUsers = users?.filter(u => {
+    const search = searchTerm.toLowerCase()
+    return (
+      (u.username?.toLowerCase() || "").includes(search) ||
+      (u.firstName?.toLowerCase() || "").includes(search) ||
+      (u.lastName?.toLowerCase() || "").includes(search) ||
+      (u.cedula || "").includes(search)
+    )
+  }).sort((a, b) => (a.username || "").localeCompare(b.username || ""))
 
   const handleSaveUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!db) return
 
     const formData = new FormData(e.currentTarget)
-    const username = (formData.get("username") as string || "").toUpperCase()
+    const username = (formData.get("username") as string || "").toUpperCase().trim()
     
     const userData = {
       username,
@@ -60,11 +63,11 @@ export default function AdminUsersPage() {
     try {
       if (editingUser) {
         await updateDoc(doc(db, "user_profiles", editingUser.id), userData)
-        toast({ title: "Cambios Guardados", description: "El perfil del colaborador ha sido actualizado." })
+        toast({ title: "Cambios Guardados", description: "El perfil ha sido actualizado correctamente." })
       } else {
         const newId = Math.random().toString(36).substring(7)
         await setDoc(doc(db, "user_profiles", newId), { ...userData, id: newId })
-        toast({ title: "Usuario Registrado", description: "Se ha creado el nuevo acceso corporativo." })
+        toast({ title: "Usuario Registrado", description: "Se ha creado el perfil en la base de datos." })
       }
       setEditingUser(null)
       setIsCreating(false)
@@ -84,7 +87,7 @@ export default function AdminUsersPage() {
       })
       toast({
         title: user.isActive ? "Acceso Suspendido" : "Acceso Reactivado",
-        description: `El estado de ${user.firstName} ha sido actualizado correctamente.`
+        description: `El estado de ${user.firstName} ha sido actualizado.`
       })
     } catch (error) {
       toast({ variant: "destructive", title: "Error", description: "No se pudo cambiar el estado." })
@@ -105,7 +108,7 @@ export default function AdminUsersPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">Control de Personal</h1>
-          <p className="text-muted-foreground font-medium">Administración de identidades corporativas y permisos de acceso.</p>
+          <p className="text-muted-foreground font-medium">Gestión de identidades y accesos corporativos.</p>
         </div>
         <Button 
           className="gap-2 shadow-lg h-12 font-bold" 
@@ -128,7 +131,7 @@ export default function AdminUsersPage() {
                 <Fingerprint className="h-5 w-5" />
                 {editingUser ? "Configuración de Perfil" : "Vinculación de Personal"}
               </CardTitle>
-              <CardDescription className="text-primary-foreground/70">Asignación de roles y credenciales corporativas.</CardDescription>
+              <CardDescription className="text-primary-foreground/70">Asignación de roles y credenciales.</CardDescription>
             </div>
             <Button 
               variant="ghost" 
@@ -144,7 +147,7 @@ export default function AdminUsersPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="username" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">ID Usuario</Label>
-                  <Input id="username" name="username" placeholder="Ej. SER05" defaultValue={editingUser?.username} required className="font-mono font-bold uppercase" />
+                  <Input id="username" name="username" placeholder="Ej. SER01" defaultValue={editingUser?.username} required className="font-mono font-bold uppercase" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="cedula" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Cédula</Label>
@@ -162,7 +165,7 @@ export default function AdminUsersPage() {
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Correo Corporativo</Label>
+                  <Label htmlFor="email" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Correo</Label>
                   <Input id="email" name="email" type="email" placeholder="daniel@rys.com" defaultValue={editingUser?.email} required />
                 </div>
                 <div className="space-y-2">
@@ -170,7 +173,7 @@ export default function AdminUsersPage() {
                   <Input id="phoneNumber" name="phoneNumber" placeholder="3167533657" defaultValue={editingUser?.phoneNumber} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="roleId" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Rol Jerárquico</Label>
+                  <Label htmlFor="roleId" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Rol</Label>
                   <Select name="roleId" defaultValue={editingUser?.roleId || "Servicio al Cliente"}>
                     <SelectTrigger className="h-10">
                       <SelectValue placeholder="Seleccionar rol" />
@@ -187,7 +190,7 @@ export default function AdminUsersPage() {
 
               <div className="flex gap-3 pt-2">
                 <Button type="submit" className="flex-1 font-black shadow-lg h-12" disabled={isProcessing}>
-                  {isProcessing ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Save className="h-5 w-5 mr-2" /> {editingUser ? "ACTUALIZAR DATOS" : "VINCULAR COLABORADOR"}</>}
+                  {isProcessing ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Save className="h-5 w-5 mr-2" /> {editingUser ? "ACTUALIZAR" : "VINCULAR"}</>}
                 </Button>
                 <Button 
                   type="button" 
@@ -208,13 +211,13 @@ export default function AdminUsersPage() {
         <CardHeader className="bg-slate-50 border-b">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <CardTitle className="text-lg">Nómina de Usuarios</CardTitle>
-              <CardDescription>Visualización por ID corporativo y estado de acceso.</CardDescription>
+              <CardTitle className="text-lg">Personal Registrado</CardTitle>
+              <CardDescription>Los perfiles se crean automáticamente al primer ingreso del colaborador.</CardDescription>
             </div>
             <div className="relative w-full md:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input 
-                placeholder="Buscar por ID, Cédula o Nombre..." 
+                placeholder="Buscar por ID o Cédula..." 
                 className="pl-9 h-9 text-xs"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -228,8 +231,8 @@ export default function AdminUsersPage() {
               <TableHeader>
                 <TableRow className="bg-muted/30">
                   <TableHead className="w-[120px] font-black uppercase text-[10px] tracking-widest">ID / Cédula</TableHead>
-                  <TableHead className="font-black uppercase text-[10px] tracking-widest">Colaborador / Contacto</TableHead>
-                  <TableHead className="font-black uppercase text-[10px] tracking-widest">Rol Asignado</TableHead>
+                  <TableHead className="font-black uppercase text-[10px] tracking-widest">Colaborador</TableHead>
+                  <TableHead className="font-black uppercase text-[10px] tracking-widest">Rol</TableHead>
                   <TableHead className="font-black uppercase text-[10px] tracking-widest">Estado</TableHead>
                   <TableHead className="text-right font-black uppercase text-[10px] tracking-widest">Acciones</TableHead>
                 </TableRow>
@@ -239,13 +242,23 @@ export default function AdminUsersPage() {
                   <TableRow>
                     <TableCell colSpan={5} className="h-40 text-center">
                       <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary opacity-20" />
-                      <p className="mt-2 text-xs font-bold text-muted-foreground">Sincronizando base de datos...</p>
+                      <p className="mt-2 text-xs font-bold text-muted-foreground tracking-tighter uppercase">Conectando con Firestore...</p>
                     </TableCell>
                   </TableRow>
                 ) : filteredUsers?.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-40 text-center text-muted-foreground italic">
-                      No se encontraron colaboradores con ese criterio.
+                    <TableCell colSpan={5} className="h-60 text-center">
+                      <div className="flex flex-col items-center justify-center space-y-4">
+                        <div className="p-4 bg-slate-50 rounded-full">
+                          <AlertCircle className="h-10 w-10 text-slate-300" />
+                        </div>
+                        <div className="max-w-[300px] mx-auto">
+                          <p className="text-sm font-bold text-slate-800">No hay perfiles activos</p>
+                          <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                            Recuerda que para que aparezcan <strong>SER01</strong> y <strong>CON01</strong>, primero debes iniciar sesión con esos IDs una vez.
+                          </p>
+                        </div>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : filteredUsers?.map((user) => (
@@ -289,10 +302,10 @@ export default function AdminUsersPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-56">
                           <DropdownMenuItem onClick={() => { setEditingUser(user); setIsCreating(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
-                            <UserCog className="h-4 w-4 mr-2" /> Editar Perfil Completo
+                            <UserCog className="h-4 w-4 mr-2" /> Editar Perfil
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleResetPassword(user.username)}>
-                            <Key className="h-4 w-4 mr-2" /> Restablecer Clave (RYS2025)
+                            <Key className="h-4 w-4 mr-2" /> Reset Clave (RYS2025)
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem 
@@ -300,7 +313,7 @@ export default function AdminUsersPage() {
                             onClick={() => toggleUserStatus(user)}
                             disabled={isProcessing}
                           >
-                            <Power className="h-4 w-4 mr-2" /> {user.isActive ? "Suspender Acceso" : "Reactivar Acceso"}
+                            <Power className="h-4 w-4 mr-2" /> {user.isActive ? "Suspender Acceso" : "Reactivar"}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
