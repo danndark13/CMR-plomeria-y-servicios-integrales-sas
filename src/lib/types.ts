@@ -11,7 +11,7 @@ export type ServiceCategory =
 
 export type InterventionType = 'Diagnóstico' | 'Reparación' | 'Seguimiento' | 'Finalización' | 'Garantía';
 
-export type BillingStatus = 'pending' | 'ready_to_bill' | 'billed' | 'paid';
+export type BillingStatus = 'pending' | 'pre_validated' | 'validated' | 'paid';
 
 export type ExpenseCategory = 'material' | 'transporte' | 'otros';
 
@@ -120,6 +120,7 @@ export interface ServiceRequest {
   approvedAmount?: number;  // Lo que la asistencia aprueba pagar
   billingStatus: BillingStatus;
   invoiceNumber?: string;
+  billingConsecutive?: string; // Consecutivo interno contable
   
   // Auditoría
   auditLogs?: AuditEntry[];

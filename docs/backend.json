@@ -64,6 +64,7 @@
         "companyId": { "type": "string" },
         "accountName": { "type": "string" },
         "status": { "type": "string" },
+        "billingStatus": { "type": "string" },
         "insuredName": { "type": "string" },
         "claimNumber": { "type": "string" },
         "address": { "type": "string" },
@@ -73,6 +74,8 @@
         "accountingNotes": { "type": "string" },
         "requestedAmount": { "type": "number" },
         "approvedAmount": { "type": "number" },
+        "invoiceNumber": { "type": "string" },
+        "billingConsecutive": { "type": "string" },
         "updatedAt": { "type": "string" }
       },
       "required": ["id", "claimNumber", "status"]
