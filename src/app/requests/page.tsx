@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState } from "react"
@@ -341,6 +340,9 @@ export default function RequestsPage() {
                     <SelectItem value="Trabajo en Alturas">Trabajo en Alturas</SelectItem>
                     <SelectItem value="Instalación">Instalación</SelectItem>
                     <SelectItem value="Destaponamiento">Destaponamiento</SelectItem>
+                    <SelectItem value="Taponamiento">Taponamiento</SelectItem>
+                    <SelectItem value="Impermeabilización">Impermeabilización</SelectItem>
+                    <SelectItem value="Garantía">Garantía</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -364,7 +366,7 @@ export default function RequestsPage() {
                 <Label className="text-[10px] font-black uppercase tracking-widest">Cuenta / Asegurado</Label>
                 <div className="relative">
                   <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input name="accountName" placeholder="EJ: COOMEVA" required className="pl-10 font-bold uppercase" />
+                  <Input name="accountName" placeholder="EJ: ALLIANZ" required className="pl-10 font-bold uppercase" />
                 </div>
               </div>
             </div>

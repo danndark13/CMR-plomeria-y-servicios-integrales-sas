@@ -8,7 +8,9 @@ export type ServiceCategory =
   | 'Trabajo en Alturas' 
   | 'Instalación' 
   | 'Destaponamiento'
-  | 'Impermeabilización';
+  | 'Taponamiento'
+  | 'Impermeabilización'
+  | 'Garantía';
 
 export type InterventionType = 'Diagnóstico' | 'Reparación' | 'Seguimiento' | 'Finalización' | 'Garantía' | 'Visita Programada';
 

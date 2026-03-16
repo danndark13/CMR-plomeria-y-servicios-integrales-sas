@@ -1,10 +1,10 @@
 import { AssistanceCompany, Technician, ServiceRequest, Reminder } from './types';
 
 export const MOCK_COMPANIES: AssistanceCompany[] = [
-  { id: '1', name: 'IKE Asistencia', accounts: ['Coomeva', 'HDI', 'Banco de Bogotá', 'Sura'] },
-  { id: '2', name: 'IGS', accounts: ['Allianz', 'Axa Colpatria', 'Mapfre', 'BBVA'] },
-  { id: '3', name: 'Mawdy', accounts: ['Davivienda', 'Sura', 'Bolivar'] },
-  { id: '4', name: 'Assisprex', accounts: ['Generali', 'Liberty Seguros'] },
+  { id: '1', name: 'IKE Asistencia', accounts: ['Coomeva', 'HDI', 'Banco de Bogotá', 'Sura', 'Axa Colpatria'] },
+  { id: '2', name: 'IGS', accounts: ['Allianz', 'Bancolombia', 'Claro', 'Confama', 'Davivienda', 'Ser Finanzas', 'Tuya', 'Mapfre', 'BBVA'] },
+  { id: '3', name: 'Mawdy', accounts: ['Davivienda', 'Sura', 'Bolivar', 'Mapfre'] },
+  { id: '4', name: 'Assisprex', accounts: ['Generali', 'Liberty Seguros', 'Allianz'] },
 ];
 
 export const MOCK_TECHNICIANS: Technician[] = [

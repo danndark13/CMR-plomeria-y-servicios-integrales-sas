@@ -6,7 +6,10 @@ import {
   Square, 
   Mountain, 
   Wrench, 
-  Waves 
+  Waves,
+  ShieldAlert,
+  Paintbrush,
+  Hammer
 } from "lucide-react"
 
 const iconMap: Record<ServiceCategory, any> = {
@@ -15,8 +18,11 @@ const iconMap: Record<ServiceCategory, any> = {
   'Cerrajería': Key,
   'Vidriería': Square,
   'Trabajo en Alturas': Mountain,
-  'Instalación': Wrench,
+  'Instalación': Hammer,
   'Destaponamiento': Waves,
+  'Taponamiento': Waves,
+  'Impermeabilización': Paintbrush,
+  'Garantía': ShieldAlert,
 }
 
 export function CategoryIcon({ category, className }: { category: ServiceCategory; className?: string }) {
