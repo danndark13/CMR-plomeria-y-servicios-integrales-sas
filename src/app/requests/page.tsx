@@ -21,7 +21,7 @@ import {
   ArrowUpDown,
   FileText,
   ClipboardList,
-  Loader2
+  ChevronRight
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -45,7 +45,7 @@ export default function RequestsPage() {
     return doc(db, 'user_profiles', user.uid)
   }, [user, db])
 
-  const { data: profile, isLoading: isProfileLoading } = useDoc(profileRef)
+  const { data: profile } = useDoc(profileRef)
 
   const filteredRequests = MOCK_REQUESTS.filter(req => 
     req.claimNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -108,10 +108,10 @@ export default function RequestsPage() {
                 return (
                   <TableRow key={req.id} className="hover:bg-muted/20 transition-colors group">
                     <TableCell>
-                      <div className="flex flex-col">
+                      <Link href={`/requests/${req.id}`} className="flex flex-col hover:underline">
                         <span className="font-mono font-black text-primary text-sm">{req.claimNumber}</span>
                         <span className="text-[10px] text-muted-foreground font-bold uppercase">{req.category}</span>
-                      </div>
+                      </Link>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
@@ -123,21 +123,23 @@ export default function RequestsPage() {
                       <StatusBadge status={req.status} />
                     </TableCell>
                     <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity">
-                            <MoreVertical className="h-4 w-4" />
+                      <div className="flex items-center justify-end gap-2">
+                        <Link href={`/requests/${req.id}`}>
+                          <Button variant="outline" size="sm" className="h-8 gap-1 font-bold text-xs">
+                            Ver <ChevronRight className="h-3.5 w-3.5" />
                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem asChild>
-                            <Link href={`/requests/${req.id}`} className="flex items-center gap-2 cursor-pointer">
-                              <FileText className="h-4 w-4" /> Ver Expediente
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive font-bold">Cancelar Servicio</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                        </Link>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem className="text-destructive font-bold">Cancelar Servicio</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </TableCell>
                   </TableRow>
                 )
