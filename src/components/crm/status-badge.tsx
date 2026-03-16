@@ -7,6 +7,7 @@ const statusConfig: Record<ServiceStatus, { label: string; variant: "default" | 
   in_progress: { label: "En Progreso", variant: "default", className: "bg-primary/10 text-primary border-primary/20" },
   completed: { label: "Completado", variant: "default", className: "bg-green-50 text-green-700 border-green-200" },
   cancelled: { label: "Cancelado", variant: "destructive", className: "" },
+  warranty: { label: "En Garantía", variant: "default", className: "bg-orange-500 text-white border-orange-600 animate-pulse" },
 }
 
 export function StatusBadge({ status }: { status: ServiceStatus }) {

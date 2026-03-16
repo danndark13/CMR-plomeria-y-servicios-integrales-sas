@@ -1,4 +1,4 @@
-export type ServiceStatus = 'pending' | 'assigned' | 'in_progress' | 'completed' | 'cancelled';
+export type ServiceStatus = 'pending' | 'assigned' | 'in_progress' | 'completed' | 'cancelled' | 'warranty';
 
 export type ServiceCategory = 
   | 'Plomería' 
@@ -9,7 +9,7 @@ export type ServiceCategory =
   | 'Instalación' 
   | 'Destaponamiento';
 
-export type InterventionType = 'Diagnóstico' | 'Reparación' | 'Seguimiento' | 'Finalización';
+export type InterventionType = 'Diagnóstico' | 'Reparación' | 'Seguimiento' | 'Finalización' | 'Garantía';
 
 export type BillingStatus = 'pending' | 'ready_to_bill' | 'billed' | 'paid';
 

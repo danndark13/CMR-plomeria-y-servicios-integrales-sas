@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS, MOCK_COMPANIES } from "@/lib/mock-data"
-import { ServiceRequest, BillingStatus, ExpenseCategory, Technician, Advance, AuditEntry } from "@/lib/types"
+import { ServiceRequest, BillingStatus, ExpenseCategory, Technician, Advance, AuditEntry, ServiceStatus } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -39,7 +39,8 @@ import {
   History,
   Lock,
   Activity,
-  Clock
+  Clock,
+  ShieldCheck
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -63,6 +64,7 @@ export default function RequestDetailPage() {
   const [requestedAmount, setRequestedAmount] = useState<number>(0)
   const [approvedAmount, setApprovedAmount] = useState<number>(0)
   const [billingStatus, setBillingStatus] = useState<BillingStatus>('pending')
+  const [currentStatus, setCurrentStatus] = useState<ServiceStatus>('pending')
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([])
   
   const [isAddingAdvance, setIsAddingAdvance] = useState(false)
@@ -93,6 +95,7 @@ export default function RequestDetailPage() {
       setRequestedAmount(found.requestedAmount || 0)
       setApprovedAmount(found.approvedAmount || 0)
       setBillingStatus(found.billingStatus || 'pending')
+      setCurrentStatus(found.status || 'pending')
       setAuditLogs(found.auditLogs || [])
     }
   }, [id])
@@ -104,11 +107,13 @@ export default function RequestDetailPage() {
   const isAccounting = CURRENT_USER_ROLE === 'Contabilidad';
   const isCustomerService = CURRENT_USER_ROLE === 'Atención al Cliente';
   
-  // "Ya hace parte de contabilidad": Si el estado de facturación no es 'pending'
   const isInAccountingProcess = billingStatus !== 'pending';
+  const isWarranty = currentStatus === 'warranty';
   
-  // Atención al cliente no puede editar ni ver financieros si ya está en contabilidad
-  const canEdit = isAdmin || (isCustomerService && !isInAccountingProcess);
+  // Atención al cliente solo puede editar si NO está en contabilidad O si está en GARANTÍA
+  const canEditGeneral = isAdmin || (isCustomerService && (!isInAccountingProcess || isWarranty));
+  
+  // Pero Atención al Cliente NO puede ver financieros si ya está en contabilidad (incluso en garantía, los costos viejos son privados)
   const canSeeFinancials = isAdmin || isAccounting || (isCustomerService && !isInAccountingProcess);
 
   const company = MOCK_COMPANIES.find(c => c.id === request.companyId)
@@ -122,7 +127,7 @@ export default function RequestDetailPage() {
   const totalOperative = totalLabor + totalUsedExpenses
 
   const handleGenerateSummary = async () => {
-    if (!canEdit) return;
+    if (!canEditGeneral) return;
     if (!allNotes) {
       toast({ title: "Error", description: "Debe haber intervenciones con notas para generar un resumen.", variant: "destructive" })
       return
@@ -140,7 +145,7 @@ export default function RequestDetailPage() {
   }
 
   const handleAddExpense = (intervention: any) => {
-    if (!canEdit) return;
+    if (!canEditGeneral) return;
     if (!newExpense.amount || !newExpense.description) {
       toast({ title: "Error", description: "Monto y descripción son obligatorios.", variant: "destructive" })
       return
@@ -170,7 +175,7 @@ export default function RequestDetailPage() {
   }
 
   const handleAddAdvance = () => {
-    if (!canEdit) return;
+    if (!canEditGeneral) return;
     if (!newAdvanceAmount || !newAdvanceReason) {
       toast({ title: "Error", description: "Monto y motivo son obligatorios.", variant: "destructive" })
       return
@@ -184,18 +189,23 @@ export default function RequestDetailPage() {
   const handleSaveBilling = () => {
     if (!isAdmin && !isAccounting) return;
     
-    // Simular registro en bitácora
     const newEntry: AuditEntry = {
       id: Math.random().toString(36).substr(2, 9),
       userId: 'user-id',
       userName: CURRENT_USER_NAME,
       action: 'Ajuste de Facturación',
       timestamp: new Date().toISOString(),
-      details: `Cambio de valores. Cobro: $${requestedAmount}. Aprobado: $${approvedAmount}. Estado: ${billingStatus}.`
+      details: `Cambio de valores. Cobro: $${requestedAmount}. Aprobado: $${approvedAmount}. Estado Pago: ${billingStatus}. Estado Servicio: ${currentStatus}.`
     }
     
     setAuditLogs([newEntry, ...auditLogs])
     toast({ title: "Cambios Guardados", description: "Se han actualizado los valores y registrado en la bitácora." })
+  }
+
+  const handleSetWarranty = () => {
+    if (!isAdmin && !isAccounting) return;
+    setCurrentStatus('warranty');
+    toast({ title: "Estado: GARANTÍA", description: "El servicio se ha reactivado por garantía. Atención al cliente puede añadir nuevos reportes." });
   }
 
   const getBillingStatusBadge = (status: BillingStatus) => {
@@ -218,9 +228,9 @@ export default function RequestDetailPage() {
           <div className="flex flex-col">
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold tracking-tight">{request.id}</h1>
-              <StatusBadge status={request.status} />
+              <StatusBadge status={currentStatus} />
               {getBillingStatusBadge(billingStatus)}
-              {isInAccountingProcess && isCustomerService && (
+              {isInAccountingProcess && isCustomerService && !isWarranty && (
                 <Badge variant="outline" className="gap-1 border-destructive text-destructive bg-destructive/5">
                   <Lock className="h-3 w-3" /> Solo Lectura
                 </Badge>
@@ -234,11 +244,16 @@ export default function RequestDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           {(isAdmin || isAccounting) && (
-            <Button variant="outline" className="gap-2">
-              <Receipt className="h-4 w-4" /> Generar Factura
-            </Button>
+            <>
+              <Button variant="outline" className="gap-2 border-orange-500 text-orange-600 hover:bg-orange-50" onClick={handleSetWarranty}>
+                <ShieldCheck className="h-4 w-4" /> Activar Garantía
+              </Button>
+              <Button variant="outline" className="gap-2">
+                <Receipt className="h-4 w-4" /> Generar Factura
+              </Button>
+            </>
           )}
-          {canEdit && (
+          {canEditGeneral && (
             <Button className="gap-2 bg-green-600 hover:bg-green-700">
               <CheckCircle2 className="h-4 w-4" /> Finalizar Servicio
             </Button>
@@ -248,12 +263,22 @@ export default function RequestDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          {isInAccountingProcess && isCustomerService && (
+          {isInAccountingProcess && isCustomerService && !isWarranty && (
             <Card className="bg-destructive/10 border-destructive/20 text-destructive p-4 flex items-center gap-3">
               <Lock className="h-5 w-5 shrink-0" />
               <div className="text-sm">
                 <p className="font-bold">Servicio en Contabilidad</p>
                 <p className="opacity-80">Este expediente ya está siendo procesado por el área financiera. La edición y visualización de costos está restringida.</p>
+              </div>
+            </Card>
+          )}
+
+          {isWarranty && isCustomerService && (
+            <Card className="bg-orange-50 border-orange-200 text-orange-800 p-4 flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 shrink-0" />
+              <div className="text-sm">
+                <p className="font-bold">Modo Garantía Activo</p>
+                <p className="opacity-80">Puede añadir nuevas intervenciones técnicas. Los reportes y gastos anteriores permanecen bloqueados para proteger el cierre inicial.</p>
               </div>
             </Card>
           )}
@@ -302,11 +327,24 @@ export default function RequestDetailPage() {
           </div>
 
           <div className="space-y-6">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-               <Wrench className="h-5 w-5 text-primary" /> Bitácora Operativa
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Wrench className="h-5 w-5 text-primary" /> Bitácora Operativa
+              </h2>
+              {canEditGeneral && (
+                <Button size="sm" variant="outline" className="gap-2">
+                  <Plus className="h-4 w-4" /> Nueva Intervención
+                </Button>
+              )}
+            </div>
             {request.interventions.map((intervention) => {
               const tech = MOCK_TECHNICIANS.find(t => t.id === intervention.technicianId)
+              
+              // REGLA DE PROTECCIÓN HISTÓRICA:
+              // Atención al cliente no puede editar intervenciones previas a la garantía.
+              // Para el prototipo, bloqueamos todas las existentes si es CS y el servicio ya estuvo en contabilidad.
+              const canEditThisIntervention = isAdmin || (isCustomerService && !isInAccountingProcess);
+
               return (
                 <Card key={intervention.id} className="overflow-hidden border-l-4 border-l-primary/30">
                   <CardHeader className="bg-muted/30 py-3">
@@ -329,20 +367,28 @@ export default function RequestDetailPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="pt-4 space-y-4">
-                    <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap italic">
-                      "{intervention.notes}"
-                    </p>
+                    <div className="relative group">
+                      <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap italic">
+                        "{intervention.notes}"
+                      </p>
+                      {!canEditThisIntervention && isCustomerService && (
+                        <div className="absolute top-0 right-0">
+                          <Badge variant="outline" className="text-[8px] uppercase opacity-50"><Lock className="h-2 w-2 mr-1" /> Bloqueado</Badge>
+                        </div>
+                      )}
+                    </div>
+
                     {canSeeFinancials && (
                       <div className="space-y-3 pt-2 border-t border-dashed">
                         <div className="flex items-center justify-between">
                           <Label className="text-[10px] font-bold uppercase text-muted-foreground">Gastos Registrados</Label>
-                          {canEdit && (
+                          {canEditThisIntervention && (
                             <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1 text-primary" onClick={() => setActiveInterventionId(intervention.id)}>
                               <Plus className="h-3 w-3" /> Añadir Material
                             </Button>
                           )}
                         </div>
-                        {activeInterventionId === intervention.id && canEdit && (
+                        {activeInterventionId === intervention.id && canEditThisIntervention && (
                           <div className="p-3 border rounded-md bg-muted/20 space-y-3 animate-in fade-in">
                             <div className="grid grid-cols-2 gap-3">
                               <Input placeholder="Descripción" className="h-8 text-xs" value={newExpense.description} onChange={(e) => setNewExpense({...newExpense, description: e.target.value})} />
@@ -391,7 +437,7 @@ export default function RequestDetailPage() {
                 </CardTitle>
                 <CardDescription>Documentación consolidada para la asistencia.</CardDescription>
               </div>
-              {canEdit && (
+              {canEditGeneral && (
                 <Button size="sm" variant="outline" className="gap-2" onClick={handleGenerateSummary} disabled={isSummarizing}>
                   {isSummarizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                   Consolidar con IA
@@ -404,9 +450,9 @@ export default function RequestDetailPage() {
                 className="min-h-[150px] text-sm"
                 value={report}
                 onChange={(e) => setReport(e.target.value)}
-                disabled={!canEdit}
+                disabled={!canEditGeneral}
               />
-              {canEdit && (
+              {canEditGeneral && (
                 <Button className="mt-4 gap-2">
                   <Save className="h-4 w-4" /> Guardar Reporte Final
                 </Button>
@@ -414,7 +460,6 @@ export default function RequestDetailPage() {
             </CardContent>
           </Card>
 
-          {/* BITÁCORA DE AUDITORÍA: SOLO ADMIN Y CONTABILIDAD */}
           {(isAdmin || isAccounting) && (
             <Card className="border-t-4 border-t-slate-800 bg-slate-50">
               <CardHeader className="pb-3">
@@ -506,6 +551,15 @@ export default function RequestDetailPage() {
                            <option value="paid">Pagado</option>
                         </select>
                      </div>
+                     <div className="space-y-2">
+                        <Label className="text-[10px] text-muted-foreground">ESTADO OPERATIVO</Label>
+                        <select className="w-full h-8 rounded-md border text-xs px-2" value={currentStatus} onChange={(e) => setCurrentStatus(e.target.value as ServiceStatus)}>
+                           <option value="in_progress">En Progreso</option>
+                           <option value="completed">Completado</option>
+                           <option value="warranty">En Garantía</option>
+                           <option value="cancelled">Cancelado</option>
+                        </select>
+                     </div>
                      <div className="space-y-1 pt-2">
                         <Label className="text-[10px] text-muted-foreground font-bold">MARGEN BRUTO AJUSTADO</Label>
                         <div className={cn("h-8 px-3 flex items-center rounded-md font-mono font-bold text-sm", (approvedAmount - totalOperative) >= 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
@@ -549,7 +603,7 @@ export default function RequestDetailPage() {
                       <span className="font-mono font-bold text-destructive">-${adv.amount.toLocaleString()}</span>
                    </div>
                  ))}
-                 {canEdit && !isAddingAdvance && (
+                 {canEditGeneral && !isAddingAdvance && (
                    <Button variant="outline" className="w-full h-7 text-[10px] border-dashed" onClick={() => setIsAddingAdvance(true)}>
                      <Plus className="h-3 w-3 mr-1" /> Nuevo Anticipo
                    </Button>
