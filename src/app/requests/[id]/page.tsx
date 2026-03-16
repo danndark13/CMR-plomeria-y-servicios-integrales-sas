@@ -31,6 +31,8 @@ import { toast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
 import { doc, setDoc, updateDoc } from 'firebase/firestore'
+import { errorEmitter } from '@/firebase/error-emitter'
+import { FirestorePermissionError } from '@/firebase/errors'
 
 export default function RequestDetailPage() {
   const { id } = useParams()
@@ -56,9 +58,9 @@ export default function RequestDetailPage() {
   }, [db, id])
 
   const { data: firestoreRequest, isLoading: isRequestLoading } = useDoc(requestRef)
-  const { data: profile, isLoading: isProfileLoading } = useDoc(
-    useMemoFirebase(() => (user && db ? doc(db, 'user_profiles', user.uid) : null), [user, db])
-  )
+  
+  const profileRef = useMemoFirebase(() => (user && db ? doc(db, 'user_profiles', user.uid) : null), [user, db])
+  const { data: profile, isLoading: isProfileLoading } = useDoc(profileRef)
 
   useEffect(() => {
     if (firestoreRequest) {
@@ -92,11 +94,8 @@ export default function RequestDetailPage() {
   const isAccounting = profile?.roleId === 'Contabilidad'
   const isCustomerService = profile?.roleId === 'Servicio al Cliente'
   
-  // Modo Contable: Si viene del hub de contabilidad o es contador, restringimos el reporte
   const isAccountingMode = searchParams.get('mode') === 'accounting' || isAccounting
 
-  // Definición clara de permisos por sección
-  // El reporte SOLO se edita en modo operativo (Bitácora) por Admin o Servicio al Cliente
   const canEditReport = !isAccountingMode && (isAdmin || isCustomerService)
   const canEditFinancials = isAdmin || isAccounting
   const canSeeFinancials = isAdmin || isAccounting || isCustomerService
@@ -122,48 +121,65 @@ export default function RequestDetailPage() {
     }
   }
 
-  const handleSaveAll = async () => {
+  const handleSaveAll = () => {
     if (!db || !id) return
     setIsSaving(true)
-    try {
-      const dataToSave = {
-        ...localRequest,
-        report,
-        accountingNotes,
-        requestedAmount: requestedAmount || totalSuggested,
-        approvedAmount: approvedAmount,
-        updatedAt: new Date().toISOString()
-      }
-      await setDoc(doc(db, 'service_requests', id as string), dataToSave, { merge: true })
-      toast({ title: "Cambios Guardados", description: "El expediente ha sido actualizado correctamente." })
-    } catch (error) {
-      toast({ variant: "destructive", title: "Error al guardar", description: "No se pudieron persistir los cambios." })
-    } finally {
-      setIsSaving(false)
+    
+    const dataToSave = {
+      ...localRequest,
+      report,
+      accountingNotes,
+      requestedAmount: requestedAmount || totalSuggested,
+      approvedAmount: approvedAmount,
+      updatedAt: new Date().toISOString()
     }
+    
+    const docRef = doc(db, 'service_requests', id as string)
+    setDoc(docRef, dataToSave, { merge: true })
+      .then(() => {
+        toast({ title: "Cambios Guardados", description: "El expediente ha sido actualizado correctamente." })
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: docRef.path,
+          operation: "update",
+          requestResourceData: dataToSave,
+        })
+        errorEmitter.emit("permission-error", permissionError)
+      })
+      .finally(() => setIsSaving(false))
   }
 
-  const handleUpdateBilling = async () => {
-    if (!canEditFinancials || !db) return;
+  const handleUpdateBilling = () => {
+    if (!canEditFinancials || !db || !id) return;
     setIsSaving(true)
-    try {
-      await updateDoc(doc(db, 'service_requests', id as string), {
-        approvedAmount: approvedAmount,
-        requestedAmount: requestedAmount || totalSuggested,
-        accountingNotes: accountingNotes,
-        billingStatus: 'ready_to_bill',
-        updatedAt: new Date().toISOString()
-      })
-      setIsConciliated(true)
-      toast({ 
-        title: "Valores Conciliados", 
-        description: `Se ha fijado el valor de cobro en $${approvedAmount.toLocaleString()}.` 
-      })
-    } catch (error) {
-      handleSaveAll()
-    } finally {
-      setIsSaving(false)
+    
+    const billingUpdate = {
+      approvedAmount: approvedAmount,
+      requestedAmount: requestedAmount || totalSuggested,
+      accountingNotes: accountingNotes,
+      billingStatus: 'ready_to_bill',
+      updatedAt: new Date().toISOString()
     }
+
+    const docRef = doc(db, 'service_requests', id as string)
+    updateDoc(docRef, billingUpdate)
+      .then(() => {
+        setIsConciliated(true)
+        toast({ 
+          title: "Valores Conciliados", 
+          description: `Se ha fijado el valor de cobro en $${approvedAmount.toLocaleString()}.` 
+        })
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: docRef.path,
+          operation: "update",
+          requestResourceData: billingUpdate,
+        })
+        errorEmitter.emit("permission-error", permissionError)
+      })
+      .finally(() => setIsSaving(false))
   }
 
   return (

@@ -27,7 +27,8 @@ import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from "@
 import { collection, doc, setDoc, addDoc, serverTimestamp } from "firebase/firestore"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { toast } from "@/hooks/use-toast"
-import { MOCK_TECHNICIANS } from "@/lib/mock-data"
+import { errorEmitter } from '@/firebase/error-emitter'
+import { FirestorePermissionError } from '@/firebase/errors'
 import { cn } from "@/lib/utils"
 
 export default function InventoryPage() {
@@ -37,14 +38,12 @@ export default function InventoryPage() {
   const [isAddingItem, setIsAddingItem] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
 
-  // Consultar inventario global
   const inventoryQuery = useMemoFirebase(() => {
     if (!db) return null
     return collection(db, "inventory")
   }, [db])
   const { data: inventoryItems, isLoading } = useCollection(inventoryQuery)
 
-  // Consultar perfiles de técnicos para ver su stock
   const techsQuery = useMemoFirebase(() => {
     if (!db) return null
     return collection(db, "user_profiles")
@@ -56,7 +55,7 @@ export default function InventoryPage() {
     item.description.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const handleAddItem = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAddItem = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!db) return
 
@@ -70,15 +69,21 @@ export default function InventoryPage() {
       lastModifiedBy: user?.uid
     }
 
-    try {
-      await addDoc(collection(db, "inventory"), newItem)
-      toast({ title: "Insumo Agregado", description: "El stock de bodega ha sido actualizado." })
-      setIsAddingItem(false)
-    } catch (error) {
-      toast({ variant: "destructive", title: "Error", description: "No se pudo registrar el insumo." })
-    } finally {
-      setIsProcessing(false)
-    }
+    const colRef = collection(db, "inventory")
+    addDoc(colRef, newItem)
+      .then(() => {
+        toast({ title: "Insumo Agregado", description: "El stock de bodega ha sido actualizado." })
+        setIsAddingItem(false)
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: colRef.path,
+          operation: "create",
+          requestResourceData: newItem,
+        })
+        errorEmitter.emit("permission-error", permissionError)
+      })
+      .finally(() => setIsProcessing(false))
   }
 
   const totalValue = inventoryItems?.reduce((sum, item) => sum + (item.quantity * item.unitValue), 0) || 0
@@ -220,7 +225,6 @@ export default function InventoryPage() {
                       <History className="h-3 w-3" /> Materiales en Posesión
                     </p>
                     <div className="grid gap-2">
-                      {/* Aquí iría la lógica de inventario por técnico de Firestore si estuviera mapeado */}
                       <div className="p-3 bg-slate-50 rounded-lg border border-dashed flex justify-between items-center">
                         <span className="text-[10px] font-bold text-slate-500 italic">No hay materiales asignados manualmente</span>
                         <Button variant="ghost" size="sm" className="h-6 text-[9px] font-black uppercase text-primary">Asignar Stock</Button>
@@ -234,7 +238,6 @@ export default function InventoryPage() {
         </TabsContent>
       </Tabs>
 
-      {/* DIALOG PARA AGREGAR STOCK */}
       <Dialog open={isAddingItem} onOpenChange={setIsAddingItem}>
         <DialogContent className="sm:max-w-[450px]">
           <DialogHeader>

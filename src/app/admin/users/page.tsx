@@ -14,6 +14,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { toast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, doc, updateDoc, setDoc } from "firebase/firestore"
+import { errorEmitter } from '@/firebase/error-emitter'
+import { FirestorePermissionError } from '@/firebase/errors'
 import { cn } from "@/lib/utils"
 
 export default function AdminUsersPage() {
@@ -40,10 +42,11 @@ export default function AdminUsersPage() {
     )
   }).sort((a, b) => (a.username || "").localeCompare(b.username || ""))
 
-  const handleSaveUser = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSaveUser = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!db) return
 
+    setIsProcessing(true)
     const formData = new FormData(e.currentTarget)
     const username = (formData.get("username") as string || "").toUpperCase().trim()
     
@@ -58,26 +61,45 @@ export default function AdminUsersPage() {
       isActive: true,
     }
 
-    setIsProcessing(true)
-    try {
-      if (editingUser) {
-        await updateDoc(doc(db, "user_profiles", editingUser.id), userData)
-        toast({ title: "Cambios Guardados", description: "El perfil ha sido actualizado correctamente." })
-      } else {
-        const newId = Math.random().toString(36).substring(7)
-        await setDoc(doc(db, "user_profiles", newId), { ...userData, id: newId })
-        toast({ title: "Usuario Registrado", description: "Se ha creado el perfil en la base de datos." })
-      }
-      setEditingUser(null)
-      setIsCreating(false)
-    } catch (error) {
-      toast({ variant: "destructive", title: "Error", description: "No se pudo procesar la solicitud." })
-    } finally {
-      setIsProcessing(false)
+    if (editingUser) {
+      const docRef = doc(db, "user_profiles", editingUser.id)
+      updateDoc(docRef, userData)
+        .then(() => {
+          toast({ title: "Cambios Guardados", description: "El perfil ha sido actualizado correctamente." })
+          setEditingUser(null)
+          setIsCreating(false)
+        })
+        .catch(async (error) => {
+          const permissionError = new FirestorePermissionError({
+            path: docRef.path,
+            operation: "update",
+            requestResourceData: userData,
+          })
+          errorEmitter.emit("permission-error", permissionError)
+        })
+        .finally(() => setIsProcessing(false))
+    } else {
+      const newId = Math.random().toString(36).substring(7)
+      const docRef = doc(db, "user_profiles", newId)
+      setDoc(docRef, { ...userData, id: newId })
+        .then(() => {
+          toast({ title: "Usuario Registrado", description: "Se ha creado el perfil en la base de datos." })
+          setEditingUser(null)
+          setIsCreating(false)
+        })
+        .catch(async (error) => {
+          const permissionError = new FirestorePermissionError({
+            path: docRef.path,
+            operation: "create",
+            requestResourceData: { ...userData, id: newId },
+          })
+          errorEmitter.emit("permission-error", permissionError)
+        })
+        .finally(() => setIsProcessing(false))
     }
   }
 
-  const toggleUserStatus = async (user: any) => {
+  const toggleUserStatus = (user: any) => {
     if (!db) return
     if (user.username === 'GERENTE') {
       toast({
@@ -89,19 +111,25 @@ export default function AdminUsersPage() {
     }
 
     setIsProcessing(true)
-    try {
-      await updateDoc(doc(db, "user_profiles", user.id), {
-        isActive: !user.isActive
+    const docRef = doc(db, "user_profiles", user.id)
+    const update = { isActive: !user.isActive }
+    
+    updateDoc(docRef, update)
+      .then(() => {
+        toast({
+          title: user.isActive ? "Acceso Suspendido" : "Acceso Reactivado",
+          description: `El estado de ${user.firstName} ha sido actualizado.`
+        })
       })
-      toast({
-        title: user.isActive ? "Acceso Suspendido" : "Acceso Reactivado",
-        description: `El estado de ${user.firstName} ha sido actualizado.`
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: docRef.path,
+          operation: "update",
+          requestResourceData: update,
+        })
+        errorEmitter.emit("permission-error", permissionError)
       })
-    } catch (error) {
-      toast({ variant: "destructive", title: "Error", description: "No se pudo cambiar el estado." })
-    } finally {
-      setIsProcessing(false)
-    }
+      .finally(() => setIsProcessing(false))
   }
 
   const handleResetPassword = (username: string) => {
@@ -227,6 +255,7 @@ export default function AdminUsersPage() {
               <Input 
                 placeholder="Buscar por ID o Cédula..." 
                 className="pl-9 h-9 text-xs"
+                // onChange ya no debería causar problemas al no haber await bloqueando el thread
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
