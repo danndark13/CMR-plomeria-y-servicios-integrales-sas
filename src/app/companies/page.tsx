@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label"
 import { toast } from "@/hooks/use-toast"
 import { errorEmitter } from "@/firebase/error-emitter"
 import { FirestorePermissionError } from "@/firebase/errors"
+import { MOCK_COMPANIES } from "@/lib/mock-data"
 
 export default function CompaniesPage() {
   const db = useFirestore()
@@ -37,13 +38,27 @@ export default function CompaniesPage() {
     if (!db || !user) return null
     return collection(db, "assistance_companies")
   }, [db, user])
-  const { data: companies, isLoading: loadingCompanies } = useCollection(companiesQuery)
+  const { data: firestoreCompanies, isLoading: loadingCompanies } = useCollection(companiesQuery)
 
   const accountsQuery = useMemoFirebase(() => {
     if (!db || !user) return null
     return collection(db, "client_accounts")
   }, [db, user])
-  const { data: allAccounts, isLoading: loadingAccounts } = useCollection(accountsQuery)
+  const { data: firestoreAccounts, isLoading: loadingAccounts } = useCollection(accountsQuery)
+
+  // Combine Firestore and Mock Data for a robust test phase
+  const allCompanies = useMemo(() => {
+    const combined = [...(firestoreCompanies || [])]
+    const seenIds = new Set(combined.map(c => c.id))
+    
+    MOCK_COMPANIES.forEach(mock => {
+      if (!seenIds.has(mock.id)) {
+        combined.push(mock)
+        seenIds.add(mock.id)
+      }
+    })
+    return combined
+  }, [firestoreCompanies])
 
   const handleCreateCompany = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -55,7 +70,7 @@ export default function CompaniesPage() {
     
     const companyData = {
       id: companyId,
-      name: formData.get("name") as string,
+      name: (formData.get("name") as string).toUpperCase(),
       contactPerson: formData.get("contactPerson") as string,
       contactEmail: formData.get("contactEmail") as string,
       contactPhone: formData.get("contactPhone") as string,
@@ -88,7 +103,7 @@ export default function CompaniesPage() {
     
     const accountData = {
       id: accountId,
-      name: formData.get("name") as string,
+      name: (formData.get("name") as string).toUpperCase(),
       assistanceCompanyId: selectedCompanyId,
       contactPerson: formData.get("contactPerson") as string,
       contactEmail: formData.get("contactEmail") as string,
@@ -137,8 +152,14 @@ export default function CompaniesPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {companies?.map((company) => {
-          const companyAccounts = allAccounts?.filter(acc => acc.assistanceCompanyId === company.id) || []
+        {allCompanies.map((company) => {
+          // Get accounts from DB + Mocks for this company
+          const mockAccounts = company.accounts || []
+          const dbAccounts = (firestoreAccounts || [])
+            .filter(acc => acc.assistanceCompanyId === company.id)
+            .map(acc => acc.name)
+          
+          const uniqueAccounts = Array.from(new Set([...mockAccounts, ...dbAccounts])).sort()
           
           return (
             <Card key={company.id} className="overflow-hidden hover:shadow-xl transition-all border-l-4 border-l-primary group">
@@ -150,7 +171,7 @@ export default function CompaniesPage() {
                     </div>
                     <div>
                       <CardTitle className="text-xl font-black uppercase tracking-tight">{company.name}</CardTitle>
-                      <CardDescription className="text-[10px] font-bold uppercase">{companyAccounts.length} Cuentas activas</CardDescription>
+                      <CardDescription className="text-[10px] font-bold uppercase">{uniqueAccounts.length} Cuentas activas</CardDescription>
                     </div>
                   </div>
                 </div>
@@ -159,13 +180,13 @@ export default function CompaniesPage() {
                 <div className="space-y-4 mt-2">
                   <div>
                     <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-2">Cuentas Cliente</p>
-                    <div className="flex flex-wrap gap-2">
-                      {companyAccounts.map((account) => (
-                        <Badge key={account.id} variant="secondary" className="px-2 py-0.5 font-bold bg-accent/10 text-accent border-accent/20 text-[10px] uppercase">
-                          {account.name}
+                    <div className="flex flex-wrap gap-2 max-h-[150px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-200">
+                      {uniqueAccounts.map((accName, idx) => (
+                        <Badge key={`${company.id}-${idx}`} variant="secondary" className="px-2 py-0.5 font-bold bg-accent/10 text-accent border-accent/20 text-[10px] uppercase">
+                          {accName}
                         </Badge>
                       ))}
-                      {companyAccounts.length === 0 && <span className="text-[10px] italic text-muted-foreground">Sin cuentas vinculadas</span>}
+                      {uniqueAccounts.length === 0 && <span className="text-[10px] italic text-muted-foreground">Sin cuentas vinculadas</span>}
                     </div>
                   </div>
                   {isAdmin && (
@@ -201,7 +222,7 @@ export default function CompaniesPage() {
         )}
       </div>
 
-      {/* Dialog for Adding Company */}
+      {/* Dialogs... */}
       <Dialog open={isAddingCompany} onOpenChange={setIsAddingCompany}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
@@ -214,9 +235,10 @@ export default function CompaniesPage() {
                 <Label htmlFor="name" className="text-[10px] font-black uppercase tracking-widest">Nombre de la Empresa</Label>
                 <div className="relative">
                   <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input id="name" name="name" placeholder="Ej. IKE ASISTENCIA" className="pl-10 font-bold" required />
+                  <Input id="name" name="name" placeholder="Ej. IKE ASISTENCIA" className="pl-10 font-bold uppercase" required />
                 </div>
               </div>
+              {/* ... Other fields ... */}
               <div className="space-y-2">
                 <Label htmlFor="contactPerson" className="text-[10px] font-black uppercase tracking-widest">Persona de Contacto</Label>
                 <div className="relative">
@@ -251,12 +273,11 @@ export default function CompaniesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog for Adding Client Account */}
       <Dialog open={isAddingAccount} onOpenChange={(v) => { if(!v) setSelectedCompanyId(null); setIsAddingAccount(v); }}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black uppercase tracking-tighter text-accent">Nueva Cuenta de Cliente</DialogTitle>
-            <DialogDescription>Vincule una cuenta específica (ej. Coomeva, Seguros Bolivar) a esta asistencia.</DialogDescription>
+            <DialogDescription>Vincule una cuenta específica a esta asistencia.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateAccount} className="space-y-6 pt-4">
             <div className="space-y-4">
@@ -264,7 +285,7 @@ export default function CompaniesPage() {
                 <Label htmlFor="accountName" className="text-[10px] font-black uppercase tracking-widest">Nombre de la Cuenta / Asegurado</Label>
                 <div className="relative">
                   <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input id="accountName" name="name" placeholder="Ej. COOMEVA MEDICINA PREPAGADA" className="pl-10 font-bold" required />
+                  <Input id="accountName" name="name" placeholder="Ej. COOMEVA MEDICINA PREPAGADA" className="pl-10 font-bold uppercase" required />
                 </div>
               </div>
               <div className="space-y-2">
