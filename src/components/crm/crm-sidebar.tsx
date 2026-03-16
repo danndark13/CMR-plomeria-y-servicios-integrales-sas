@@ -15,7 +15,9 @@ import {
   UserCog,
   Calculator,
   LogOut,
-  User as UserIcon
+  User as UserIcon,
+  Package,
+  RefreshCw
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -30,94 +32,100 @@ import {
   SidebarGroupLabel,
   SidebarSeparator
 } from "@/components/ui/sidebar"
-import { MOCK_REQUESTS, MOCK_REMINDERS } from "@/lib/mock-data"
-import { Badge } from "@/components/ui/badge"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator
-} from "@/components/ui/dropdown-menu"
+import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
+import { doc } from 'firebase/firestore'
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "@/hooks/use-toast"
+import { getAuth, signOut } from "firebase/auth"
 
 export function CRMSidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  
-  const today = new Date().toLocaleDateString()
-  const todayCount = MOCK_REQUESTS.reduce((acc, req) => {
-    const hasToday = req.interventions.some(i => new Date(i.date).toLocaleDateString() === today)
-    return hasToday ? acc + 1 : acc
-  }, 0)
+  const { user } = useUser()
+  const db = useFirestore()
+  const auth = getAuth()
 
-  const criticalCount = MOCK_REMINDERS.filter(r => r.type === 'critical' || r.type === 'warning').length
+  const profileRef = useMemoFirebase(() => {
+    if (!user || !db) return null
+    return doc(db, 'user_profiles', user.uid)
+  }, [user, db])
 
-  const mainItems = [
-    { title: "Panel Principal", icon: LayoutDashboard, href: "/", badge: criticalCount > 0 ? criticalCount : null, badgeColor: "bg-destructive text-destructive-foreground" },
-    { title: "Bitácora", icon: ClipboardList, href: "/requests" },
-    { title: "Calendario", icon: CalendarDays, href: "/calendar", badge: todayCount > 0 ? todayCount : null, badgeColor: "bg-accent text-accent-foreground" },
-    { title: "Empresas", icon: Briefcase, href: "/companies" },
-    { title: "Técnicos", icon: Users, href: "/technicians" },
-  ]
-
-  const adminItems = [
-    { title: "Contabilidad", icon: Calculator, href: "/accounting" },
-    { title: "Gestión Usuarios", icon: UserCog, href: "/admin/users" },
-    { title: "Productividad", icon: BarChart3, href: "/admin/reports" },
-  ]
+  const { data: profile } = useDoc(profileRef)
 
   const handleLogout = () => {
-    toast({
-      title: "Sesión cerrada",
-      description: "Has salido del sistema exitosamente."
+    signOut(auth).then(() => {
+      toast({
+        title: "Sesión cerrada",
+        description: "Has salido del sistema exitosamente."
+      })
+      router.push("/login")
     })
-    router.push("/login")
   }
 
+  // Define navigation based on role
+  const role = profile?.roleId || 'Servicio al Cliente'
+  const isAdmin = role === 'Administrador'
+  const isTech = role === 'Técnico'
+  const isAccounting = role === 'Contabilidad'
+
+  const navigationItems = [
+    { title: "Panel Principal", icon: LayoutDashboard, href: "/", show: true },
+    { title: "Bitácora", icon: ClipboardList, href: "/requests", show: true },
+    { title: "Calendario", icon: CalendarDays, href: "/calendar", show: true },
+    { title: "Inventario", icon: Package, href: "/accounting/payroll", show: isAdmin || isAccounting || isTech },
+    { title: "Empresas", icon: Briefcase, href: "/companies", show: !isTech },
+    { title: "Técnicos", icon: Users, href: "/technicians", show: !isTech },
+  ]
+
+  const accountItems = [
+    { title: "Actualizar datos", icon: RefreshCw, href: "/profile", show: true },
+    { title: "Gestión Usuarios", icon: UserCog, href: "/admin/users", show: isAdmin },
+  ]
+
   return (
-    <Sidebar variant="sidebar" collapsible="icon">
-      <SidebarHeader className="p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-lg">
-            <ShieldCheck className="h-6 w-6" />
-          </div>
-          <div className="flex flex-col group-data-[collapsible=icon]:hidden">
-            <span className="text-lg font-bold tracking-tight text-primary">AsistenciaPro</span>
-            <span className="text-[10px] font-bold text-muted-foreground uppercase">CRM Operativo</span>
+    <Sidebar variant="sidebar" collapsible="offcanvas" className="bg-white border-r shadow-xl">
+      <SidebarHeader className="p-6">
+        <div className="flex items-center gap-4">
+          <Avatar className="h-12 w-12 border-2 border-primary/20 shadow-md">
+            <AvatarImage src={`https://picsum.photos/seed/${user?.uid}/100/100`} />
+            <AvatarFallback className="bg-primary text-primary-foreground font-bold">
+              {profile?.firstName?.charAt(0)}{profile?.lastName?.charAt(0)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex flex-col overflow-hidden">
+            <span className="text-sm font-bold truncate text-slate-900">
+              {profile?.firstName} {profile?.lastName}
+            </span>
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+              {role}
+            </span>
           </div>
         </div>
       </SidebarHeader>
       
-      <SidebarSeparator />
+      <SidebarSeparator className="mx-4 opacity-50" />
 
-      <SidebarContent>
+      <SidebarContent className="px-3 py-4">
         <SidebarGroup>
-          <SidebarGroupLabel className="px-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            Operación
+          <SidebarGroupLabel className="px-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">
+            Navegación
           </SidebarGroupLabel>
-          <SidebarMenu className="px-2 mt-2">
-            {mainItems.map((item) => (
+          <SidebarMenu>
+            {navigationItems.filter(i => i.show).map((item) => (
               <SidebarMenuItem key={item.href}>
                 <SidebarMenuButton
                   asChild
                   isActive={pathname === item.href}
-                  tooltip={item.title}
                   className={cn(
-                    "relative flex items-center gap-3 rounded-md px-3 py-2 transition-all duration-200",
+                    "flex items-center gap-3 rounded-xl px-4 py-6 transition-all duration-300",
                     pathname === item.href 
-                      ? "bg-primary/10 text-primary font-bold shadow-sm" 
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                      ? "bg-primary text-primary-foreground font-bold shadow-lg scale-[1.02]" 
+                      : "text-slate-600 hover:bg-slate-50 hover:text-primary"
                   )}
                 >
                   <Link href={item.href}>
-                    <item.icon className="h-5 w-5 shrink-0" />
-                    <span className="truncate">{item.title}</span>
-                    {item.badge && (
-                      <Badge className={cn("ml-auto h-5 w-5 flex items-center justify-center p-0 rounded-full text-[10px] animate-pulse", item.badgeColor)}>
-                        {item.badge}
-                      </Badge>
-                    )}
+                    <item.icon className={cn("h-5 w-5", pathname === item.href ? "text-white" : "text-slate-400")} />
+                    <span className="text-sm font-medium">{item.title}</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -125,27 +133,26 @@ export function CRMSidebar() {
           </SidebarMenu>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="px-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            Administración
+        <SidebarGroup className="mt-4">
+          <SidebarGroupLabel className="px-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">
+            Cuenta
           </SidebarGroupLabel>
-          <SidebarMenu className="px-2 mt-2">
-            {adminItems.map((item) => (
+          <SidebarMenu>
+            {accountItems.filter(i => i.show).map((item) => (
               <SidebarMenuItem key={item.href}>
                 <SidebarMenuButton
                   asChild
-                  isActive={pathname === item.href || (item.href === '/accounting' && pathname.startsWith('/accounting'))}
-                  tooltip={item.title}
+                  isActive={pathname === item.href}
                   className={cn(
-                    "relative flex items-center gap-3 rounded-md px-3 py-2 transition-all duration-200",
-                    (pathname === item.href || (item.href === '/accounting' && pathname.startsWith('/accounting')))
-                      ? "bg-primary/10 text-primary font-bold shadow-sm" 
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    "flex items-center gap-3 rounded-xl px-4 py-6 transition-all duration-300",
+                    pathname === item.href 
+                      ? "bg-primary/10 text-primary font-bold" 
+                      : "text-slate-600 hover:bg-slate-50 hover:text-primary"
                   )}
                 >
                   <Link href={item.href}>
-                    <item.icon className="h-5 w-5 shrink-0" />
-                    <span className="truncate">{item.title}</span>
+                    <item.icon className="h-5 w-5 text-slate-400" />
+                    <span className="text-sm font-medium">{item.title}</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -154,41 +161,16 @@ export function CRMSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-4">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <SidebarMenuButton className="h-fit py-3 px-3 border bg-accent/30 hover:bg-accent/50 rounded-lg group-data-[collapsible=icon]:p-2 transition-all">
-              <div className="flex items-center gap-3 w-full">
-                <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0">
-                  DC
-                </div>
-                <div className="flex flex-col overflow-hidden text-left group-data-[collapsible=icon]:hidden">
-                  <span className="truncate text-sm font-semibold">Daniel Céspedes</span>
-                  <span className="truncate text-[10px] text-muted-foreground">danielcorecspds@gmail.com</span>
-                </div>
-              </div>
-            </SidebarMenuButton>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent side="right" align="end" className="w-56">
-            <DropdownMenuItem asChild>
-              <Link href="/profile" className="flex items-center gap-2 cursor-pointer">
-                <UserIcon className="h-4 w-4" />
-                <span>Mi Perfil</span>
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/settings" className="flex items-center gap-2 cursor-pointer">
-                <Settings className="h-4 w-4" />
-                <span>Configuración</span>
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout} className="text-destructive flex items-center gap-2 cursor-pointer focus:bg-destructive/10 focus:text-destructive">
-              <LogOut className="h-4 w-4" />
-              <span>Cerrar Sesión</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      <SidebarFooter className="p-4 mt-auto">
+        <button 
+          onClick={handleLogout}
+          className="flex w-full items-center gap-3 rounded-xl px-4 py-4 text-slate-600 hover:bg-destructive/5 hover:text-destructive transition-all group"
+        >
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 group-hover:bg-destructive/10">
+            <LogOut className="h-5 w-5" />
+          </div>
+          <span className="text-sm font-bold">Cerrar Sesión</span>
+        </button>
       </SidebarFooter>
     </Sidebar>
   )
