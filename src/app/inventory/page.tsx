@@ -21,15 +21,16 @@ import {
   Save,
   X,
   History,
-  AlertCircle
+  AlertCircle,
+  PackageCheck
 } from "lucide-react"
-import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from "@/firebase"
-import { collection, doc, setDoc, addDoc, serverTimestamp } from "firebase/firestore"
+import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase"
+import { collection, addDoc, serverTimestamp } from "firebase/firestore"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { toast } from "@/hooks/use-toast"
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
-import { cn } from "@/lib/utils"
+import { ServiceRequest, Expense } from "@/lib/types"
 
 export default function InventoryPage() {
   const db = useFirestore()
@@ -38,18 +39,58 @@ export default function InventoryPage() {
   const [isAddingItem, setIsAddingItem] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
 
+  // 1. Fetch Warehouse Inventory
   const inventoryQuery = useMemoFirebase(() => {
     if (!db || !user) return null
     return collection(db, "inventory")
   }, [db, user])
   const { data: inventoryItems, isLoading: isInventoryLoading } = useCollection(inventoryQuery)
 
+  // 2. Fetch Technicians
   const techsQuery = useMemoFirebase(() => {
     if (!db || !user) return null
     return collection(db, "user_profiles")
   }, [db, user])
   const { data: allUsers } = useCollection(techsQuery)
   const technicians = allUsers?.filter(u => u.roleId === 'Técnico') || []
+
+  // 3. Fetch Service Requests to calculate "Field Stock" (isUnused items)
+  const requestsQuery = useMemoFirebase(() => {
+    if (!db || !user) return null
+    return collection(db, "service_requests")
+  }, [db, user])
+  const { data: allRequests, isLoading: isRequestsLoading } = useCollection(requestsQuery)
+
+  // Calculate Field Stock per Technician
+  const getFieldStockForTech = (techId: string) => {
+    if (!allRequests) return []
+    
+    const unusedExpenses: Expense[] = []
+    
+    allRequests.forEach((req: ServiceRequest) => {
+      (req.interventions || []).forEach(interv => {
+        if (interv.technicianId === techId) {
+          (interv.detailedExpenses || []).forEach(exp => {
+            if (exp.isUnused) {
+              unusedExpenses.push(exp)
+            }
+          })
+        }
+      })
+    })
+
+    // Group by description
+    const grouped = unusedExpenses.reduce((acc, exp) => {
+      const key = exp.description.toUpperCase()
+      if (!acc[key]) {
+        acc[key] = { description: key, quantity: 0, unit: exp.unit || 'UND' }
+      }
+      acc[key].quantity += (exp.quantity || 1)
+      return acc
+    }, {} as Record<string, { description: string, quantity: number, unit: string }>)
+
+    return Object.values(grouped)
+  }
 
   const filteredItems = inventoryItems?.filter(item => 
     item.description.toLowerCase().includes(searchTerm.toLowerCase())
@@ -78,16 +119,16 @@ export default function InventoryPage() {
       .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
           path: colRef.path,
-          operation: "create",
+          operation: 'create',
           requestResourceData: newItem,
         })
-        errorEmitter.emit("permission-error", permissionError)
+        errorEmitter.emit('permission-error', permissionError)
       })
       .finally(() => setIsProcessing(false))
   }
 
   const totalValue = inventoryItems?.reduce((sum, item) => sum + (item.quantity * item.unitValue), 0) || 0
-  const isLoadingTotal = isUserLoading || isInventoryLoading
+  const isLoadingTotal = isUserLoading || isInventoryLoading || isRequestsLoading
 
   return (
     <div className="flex flex-col gap-8">
@@ -205,36 +246,48 @@ export default function InventoryPage() {
 
         <TabsContent value="tecnicos">
           <div className="grid gap-6 md:grid-cols-2">
-            {technicians.map((tech) => (
-              <Card key={tech.id} className="border-l-4 border-l-orange-500 shadow-sm hover:shadow-md transition-all group">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600">
-                        <Users className="h-6 w-6" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-sm font-black uppercase">{tech.firstName} {tech.lastName}</CardTitle>
-                        <CardDescription className="text-[10px] font-bold uppercase tracking-tighter">ID: {tech.username}</CardDescription>
-                      </div>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3 mt-2">
-                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                      <History className="h-3 w-3" /> Materiales en Posesión
-                    </p>
-                    <div className="grid gap-2">
-                      <div className="p-3 bg-slate-50 rounded-lg border border-dashed flex justify-between items-center">
-                        <span className="text-[10px] font-bold text-slate-500 italic">No hay materiales asignados manualmente</span>
-                        <Button variant="ghost" size="sm" className="h-6 text-[9px] font-black uppercase text-primary">Asignar Stock</Button>
+            {technicians.map((tech) => {
+              const fieldStock = getFieldStockForTech(tech.id)
+              
+              return (
+                <Card key={tech.id} className="border-l-4 border-l-orange-500 shadow-sm hover:shadow-md transition-all group">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600">
+                          <Users className="h-6 w-6" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-sm font-black uppercase">{tech.firstName} {tech.lastName}</CardTitle>
+                          <CardDescription className="text-[10px] font-bold uppercase tracking-tighter">ID: {tech.username}</CardDescription>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3 mt-2">
+                      <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2 border-b pb-1">
+                        <PackageCheck className="h-3 w-3 text-orange-600" /> Materiales en Posesión (Sobrantes de Obra)
+                      </p>
+                      <div className="grid gap-2">
+                        {fieldStock.length === 0 ? (
+                          <div className="p-4 bg-slate-50 rounded-lg border border-dashed text-center">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase italic">Sin materiales registrados en campo</span>
+                          </div>
+                        ) : fieldStock.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-lg border shadow-sm">
+                            <span className="text-xs font-black uppercase text-slate-700">{item.description}</span>
+                            <Badge className="bg-orange-500 text-white font-black">
+                              {item.quantity} {item.unit}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
         </TabsContent>
       </Tabs>
