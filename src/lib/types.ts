@@ -13,6 +13,14 @@ export type InterventionType = 'Diagnóstico' | 'Reparación' | 'Seguimiento' | 
 
 export type BillingStatus = 'pending' | 'ready_to_bill' | 'billed' | 'paid';
 
+export interface Advance {
+  id: string;
+  amount: number;
+  reason: string;
+  date: string;
+  createdByUserId: string;
+}
+
 export interface TechnicianIntervention {
   id: string;
   technicianId: string;
@@ -63,6 +71,9 @@ export interface ServiceRequest {
   
   // Historial de intervenciones (soporta múltiples técnicos)
   interventions: TechnicianIntervention[];
+  
+  // Anticipos entregados al técnico
+  advances?: Advance[];
   
   summary?: string;       // Resumen consolidado IA
   report?: string;        // Reporte final formal

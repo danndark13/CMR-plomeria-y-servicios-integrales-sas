@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS, MOCK_COMPANIES } from "@/lib/mock-data"
-import { ServiceRequest, BillingStatus } from "@/lib/types"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
+import { ServiceRequest, BillingStatus, Advance } from "@/lib/types"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
@@ -32,7 +32,8 @@ import {
   Briefcase,
   Receipt,
   Save,
-  Calculator
+  Calculator,
+  HandCoins
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -48,10 +49,14 @@ export default function RequestDetailPage() {
   const [report, setReport] = useState("")
   const [isSummarizing, setIsSummarizing] = useState(false)
   
-  // Billing States
+  // Billing & Advance States
   const [requestedAmount, setRequestedAmount] = useState<number>(0)
   const [approvedAmount, setApprovedAmount] = useState<number>(0)
   const [billingStatus, setBillingStatus] = useState<BillingStatus>('pending')
+  
+  const [isAddingAdvance, setIsAddingAdvance] = useState(false)
+  const [newAdvanceAmount, setNewAdvanceAmount] = useState("")
+  const [newAdvanceReason, setNewAdvanceReason] = useState("")
 
   useEffect(() => {
     const found = MOCK_REQUESTS.find(r => r.id === id)
@@ -71,6 +76,7 @@ export default function RequestDetailPage() {
   const allNotes = request.interventions.map(i => `[${i.type} - ${MOCK_TECHNICIANS.find(t => t.id === i.technicianId)?.name}]: ${i.notes}`).join('\n')
   const totalLabor = request.interventions.reduce((sum, i) => sum + i.laborCost, 0)
   const totalExpenses = request.interventions.reduce((sum, i) => sum + i.expenses, 0)
+  const totalAdvances = request.advances?.reduce((sum, a) => sum + a.amount, 0) || 0
   const totalOperative = totalLabor + totalExpenses
 
   const handleGenerateSummary = async () => {
@@ -91,15 +97,18 @@ export default function RequestDetailPage() {
   }
 
   const handleSaveBilling = () => {
-    toast({
-      title: "Valores Conciliados",
-      description: "Los valores para facturación electrónica han sido actualizados."
-    })
+    toast({ title: "Valores Conciliados", description: "Los valores para facturación electrónica han sido actualizados." })
   }
 
-  const copyToReport = () => {
-    setReport(summary)
-    toast({ title: "Copiado", description: "El resumen de IA ha sido transferido al reporte final." })
+  const handleAddAdvance = () => {
+    if (!newAdvanceAmount || !newAdvanceReason) {
+      toast({ title: "Error", description: "Monto y motivo son obligatorios.", variant: "destructive" })
+      return
+    }
+    toast({ title: "Anticipo Registrado", description: `Se han adelantado $${newAdvanceAmount} para el técnico.` })
+    setIsAddingAdvance(false)
+    setNewAdvanceAmount("")
+    setNewAdvanceReason("")
   }
 
   const getBillingStatusBadge = (status: BillingStatus) => {
@@ -142,7 +151,6 @@ export default function RequestDetailPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Columna Izquierda: Detalles e Intervenciones */}
         <div className="lg:col-span-2 space-y-6">
           <div className="grid gap-6 md:grid-cols-2">
             <Card className="shadow-sm border-l-4 border-l-accent">
@@ -187,7 +195,68 @@ export default function RequestDetailPage() {
             </Card>
           </div>
 
-          {/* Gestión de Facturación (Exclusivo Contabilidad) */}
+          <Card className="shadow-md border-t-4 border-t-yellow-500 bg-yellow-50/30">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2 text-yellow-800 font-bold">
+                    <HandCoins className="h-5 w-5" />
+                    Anticipos a Técnicos
+                  </CardTitle>
+                  <CardDescription>Adelantos registrados para este expediente.</CardDescription>
+                </div>
+                <Button size="sm" onClick={() => setIsAddingAdvance(true)} className="bg-yellow-600 hover:bg-yellow-700">
+                  <Plus className="h-4 w-4 mr-2" /> Nuevo Anticipo
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isAddingAdvance && (
+                <div className="p-4 border rounded-lg bg-white space-y-4 animate-in fade-in zoom-in-95">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Monto del Anticipo</Label>
+                      <Input 
+                        type="number" 
+                        placeholder="0.00" 
+                        value={newAdvanceAmount}
+                        onChange={(e) => setNewAdvanceAmount(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Motivo</Label>
+                      <Input 
+                        placeholder="Ej. Gasolina, Peajes..." 
+                        value={newAdvanceReason}
+                        onChange={(e) => setNewAdvanceReason(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleAddAdvance} className="flex-1">Confirmar Anticipo</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setIsAddingAdvance(false)}>Cancelar</Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {request.advances && request.advances.length > 0 ? (
+                  request.advances.map((adv) => (
+                    <div key={adv.id} className="flex items-center justify-between p-3 bg-white border rounded shadow-sm">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold">{adv.reason}</span>
+                        <span className="text-[10px] text-muted-foreground">{new Date(adv.date).toLocaleDateString()}</span>
+                      </div>
+                      <span className="font-mono font-bold text-destructive">-${adv.amount.toLocaleString()}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-center text-muted-foreground py-4 italic">No se han registrado anticipos para este servicio.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="shadow-md border-t-4 border-t-accent bg-accent/5">
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -208,11 +277,10 @@ export default function RequestDetailPage() {
                   <div className="h-10 flex items-center px-3 bg-muted rounded-md border font-mono font-bold text-lg">
                     ${totalOperative.toLocaleString()}
                   </div>
-                  <p className="text-[10px] text-muted-foreground">Suma de mano de obra y materiales.</p>
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="requested" className="text-xs font-bold uppercase text-primary">Valor Cobrado (Inicial)</Label>
+                  <Label htmlFor="requested" className="text-xs font-bold uppercase text-primary">Valor Cobrado</Label>
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
                     <Input 
@@ -226,18 +294,17 @@ export default function RequestDetailPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="approved" className="text-xs font-bold uppercase text-green-600">Valor Real Aprobado</Label>
+                  <Label htmlFor="approved" className="text-xs font-bold uppercase text-green-600">Valor Aprobado</Label>
                   <div className="relative">
                     <Calculator className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-green-600" />
                     <Input 
                       id="approved" 
                       type="number" 
-                      className="pl-9 font-mono font-bold border-green-600/30 focus:ring-green-500"
+                      className="pl-9 font-mono font-bold border-green-600/30"
                       value={approvedAmount}
                       onChange={(e) => setApprovedAmount(Number(e.target.value))}
                     />
                   </div>
-                  <p className="text-[10px] text-green-600 font-medium">Monto que se reflejará en la factura.</p>
                 </div>
               </div>
 
@@ -284,9 +351,6 @@ export default function RequestDetailPage() {
                         <Badge variant="secondary" className="bg-primary/10 text-primary">{intervention.type}</Badge>
                         <span className="text-[10px] text-muted-foreground">{new Date(intervention.date).toLocaleDateString()}</span>
                       </div>
-                      <div className="flex items-center gap-4 text-xs font-semibold">
-                        <span className="text-muted-foreground">Operativo: <span className="text-foreground">${(intervention.laborCost + intervention.expenses).toLocaleString()}</span></span>
-                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="pt-4 space-y-2">
@@ -328,7 +392,6 @@ export default function RequestDetailPage() {
           </Card>
         </div>
 
-        {/* Columna Derecha: Finanzas y Administración */}
         <div className="flex flex-col gap-6">
           <Card className="bg-primary text-primary-foreground overflow-hidden">
             <div className="bg-white/10 p-4 border-b border-white/20">
@@ -337,29 +400,23 @@ export default function RequestDetailPage() {
             <CardContent className="p-6 space-y-4">
               <div className="space-y-3">
                 <div className="flex justify-between text-xs">
-                  <span className="opacity-70">Mano de Obra (Técnicos):</span>
+                  <span className="opacity-70">Mano de Obra (Bruto):</span>
                   <span className="font-mono font-bold">${totalLabor.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="opacity-70">Gastos y Materiales:</span>
+                  <span className="opacity-70">Gastos Materiales:</span>
                   <span className="font-mono font-bold">${totalExpenses.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-xs text-red-300">
+                  <span className="opacity-70">Anticipos (Descuento):</span>
+                  <span className="font-mono font-bold">-${totalAdvances.toLocaleString()}</span>
                 </div>
                 <Separator className="bg-white/20" />
                 <div className="space-y-1">
                    <p className="text-[10px] opacity-60 font-bold">TOTAL COSTO OPERATIVO</p>
-                   <p className="text-3xl font-mono font-black">${totalOperative.toLocaleString()}</p>
+                   <p className="text-3xl font-mono font-black">${(totalOperative).toLocaleString()}</p>
+                   <p className="text-[10px] opacity-60 italic">Nota: Anticipos ya descontados del neto técnico.</p>
                 </div>
-                {approvedAmount > 0 && (
-                  <div className="mt-4 pt-4 border-t border-white/20 bg-white/5 p-3 rounded-lg">
-                    <p className="text-[10px] opacity-60 font-bold uppercase">Utilidad Proyectada (Aprobado - Costo)</p>
-                    <p className={cn(
-                      "text-xl font-mono font-bold",
-                      (approvedAmount - totalOperative) >= 0 ? "text-green-300" : "text-red-300"
-                    )}>
-                      ${(approvedAmount - totalOperative).toLocaleString()}
-                    </p>
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>
@@ -375,35 +432,6 @@ export default function RequestDetailPage() {
                 <p className="text-sm font-bold text-primary">{company?.name}</p>
                 <p className="text-xs text-muted-foreground">Cuenta: {request.accountName}</p>
               </div>
-              <div className="grid gap-2 text-[10px]">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Ingreso:</span>
-                  <span>{new Date(request.createdAt).toLocaleDateString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">ID Interno:</span>
-                  <span>{request.id}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-md flex items-center gap-2">
-                <Briefcase className="h-4 w-4 text-primary" /> Acciones Rápidas
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Button variant="outline" className="w-full justify-start gap-3 h-9 text-xs">
-                <Clock className="h-4 w-4" /> Reprogramar Cita
-              </Button>
-              <Button variant="outline" className="w-full justify-start gap-3 h-9 text-xs">
-                <AlertTriangle className="h-4 w-4" /> Reportar Incidente
-              </Button>
-              <Button variant="outline" className="w-full justify-start gap-3 h-9 text-xs">
-                <DollarSign className="h-4 w-4" /> Autorizar Gastos
-              </Button>
             </CardContent>
           </Card>
         </div>

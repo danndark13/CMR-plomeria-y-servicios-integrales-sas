@@ -15,10 +15,6 @@ export const MOCK_TECHNICIANS: Technician[] = [
 ];
 
 const today = new Date();
-const tomorrow = new Date(today);
-tomorrow.setDate(today.getDate() + 1);
-const nextWeek = new Date(today);
-nextWeek.setDate(today.getDate() + 7);
 
 export const MOCK_REQUESTS: ServiceRequest[] = [
   {
@@ -52,6 +48,15 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
         expenses: 12000
       }
     ],
+    advances: [
+      {
+        id: 'adv1',
+        amount: 20000,
+        reason: 'Anticipo para transporte y materiales menores',
+        date: today.toISOString(),
+        createdByUserId: 'user-admin'
+      }
+    ],
     billingStatus: 'pending',
     requestedAmount: 180000,
     approvedAmount: 165000,
@@ -74,7 +79,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
         id: 'v3',
         technicianId: 't2',
         type: 'Reparación',
-        date: tomorrow.toISOString(),
+        date: new Date(today.getTime() + 86400000).toISOString(),
         notes: 'Visita programada para revisión de cableado.',
         laborCost: 40000,
         expenses: 0
@@ -83,32 +88,6 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
     billingStatus: 'pending',
     createdAt: new Date(today.getTime() - 7200000).toISOString(),
     updatedAt: new Date(today.getTime() - 7200000).toISOString(),
-  },
-  {
-    id: 'REQ-003',
-    category: 'Cerrajería',
-    companyId: '3',
-    accountName: 'Davivienda',
-    status: 'pending',
-    insuredName: 'Marta Lucia',
-    claimNumber: 'EXP-552233',
-    address: 'Av. Jimenez #4-12',
-    phoneNumber: '320 444 5566',
-    description: 'Apertura de puerta principal por olvido de llaves.',
-    interventions: [
-      {
-        id: 'v4',
-        technicianId: 't3',
-        type: 'Diagnóstico',
-        date: nextWeek.toISOString(),
-        notes: 'Programado para mantenimiento preventivo de cerraduras.',
-        laborCost: 35000,
-        expenses: 0
-      }
-    ],
-    billingStatus: 'pending',
-    createdAt: today.toISOString(),
-    updatedAt: today.toISOString(),
   }
 ];
 
@@ -127,14 +106,6 @@ export const MOCK_REMINDERS: Reminder[] = [
     title: 'Reporte Pendiente',
     description: 'Expediente EXP-998822 lleva 2 días sin reporte final.',
     requestId: 'REQ-001',
-    createdAt: today.toISOString(),
-  },
-  {
-    id: 'r3',
-    type: 'info',
-    title: 'Próxima Visita',
-    description: 'Visita técnica de Carlos Ruiz inicia en 30 minutos.',
-    technicianId: 't2',
     createdAt: today.toISOString(),
   }
 ];
