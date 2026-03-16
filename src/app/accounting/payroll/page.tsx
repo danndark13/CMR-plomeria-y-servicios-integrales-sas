@@ -6,6 +6,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 import { 
   Wallet, 
   Users, 
@@ -13,11 +15,13 @@ import {
   Printer,
   FileSpreadsheet,
   HandCoins,
-  ArrowDown,
-  Package
+  Package,
+  Wrench,
+  AlertCircle
 } from "lucide-react"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS, MOCK_COMPANIES } from "@/lib/mock-data"
 import Link from "next/link"
+import { toast } from "@/hooks/use-toast"
 
 export default function PayrollPage() {
   const [selectedTech, setSelectedTech] = useState<string>("all")
@@ -30,17 +34,24 @@ export default function PayrollPage() {
         ...i,
         request: req,
         assistanceName: MOCK_COMPANIES.find(c => c.id === req.companyId)?.name || "N/A",
-        // Total expenses that were actually USED for the technician (deducted from their labor pay usually)
         usedExpensesTotal: i.detailedExpenses.filter(e => !e.isUnused).reduce((s, e) => s + e.amount, 0),
         unusedExpensesTotal: i.detailedExpenses.filter(e => e.isUnused).reduce((s, e) => s + e.amount, 0),
         requestAdvances: req.advances || []
       }))
   ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
+  const handleToggleInventory = (expenseId: string, isNowInventory: boolean) => {
+    toast({
+      title: isNowInventory ? "Trasladado a Inventario" : "Cargado al Servicio",
+      description: isNowInventory 
+        ? "El material ya no se cobrará al servicio y quedará registrado como inventario del técnico."
+        : "El material se descontará del pago del técnico y se cargará al costo del servicio."
+    })
+  }
+
   const totalLabor = payrollData.reduce((sum, i) => sum + i.laborCost, 0)
   const totalUsedExpenses = payrollData.reduce((sum, i) => sum + i.usedExpensesTotal, 0)
   
-  // To avoid double-counting advances if a request has multiple interventions by same tech
   const processedRequests = new Set()
   const totalAdvances = payrollData.reduce((sum, i) => {
     if (processedRequests.has(i.request.id)) return sum
@@ -54,7 +65,7 @@ export default function PayrollPage() {
     <div className="flex flex-col gap-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-primary">Nómina y Liquidación</h1>
-        <p className="text-muted-foreground">Control de pagos descontando gastos utilizados y anticipos entregados.</p>
+        <p className="text-muted-foreground">Control de pagos, gestión de inventario y deducción de anticipos.</p>
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
@@ -129,78 +140,117 @@ export default function PayrollPage() {
         <CardHeader className="bg-muted/30">
           <CardTitle className="text-lg flex items-center gap-2">
             <Wallet className="h-5 w-5 text-primary" />
-            Liquidación por Intervención
+            Liquidación Detallada por Técnico
           </CardTitle>
+          <CardDescription>Determine si los gastos se cargan al servicio o pasan al inventario del técnico.</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Fecha / Técnico</TableHead>
-                <TableHead>Expediente / Asistencia</TableHead>
-                <TableHead className="text-right">M. de Obra</TableHead>
-                <TableHead className="text-right">Gastos Usados</TableHead>
-                <TableHead className="text-right">Anticipos</TableHead>
-                <TableHead className="text-right font-bold text-primary">Neto</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {payrollData.map((item) => {
-                const tech = MOCK_TECHNICIANS.find(t => t.id === item.technicianId)
-                const advances = item.requestAdvances.reduce((s, a) => s + a.amount, 0)
-                const net = item.laborCost - item.usedExpensesTotal - advances
-                return (
-                  <TableRow key={item.id} className="hover:bg-muted/50">
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-muted-foreground">{new Date(item.date).toLocaleDateString()}</span>
-                        <span className="font-semibold text-xs">{tech?.name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-2">
-                           <span className="font-mono font-bold text-primary text-xs">{item.request.claimNumber}</span>
-                           {item.unusedExpensesTotal > 0 && (
-                             <Badge variant="outline" className="text-[8px] h-3 bg-orange-50 text-orange-600 border-orange-200">
-                               <Package className="h-2 w-2 mr-1" /> Inventario
-                             </Badge>
-                           )}
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Fecha / Técnico</TableHead>
+                  <TableHead>Expediente / Asistencia</TableHead>
+                  <TableHead>Gestión de Materiales (Contador)</TableHead>
+                  <TableHead className="text-right">M. de Obra</TableHead>
+                  <TableHead className="text-right">Neto</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {payrollData.map((item) => {
+                  const tech = MOCK_TECHNICIANS.find(t => t.id === item.technicianId)
+                  const advances = item.requestAdvances.reduce((s, a) => s + a.amount, 0)
+                  const net = item.laborCost - item.usedExpensesTotal - advances
+                  
+                  return (
+                    <TableRow key={item.id} className="hover:bg-muted/50 border-b">
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-bold text-muted-foreground">{new Date(item.date).toLocaleDateString()}</span>
+                          <span className="font-semibold text-xs">{tech?.name}</span>
                         </div>
-                        <span className="text-[10px] text-muted-foreground">{item.assistanceName}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-xs text-green-600">
-                      ${item.laborCost.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-xs text-orange-600">
-                      -${item.usedExpensesTotal.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-xs text-destructive">
-                      -${advances.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm font-black text-primary">
-                      ${net.toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <Link href={`/requests/${item.request.id}`}>
-                        <Button variant="ghost" size="icon"><ChevronRight className="h-4 w-4" /></Button>
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-          {payrollData.length === 0 && (
-            <div className="py-20 text-center flex flex-col items-center text-muted-foreground">
-              <Users className="h-12 w-12 opacity-10 mb-2" />
-              <p>No hay intervenciones para liquidar.</p>
-            </div>
-          )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-mono font-bold text-primary text-xs">{item.request.claimNumber}</span>
+                          <span className="text-[10px] text-muted-foreground">{item.assistanceName}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-2 max-w-[300px]">
+                          {item.detailedExpenses.map(exp => (
+                            <div key={exp.id} className="flex items-center justify-between p-2 rounded bg-white border text-[10px]">
+                              <div className="flex flex-col">
+                                <span className="font-bold">{exp.description}</span>
+                                <span className="text-muted-foreground">${exp.amount.toLocaleString()}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Label className="text-[9px]">{exp.isUnused ? 'Inventario' : 'Cobrar'}</Label>
+                                <Switch 
+                                  size="sm"
+                                  checked={!exp.isUnused}
+                                  onCheckedChange={(v) => handleToggleInventory(exp.id, !v)}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                          {item.detailedExpenses.length === 0 && <span className="text-muted-foreground italic text-xs">Sin materiales</span>}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs text-green-600">
+                        ${item.laborCost.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex flex-col items-end">
+                          <span className="font-mono font-bold text-primary text-sm">${net.toLocaleString()}</span>
+                          {advances > 0 && <span className="text-[9px] text-destructive">Anticipos: -${advances.toLocaleString()}</span>}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Link href={`/requests/${item.request.id}`}>
+                          <Button variant="ghost" size="icon"><ChevronRight className="h-4 w-4" /></Button>
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
+
+      {/* Panel de Inventario Activo del Técnico Seleccionado */}
+      {selectedTech !== "all" && (
+        <Card className="border-orange-200 bg-orange-50/20">
+          <CardHeader>
+            <CardTitle className="text-md flex items-center gap-2 text-orange-700">
+              <Package className="h-5 w-5" />
+              Inventario Activo: {MOCK_TECHNICIANS.find(t => t.id === selectedTech)?.name}
+            </CardTitle>
+            <CardDescription>Materiales que el técnico tiene en su poder y no han sido cargados a servicios.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 md:grid-cols-3">
+               {MOCK_TECHNICIANS.find(t => t.id === selectedTech)?.inventory?.map(item => (
+                 <div key={item.id} className="p-3 bg-white border rounded-lg shadow-sm flex justify-between items-center">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold">{item.description}</span>
+                      <span className="text-[10px] text-muted-foreground">Cantidad: {item.quantity}</span>
+                    </div>
+                    <Badge variant="outline" className="text-[9px] bg-orange-100 text-orange-700">En stock</Badge>
+                 </div>
+               ))}
+               {(!MOCK_TECHNICIANS.find(t => t.id === selectedTech)?.inventory || MOCK_TECHNICIANS.find(t => t.id === selectedTech)?.inventory?.length === 0) && (
+                 <div className="col-span-3 py-6 text-center text-muted-foreground text-sm italic">
+                   Este técnico no tiene materiales registrados en inventario.
+                 </div>
+               )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

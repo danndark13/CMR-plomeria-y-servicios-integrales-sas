@@ -8,10 +8,19 @@ export const MOCK_COMPANIES: AssistanceCompany[] = [
 ];
 
 export const MOCK_TECHNICIANS: Technician[] = [
-  { id: 't1', name: 'Juan Perez', specialties: ['Plomería', 'Destaponamiento'], activeTasks: 4 },
-  { id: 't2', name: 'Carlos Ruiz', specialties: ['Electricidad', 'Instalación'], activeTasks: 1 },
-  { id: 't3', name: 'Luis Gomez', specialties: ['Cerrajería'], activeTasks: 0 },
-  { id: 't4', name: 'Mario Diaz', specialties: ['Trabajo en Alturas', 'Vidriería'], activeTasks: 3 },
+  { 
+    id: 't1', 
+    name: 'Juan Perez', 
+    specialties: ['Plomería', 'Destaponamiento'], 
+    activeTasks: 4,
+    inventory: [
+      { id: 'i1', description: 'Cemento Blanco', quantity: '2kg', addedAt: new Date().toISOString() },
+      { id: 'i2', description: 'Tubo PVC 1/2', quantity: '1m', addedAt: new Date().toISOString() }
+    ]
+  },
+  { id: 't2', name: 'Carlos Ruiz', specialties: ['Electricidad', 'Instalación'], activeTasks: 1, inventory: [] },
+  { id: 't3', name: 'Luis Gomez', specialties: ['Cerrajería'], activeTasks: 0, inventory: [] },
+  { id: 't4', name: 'Mario Diaz', specialties: ['Trabajo en Alturas', 'Vidriería'], activeTasks: 3, inventory: [] },
 ];
 
 const today = new Date();
@@ -42,14 +51,14 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
       },
       {
         id: 'v2',
-        technicianId: 't4',
+        technicianId: 't1',
         type: 'Reparación',
         date: today.toISOString(),
         notes: 'Programado para cambio de sellos hoy.',
         laborCost: 65000,
         detailedExpenses: [
           { id: 'e2', amount: 12000, description: 'Kit de Sellos Brida', category: 'material', isUnused: false },
-          { id: 'e3', amount: 8000, description: 'Pegante PVC (No usado)', category: 'material', isUnused: true }
+          { id: 'e3', amount: 8000, description: 'Pegante PVC', category: 'material', isUnused: true }
         ]
       }
     ],

@@ -21,6 +21,14 @@ export interface Expense {
   description: string;
   category: ExpenseCategory;
   isUnused: boolean; // Si es true, queda en inventario y no suma al costo del servicio
+  isApprovedExtra?: boolean; // Si es true, permite duplicar material que ya está en inventario
+}
+
+export interface InventoryItem {
+  id: string;
+  description: string;
+  quantity: string;
+  addedAt: string;
 }
 
 export interface Advance {
@@ -52,6 +60,7 @@ export interface Technician {
   name: string;
   specialties: ServiceCategory[];
   activeTasks: number;
+  inventory?: InventoryItem[]; // Inventario activo del técnico
 }
 
 export interface Reminder {

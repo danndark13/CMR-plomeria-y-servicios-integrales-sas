@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS, MOCK_COMPANIES } from "@/lib/mock-data"
-import { ServiceRequest, BillingStatus, Advance, Expense, ExpenseCategory } from "@/lib/types"
+import { ServiceRequest, BillingStatus, ExpenseCategory, Technician } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -12,13 +12,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
   ArrowLeft, 
   Sparkles, 
   User, 
   Building2, 
-  Clock,
   CheckCircle2,
   AlertTriangle,
   Loader2,
@@ -30,15 +28,14 @@ import {
   Plus,
   Wrench,
   DollarSign,
-  Briefcase,
   Receipt,
   Save,
   Calculator,
   HandCoins,
   Package,
   Truck,
-  MoreHorizontal,
-  Trash2
+  Trash2,
+  ShieldAlert
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -65,11 +62,18 @@ export default function RequestDetailPage() {
 
   // Detailed Expense State for adding to an intervention
   const [activeInterventionId, setActiveInterventionId] = useState<string | null>(null)
-  const [newExpense, setNewExpense] = useState<{amount: string, description: string, category: ExpenseCategory, isUnused: boolean}>({
+  const [newExpense, setNewExpense] = useState<{
+    amount: string, 
+    description: string, 
+    category: ExpenseCategory, 
+    isUnused: boolean,
+    isApprovedExtra: boolean
+  }>({
     amount: "",
     description: "",
     category: "material",
-    isUnused: false
+    isUnused: false,
+    isApprovedExtra: false
   })
 
   useEffect(() => {
@@ -90,16 +94,12 @@ export default function RequestDetailPage() {
   const allNotes = request.interventions.map(i => `[${i.type} - ${MOCK_TECHNICIANS.find(t => t.id === i.technicianId)?.name}]: ${i.notes}`).join('\n')
   
   const totalLabor = request.interventions.reduce((sum, i) => sum + i.laborCost, 0)
-  
-  // Only count expenses that were actually USED for the operative cost
   const totalUsedExpenses = request.interventions.reduce((sum, i) => 
     sum + i.detailedExpenses.filter(e => !e.isUnused).reduce((s, e) => s + e.amount, 0), 0
   )
-  
   const totalInInventory = request.interventions.reduce((sum, i) => 
     sum + i.detailedExpenses.filter(e => e.isUnused).reduce((s, e) => s + e.amount, 0), 0
   )
-
   const totalAdvances = request.advances?.reduce((sum, a) => sum + a.amount, 0) || 0
   const totalOperative = totalLabor + totalUsedExpenses
 
@@ -120,25 +120,39 @@ export default function RequestDetailPage() {
     }
   }
 
-  const handleAddExpense = (intId: string) => {
+  const handleAddExpense = (intervention: any) => {
     if (!newExpense.amount || !newExpense.description) {
       toast({ title: "Error", description: "Monto y descripción son obligatorios.", variant: "destructive" })
       return
     }
-    toast({ title: "Gasto Registrado", description: `${newExpense.description} por $${newExpense.amount} añadido.` })
-    setActiveInterventionId(null)
-    setNewExpense({ amount: "", description: "", category: "material", isUnused: false })
-  }
 
-  const handleAddAdvance = () => {
-    if (!newAdvanceAmount || !newAdvanceReason) {
-      toast({ title: "Error", description: "Monto y motivo son obligatorios.", variant: "destructive" })
+    // CHECK INVENTORY
+    const tech = MOCK_TECHNICIANS.find(t => t.id === intervention.technicianId)
+    const isInInventory = tech?.inventory?.some(item => 
+      newExpense.description.toLowerCase().includes(item.description.toLowerCase()) ||
+      item.description.toLowerCase().includes(newExpense.description.toLowerCase())
+    )
+
+    if (isInInventory && !newExpense.isApprovedExtra) {
+      toast({ 
+        title: "BLOQUEADO: Material en Inventario", 
+        description: `El técnico ${tech?.name} ya tiene '${newExpense.description}' en su inventario activo. Requiere 'Gasto Extra Aprobado'.`, 
+        variant: "destructive" 
+      })
       return
     }
-    toast({ title: "Anticipo Registrado", description: `Se han adelantado $${newAdvanceAmount} para el técnico.` })
-    setIsAddingAdvance(false)
-    setNewAdvanceAmount("")
-    setNewAdvanceReason("")
+
+    toast({ 
+      title: "Gasto Registrado", 
+      description: `${newExpense.description} por $${newExpense.amount} añadido.${newExpense.isApprovedExtra ? ' (Aprobado como Extra)' : ''}` 
+    })
+    
+    setActiveInterventionId(null)
+    setNewExpense({ amount: "", description: "", category: "material", isUnused: false, isApprovedExtra: false })
+  }
+
+  const handleSaveBilling = () => {
+    toast({ title: "Cambios Guardados", description: "Se han actualizado los valores de facturación." })
   }
 
   const getBillingStatusBadge = (status: BillingStatus) => {
@@ -296,9 +310,6 @@ export default function RequestDetailPage() {
                <Wrench className="h-5 w-5 text-primary" />
                Bitácora e Inventario
              </h2>
-             <Button size="sm" variant="outline" className="gap-2">
-               <Plus className="h-4 w-4" /> Nueva Visita
-             </Button>
           </div>
 
           <div className="space-y-6">
@@ -342,41 +353,51 @@ export default function RequestDetailPage() {
                       </div>
 
                       {activeInterventionId === intervention.id && (
-                        <div className="p-3 border rounded-md bg-muted/20 space-y-3 animate-in slide-in-from-top-2">
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                              <Label className="text-[10px]">Descripción del Gasto</Label>
+                        <div className="p-4 border rounded-md bg-muted/20 space-y-4 animate-in slide-in-from-top-2">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label className="text-xs">Descripción del Material/Gasto</Label>
                               <Input 
-                                placeholder="Ej. Tubo PVC 1/2..." 
-                                className="h-8 text-xs"
+                                placeholder="Ej. Cemento Blanco..." 
+                                className="h-9 text-sm"
                                 value={newExpense.description}
                                 onChange={(e) => setNewExpense({...newExpense, description: e.target.value})}
                               />
                             </div>
-                            <div className="space-y-1">
-                              <Label className="text-[10px]">Monto</Label>
+                            <div className="space-y-2">
+                              <Label className="text-xs">Monto</Label>
                               <div className="relative">
-                                <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                                <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <Input 
                                   type="number" 
                                   placeholder="0" 
-                                  className="h-8 text-xs pl-6"
+                                  className="h-9 text-sm pl-7"
                                   value={newExpense.amount}
                                   onChange={(e) => setNewExpense({...newExpense, amount: e.target.value})}
                                 />
                               </div>
                             </div>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
-                              <Switch 
-                                id="unused" 
-                                checked={newExpense.isUnused}
-                                onCheckedChange={(v) => setNewExpense({...newExpense, isUnused: v})}
-                              />
-                              <Label htmlFor="unused" className="text-[10px] cursor-pointer">Material no usado (Inventario)</Label>
-                            </div>
-                            <Button size="sm" className="h-7 text-[10px]" onClick={() => handleAddExpense(intervention.id)}>Guardar Gasto</Button>
+
+                          <div className="flex flex-col gap-3 p-3 bg-white rounded border border-dashed">
+                             <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                  <Switch 
+                                    id="isApprovedExtra" 
+                                    checked={newExpense.isApprovedExtra}
+                                    onCheckedChange={(v) => setNewExpense({...newExpense, isApprovedExtra: v})}
+                                  />
+                                  <Label htmlFor="isApprovedExtra" className="text-xs font-bold text-orange-600 flex items-center gap-1">
+                                    <ShieldAlert className="h-3 w-3" /> Gasto Extra Aprobado
+                                  </Label>
+                                </div>
+                                <Button size="sm" className="h-8 text-xs bg-primary" onClick={() => handleAddExpense(intervention)}>
+                                  Guardar Gasto
+                                </Button>
+                             </div>
+                             <p className="text-[10px] text-muted-foreground leading-tight">
+                               * Si el material ya existe en el inventario del técnico, el sistema bloqueará el registro a menos que se marque como "Gasto Extra Aprobado".
+                             </p>
                           </div>
                         </div>
                       )}
@@ -392,7 +413,8 @@ export default function RequestDetailPage() {
                                 {exp.isUnused ? <Package className="h-3 w-3 text-orange-500" /> : <Truck className="h-3 w-3 text-muted-foreground" />}
                                 <div className="flex flex-col">
                                   <span className="font-medium">{exp.description}</span>
-                                  {exp.isUnused && <span className="text-[9px] font-bold text-orange-600 uppercase">Queda en Inventario</span>}
+                                  {exp.isUnused && <span className="text-[9px] font-bold text-orange-600 uppercase">Queda en Inventario Técnico</span>}
+                                  {exp.isApprovedExtra && <span className="text-[8px] font-bold text-blue-600 uppercase flex items-center gap-1"><ShieldAlert className="h-2 w-2" /> Aprobado como Extra</span>}
                                 </div>
                               </div>
                               <div className="flex items-center gap-3">
