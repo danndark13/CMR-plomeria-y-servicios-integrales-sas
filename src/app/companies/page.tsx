@@ -5,7 +5,7 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Building2, ChevronRight, Briefcase, Loader2, Save, X, Mail, Phone, User } from "lucide-react"
+import { Plus, Building2, ChevronRight, Briefcase, Loader2, Save, X, Mail, Phone, User as UserIcon } from "lucide-react"
 import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from "@/firebase"
 import { collection, doc, setDoc } from "firebase/firestore"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
@@ -34,15 +34,15 @@ export default function CompaniesPage() {
 
   // Fetch companies and accounts from Firestore
   const companiesQuery = useMemoFirebase(() => {
-    if (!db) return null
+    if (!db || !user) return null
     return collection(db, "assistance_companies")
-  }, [db])
+  }, [db, user])
   const { data: companies, isLoading: loadingCompanies } = useCollection(companiesQuery)
 
   const accountsQuery = useMemoFirebase(() => {
-    if (!db) return null
+    if (!db || !user) return null
     return collection(db, "client_accounts")
-  }, [db])
+  }, [db, user])
   const { data: allAccounts, isLoading: loadingAccounts } = useCollection(accountsQuery)
 
   const handleCreateCompany = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -220,7 +220,7 @@ export default function CompaniesPage() {
               <div className="space-y-2">
                 <Label htmlFor="contactPerson" className="text-[10px] font-black uppercase tracking-widest">Persona de Contacto</Label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input id="contactPerson" name="contactPerson" placeholder="Nombre del coordinador" className="pl-10" />
                 </div>
               </div>

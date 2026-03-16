@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { UserPlus, Mail, Shield, MoreVertical, Key, Power, UserCog, Phone, Fingerprint, Loader2, Save, Search, CreditCard, X, AlertCircle } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { toast } from "@/hooks/use-toast"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase"
 import { collection, doc, updateDoc, setDoc } from "firebase/firestore"
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
@@ -20,15 +20,16 @@ import { cn } from "@/lib/utils"
 
 export default function AdminUsersPage() {
   const db = useFirestore()
+  const { user } = useUser()
   const [isProcessing, setIsProcessing] = useState(false)
   const [editingUser, setEditingUser] = useState<any>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
 
   const usersQuery = useMemoFirebase(() => {
-    if (!db) return null
+    if (!db || !user) return null
     return collection(db, "user_profiles")
-  }, [db])
+  }, [db, user])
 
   const { data: users, isLoading } = useCollection(usersQuery)
 
@@ -99,9 +100,9 @@ export default function AdminUsersPage() {
     }
   }
 
-  const toggleUserStatus = (user: any) => {
+  const toggleUserStatus = (u: any) => {
     if (!db) return
-    if (user.username === 'GERENTE') {
+    if (u.username === 'GERENTE') {
       toast({
         variant: "destructive",
         title: "Acción Protegida",
@@ -111,14 +112,14 @@ export default function AdminUsersPage() {
     }
 
     setIsProcessing(true)
-    const docRef = doc(db, "user_profiles", user.id)
-    const update = { isActive: !user.isActive }
+    const docRef = doc(db, "user_profiles", u.id)
+    const update = { isActive: !u.isActive }
     
     updateDoc(docRef, update)
       .then(() => {
         toast({
-          title: user.isActive ? "Acceso Suspendido" : "Acceso Reactivado",
-          description: `El estado de ${user.firstName} ha sido actualizado.`
+          title: u.isActive ? "Acceso Suspendido" : "Acceso Reactivado",
+          description: `El estado de ${u.firstName} ha sido actualizado.`
         })
       })
       .catch(async (error) => {
@@ -255,7 +256,6 @@ export default function AdminUsersPage() {
               <Input 
                 placeholder="Buscar por ID o Cédula..." 
                 className="pl-9 h-9 text-xs"
-                // onChange ya no debería causar problemas al no haber await bloqueando el thread
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -298,37 +298,37 @@ export default function AdminUsersPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : filteredUsers?.map((user) => (
-                  <TableRow key={user.id} className="hover:bg-muted/20 group">
+                ) : filteredUsers?.map((u) => (
+                  <TableRow key={u.id} className="hover:bg-muted/20 group">
                     <TableCell>
                       <div className="flex flex-col gap-1">
                         <Badge variant="outline" className="font-mono font-black text-primary text-[10px] bg-primary/5 py-0.5 px-2 border-primary/20 w-fit">
-                          {user.username}
+                          {u.username}
                         </Badge>
                         <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1">
-                          <CreditCard className="h-2.5 w-2.5" /> {user.cedula || '---'}
+                          <CreditCard className="h-2.5 w-2.5" /> {u.cedula || '---'}
                         </span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span className="font-bold text-slate-800">{user.firstName} {user.lastName}</span>
+                        <span className="font-bold text-slate-800">{u.firstName} {u.lastName}</span>
                         <div className="flex items-center gap-3 mt-1 opacity-60">
-                          <span className="flex items-center gap-1 text-[10px]"><Mail className="h-3 w-3" /> {user.email}</span>
-                          <span className="flex items-center gap-1 text-[10px]"><Phone className="h-3 w-3" /> {user.phoneNumber}</span>
+                          <span className="flex items-center gap-1 text-[10px]"><Mail className="h-3 w-3" /> {u.email}</span>
+                          <span className="flex items-center gap-1 text-[10px]"><Phone className="h-3 w-3" /> {u.phoneNumber}</span>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
                       <Badge className="bg-slate-800 text-white font-black uppercase text-[9px] tracking-tighter">
-                        {user.roleId}
+                        {u.roleId}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <div className={cn("h-2 w-2 rounded-full", user.isActive ? "bg-green-500 animate-pulse" : "bg-slate-300")} />
-                        <span className={cn("text-[10px] font-bold uppercase", user.isActive ? "text-green-700" : "text-slate-400")}>
-                          {user.isActive ? "Activo" : "Inactivo"}
+                        <div className={cn("h-2 w-2 rounded-full", u.isActive ? "bg-green-500 animate-pulse" : "bg-slate-300")} />
+                        <span className={cn("text-[10px] font-bold uppercase", u.isActive ? "text-green-700" : "text-slate-400")}>
+                          {u.isActive ? "Activo" : "Inactivo"}
                         </span>
                       </div>
                     </TableCell>
@@ -338,19 +338,19 @@ export default function AdminUsersPage() {
                           <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity"><MoreVertical className="h-4 w-4" /></Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-56">
-                          <DropdownMenuItem onClick={() => { setEditingUser(user); setIsCreating(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
+                          <DropdownMenuItem onClick={() => { setEditingUser(u); setIsCreating(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
                             <UserCog className="h-4 w-4 mr-2" /> Editar Perfil
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleResetPassword(user.username)}>
+                          <DropdownMenuItem onClick={() => handleResetPassword(u.username)}>
                             <Key className="h-4 w-4 mr-2" /> Reset Clave (RYS2025)
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem 
-                            className={user.isActive ? "text-destructive font-bold" : "text-green-600 font-bold"} 
-                            onClick={() => toggleUserStatus(user)}
-                            disabled={isProcessing || user.username === 'GERENTE'}
+                            className={u.isActive ? "text-destructive font-bold" : "text-green-600 font-bold"} 
+                            onClick={() => toggleUserStatus(u)}
+                            disabled={isProcessing || u.username === 'GERENTE'}
                           >
-                            <Power className="h-4 w-4 mr-2" /> {user.isActive ? "Suspender Acceso" : "Reactivar"}
+                            <Power className="h-4 w-4 mr-2" /> {u.isActive ? "Suspender Acceso" : "Reactivar"}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

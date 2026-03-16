@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -77,15 +78,15 @@ export default function RequestDetailPage() {
   })
 
   const inventoryQuery = useMemoFirebase(() => {
-    if (!db) return null
+    if (!db || !user) return null
     return collection(db, "inventory")
-  }, [db])
+  }, [db, user])
   const { data: inventoryItems } = useCollection(inventoryQuery)
 
   const requestRef = useMemoFirebase(() => {
-    if (!db || !id) return null
+    if (!db || !id || !user) return null
     return doc(db, 'service_requests', id as string)
-  }, [db, id])
+  }, [db, id, user])
 
   const { data: firestoreRequest, isLoading: isRequestLoading } = useDoc(requestRef)
   

@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -10,17 +11,18 @@ import { CategoryIcon } from "@/components/crm/category-icon"
 import { Clock, MapPin, User, Building2, ChevronRight, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase"
 import { collection } from "firebase/firestore"
 
 export default function CalendarPage() {
   const [date, setDate] = useState<Date | undefined>(new Date())
   const db = useFirestore()
+  const { user } = useUser()
 
   const requestsQuery = useMemoFirebase(() => {
-    if (!db) return null
+    if (!db || !user) return null
     return collection(db, "service_requests")
-  }, [db])
+  }, [db, user])
 
   const { data: firestoreRequests, isLoading } = useCollection(requestsQuery)
 
@@ -132,7 +134,7 @@ export default function CalendarPage() {
                           <span className="truncate font-medium">{item.request.address}</span>
                         </div>
                         <div className="flex items-center gap-2 text-muted-foreground">
-                          <User className="h-4 w-4 text-primary" />
+                          <UserIcon className="h-4 w-4 text-primary" />
                           <span className="text-xs font-medium">Técnico: <span className="font-black text-slate-800 uppercase">{getTechName(item.technicianId)}</span></span>
                         </div>
                         <div className="flex items-center gap-2 text-muted-foreground">
