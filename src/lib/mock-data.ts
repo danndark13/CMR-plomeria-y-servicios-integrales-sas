@@ -37,6 +37,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
     address: 'Calle 100 #15-30, Apt 502, Bogotá',
     phoneNumber: '310 555 1234',
     description: 'Fuga de agua en baño principal, goteo constante.',
+    accountingNotes: 'Pendiente descontar $5.000 de transporte por no presentar recibo.',
     interventions: [
       {
         id: 'v1',

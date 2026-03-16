@@ -107,6 +107,7 @@ export interface ServiceRequest {
   
   summary?: string;       // Resumen consolidado IA
   report?: string;        // Reporte final formal
+  accountingNotes?: string; // Notas de contabilidad para liquidación
   
   // Facturación
   requestedAmount?: number; // Lo que pretendemos cobrar

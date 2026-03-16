@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS, MOCK_COMPANIES } from "@/lib/mock-data"
-import { ServiceRequest, BillingStatus, ExpenseCategory, Technician, Advance, AuditEntry, ServiceStatus } from "@/lib/types"
+import { ServiceRequest, BillingStatus, ServiceStatus } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -12,36 +12,18 @@ import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { Switch } from "@/components/ui/switch"
 import { 
   ArrowLeft, 
   Sparkles, 
-  User, 
-  Building2, 
-  CheckCircle2,
-  AlertTriangle,
+  MapPin, 
   Loader2,
-  Phone,
-  MapPin,
-  FileText,
-  UserCheck,
-  Hash,
-  Plus,
   Wrench,
   DollarSign,
-  Receipt,
   Save,
-  Calculator,
-  HandCoins,
-  Package,
-  Truck,
-  Trash2,
-  ShieldAlert,
-  History,
-  Lock,
-  Activity,
-  Clock,
-  ShieldCheck
+  CheckCircle2,
+  Wallet,
+  AlertCircle,
+  FileText
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -49,7 +31,7 @@ import { serviceNoteSummaryGenerator } from "@/ai/flows/service-note-summary-gen
 import { toast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
-import { doc, updateDoc } from 'firebase/firestore'
+import { doc } from 'firebase/firestore'
 
 export default function RequestDetailPage() {
   const { id } = useParams()
@@ -59,12 +41,12 @@ export default function RequestDetailPage() {
   
   const [request, setRequest] = useState<ServiceRequest | null>(null)
   const [report, setReport] = useState("")
+  const [accountingNotes, setAccountingNotes] = useState("")
   const [isSummarizing, setIsSummarizing] = useState(false)
   
   // Billing States
   const [requestedAmount, setRequestedAmount] = useState<number>(0)
   const [approvedAmount, setApprovedAmount] = useState<number>(0)
-  const [billingStatus, setBillingStatus] = useState<BillingStatus>('pending')
   const [currentStatus, setCurrentStatus] = useState<ServiceStatus>('pending')
   
   const profileRef = useMemoFirebase(() => {
@@ -79,9 +61,9 @@ export default function RequestDetailPage() {
     if (found) {
       setRequest(found)
       setReport(found.report || "")
+      setAccountingNotes(found.accountingNotes || "")
       setRequestedAmount(found.requestedAmount || 0)
       setApprovedAmount(found.approvedAmount || 0)
-      setBillingStatus(found.billingStatus || 'pending')
       setCurrentStatus(found.status || 'pending')
     }
   }, [id])
@@ -97,7 +79,9 @@ export default function RequestDetailPage() {
   const isAccounting = profile?.roleId === 'Contabilidad'
   const isCustomerService = profile?.roleId === 'Servicio al Cliente'
   
+  // Contabilidad puede ver financieros pero no editar reporte técnico
   const canEditGeneral = isAdmin || isCustomerService
+  const canEditAccounting = isAdmin || isAccounting
   const canSeeFinancials = isAdmin || isAccounting || isCustomerService
 
   const allNotes = request.interventions.map(i => `[${i.type} - ${MOCK_TECHNICIANS.find(t => t.id === i.technicianId)?.name}]: ${i.notes}`).join('\n')
@@ -109,7 +93,10 @@ export default function RequestDetailPage() {
   const totalOperative = totalLabor + totalUsedExpenses
 
   const handleGenerateSummary = async () => {
-    if (!canEditGeneral) return;
+    if (!canEditGeneral) {
+      toast({ variant: "destructive", title: "Acceso denegado", description: "Solo Servicio al Cliente o Admin pueden generar reportes técnicos." });
+      return;
+    }
     setIsSummarizing(true)
     try {
       const result = await serviceNoteSummaryGenerator({ notes: allNotes })
@@ -122,13 +109,20 @@ export default function RequestDetailPage() {
     }
   }
 
+  const handleSaveAccountingNotes = () => {
+    if (!canEditAccounting) return;
+    toast({ 
+      title: "Notas de Pago Guardadas", 
+      description: "Los comentarios de liquidación se han actualizado correctamente." 
+    })
+  }
+
   const handleSaveBilling = () => {
     if (!isAdmin && !isAccounting) return;
     toast({ 
       title: "Valores Conciliados", 
       description: "Se ha actualizado el valor real a cobrar para este expediente." 
     })
-    // En una app real aquí actualizaríamos Firestore
   }
 
   return (
@@ -205,32 +199,70 @@ export default function RequestDetailPage() {
             ))}
           </div>
 
-          <Card className="shadow-lg border-t-4 border-t-green-500">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-lg font-black text-green-700 uppercase">Reporte Técnico Formal</CardTitle>
-              {canEditGeneral && (
-                <Button size="sm" variant="outline" className="gap-2 font-bold" onClick={handleGenerateSummary} disabled={isSummarizing}>
-                  <Sparkles className="h-4 w-4" /> Consolidar con IA
-                </Button>
-              )}
-            </CardHeader>
-            <CardContent>
-              <Textarea 
-                placeholder="Redacte aquí el reporte para la asistencia..."
-                className="min-h-[150px] text-sm font-medium"
-                value={report}
-                onChange={(e) => setReport(e.target.value)}
-                disabled={!canEditGeneral}
-              />
-              {canEditGeneral && (
-                <div className="flex justify-end mt-4">
-                  <Button className="gap-2 font-black shadow-lg">
-                    <Save className="h-4 w-4" /> Guardar Reporte
-                  </Button>
+          <div className="grid grid-cols-1 gap-6">
+            <Card className="shadow-lg border-t-4 border-t-green-500">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg font-black text-green-700 uppercase">Reporte Técnico Formal</CardTitle>
+                  {!canEditGeneral && <CardDescription className="text-[10px] uppercase font-bold text-orange-600">Modo Solo Lectura para Contabilidad</CardDescription>}
                 </div>
-              )}
-            </CardContent>
-          </Card>
+                {canEditGeneral && (
+                  <Button size="sm" variant="outline" className="gap-2 font-bold" onClick={handleGenerateSummary} disabled={isSummarizing}>
+                    <Sparkles className="h-4 w-4" /> Consolidar con IA
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent>
+                <Textarea 
+                  placeholder="Redacte aquí el reporte para la asistencia..."
+                  className="min-h-[150px] text-sm font-medium"
+                  value={report}
+                  onChange={(e) => setReport(e.target.value)}
+                  disabled={!canEditGeneral}
+                />
+                {canEditGeneral && (
+                  <div className="flex justify-end mt-4">
+                    <Button className="gap-2 font-black shadow-lg">
+                      <Save className="h-4 w-4" /> Guardar Reporte
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {canSeeFinancials && (
+              <Card className="shadow-lg border-t-4 border-t-orange-500">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg font-black text-orange-700 uppercase">Notas de Liquidación y Pagos</CardTitle>
+                    <CardDescription className="text-xs">Comentarios internos sobre el pago a técnicos y deducciones.</CardDescription>
+                  </div>
+                  <Wallet className="h-6 w-6 text-orange-600" />
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Textarea 
+                    placeholder="Ej: Descontar material sobrante, bonificación por prontitud, etc..."
+                    className="min-h-[100px] text-sm font-medium border-orange-200 focus-visible:ring-orange-500"
+                    value={accountingNotes}
+                    onChange={(e) => setAccountingNotes(e.target.value)}
+                    disabled={!canEditAccounting}
+                  />
+                  {canEditAccounting && (
+                    <div className="flex justify-end">
+                      <Button className="gap-2 font-black bg-orange-600 hover:bg-orange-700 shadow-lg" onClick={handleSaveAccountingNotes}>
+                        <Save className="h-4 w-4" /> Guardar Notas Contables
+                      </Button>
+                    </div>
+                  )}
+                  {!canEditAccounting && !canSeeFinancials && (
+                    <div className="p-3 bg-muted rounded-lg flex items-center gap-2 text-xs text-muted-foreground">
+                      <AlertCircle className="h-4 w-4" /> Esta sección es exclusiva de Contabilidad y Gerencia.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
 
         <div className="space-y-6">
