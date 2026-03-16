@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS, MOCK_COMPANIES } from "@/lib/mock-data"
 import { ServiceRequest } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -35,6 +35,7 @@ import { doc, setDoc, updateDoc } from 'firebase/firestore'
 export default function RequestDetailPage() {
   const { id } = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user } = useUser()
   const db = useFirestore()
   
@@ -91,8 +92,12 @@ export default function RequestDetailPage() {
   const isAccounting = profile?.roleId === 'Contabilidad'
   const isCustomerService = profile?.roleId === 'Servicio al Cliente'
   
+  // Modo Contable: Si viene del hub de contabilidad o es contador, restringimos el reporte
+  const isAccountingMode = searchParams.get('mode') === 'accounting' || isAccounting
+
   // Definición clara de permisos por sección
-  const canEditReport = isAdmin || isCustomerService
+  // El reporte SOLO se edita en modo operativo (Bitácora) por Admin o Servicio al Cliente
+  const canEditReport = !isAccountingMode && (isAdmin || isCustomerService)
   const canEditFinancials = isAdmin || isAccounting
   const canSeeFinancials = isAdmin || isAccounting || isCustomerService
 
@@ -172,6 +177,11 @@ export default function RequestDetailPage() {
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-black tracking-tighter text-primary uppercase">{localRequest.claimNumber}</h1>
               <StatusBadge status={localRequest.status} />
+              {isAccountingMode && (
+                <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 font-black text-[9px] uppercase">
+                  Modo Contable Activo
+                </Badge>
+              )}
             </div>
             <p className="text-muted-foreground flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
               <CategoryIcon category={localRequest.category} className="h-4 w-4 text-primary" />
@@ -186,9 +196,9 @@ export default function RequestDetailPage() {
               Finalizar y Guardar Reporte
             </Button>
           )}
-          {isAccounting && (
+          {canEditFinancials && (
              <Button className="gap-2 bg-primary font-bold shadow-lg" onClick={handleUpdateBilling} disabled={isSaving}>
-                <Save className="h-4 w-4" /> Guardar Notas Contables
+                <Save className="h-4 w-4" /> Guardar Cambios Contables
              </Button>
           )}
         </div>
@@ -281,7 +291,7 @@ export default function RequestDetailPage() {
                   </Button>
                 ) : (
                    <Badge variant="outline" className="gap-1 font-bold bg-slate-100 text-slate-500 border-slate-200">
-                      <Lock className="h-3 w-3" /> Solo Lectura
+                      <Lock className="h-3 w-3" /> Solo Lectura (Módulo Contable)
                    </Badge>
                 )}
               </CardHeader>

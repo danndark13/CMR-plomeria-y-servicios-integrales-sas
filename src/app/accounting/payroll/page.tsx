@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from "react"
@@ -226,7 +227,7 @@ export default function PayrollPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Link href={`/requests/${item.request.id}`}>
+                        <Link href={`/requests/${item.request.id}?mode=accounting`}>
                           <Button variant="ghost" size="icon"><ChevronRight className="h-4 w-4" /></Button>
                         </Link>
                       </TableCell>

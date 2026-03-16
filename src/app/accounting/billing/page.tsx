@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { 
   Receipt, 
   Search, 
@@ -239,7 +240,7 @@ export default function BillingReportPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Link href={`/requests/${req.id}`}>
+                      <Link href={`/requests/${req.id}?mode=accounting`}>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-primary">
                           <ChevronRight className="h-5 w-5" />
                         </Button>
