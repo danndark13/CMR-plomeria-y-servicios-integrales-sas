@@ -26,7 +26,8 @@ import {
   User,
   MapPin,
   Phone,
-  FileText
+  FileText,
+  FileSpreadsheet
 } from "lucide-react"
 import { 
   Dialog, 
@@ -39,7 +40,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { MOCK_REQUESTS, MOCK_COMPANIES } from "@/lib/mock-data"
+import { MOCK_REQUESTS, MOCK_COMPANIES, MOCK_TECHNICIANS } from "@/lib/mock-data"
 import { StatusBadge } from "@/components/crm/status-badge"
 import Link from "next/link"
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase'
@@ -133,22 +134,99 @@ export default function RequestsPage() {
       .finally(() => setIsProcessing(false))
   }
 
+  const handleExportExcel = () => {
+    const headers = [
+      "Expediente", "Fecha", "Asistencia", "Cuenta", "Asegurado", "Dirección", "Tipo de Servicio",
+      "Reporte Inicial", "Reporte 2", "Reporte 3", "Reporte 4", "Reporte 5",
+      "Técnico 1", "Técnico 2", "Técnico 3", "Técnico 4", "Técnico 5",
+      "Valor Reporte 1", "Valor Reporte 2", "Valor Reporte 3", "Valor Reporte 4", "Valor Reporte 5",
+      "Gasto Reporte 1", "Gasto Reporte 2", "Gasto Reporte 3", "Gasto Reporte 4", "Gasto Reporte 5",
+      "Valor Total Cobrado", "Valor Total Todos los Gastos"
+    ]
+
+    const csvRows = filteredRequests.map(req => {
+      const companyName = allCompanies.find(c => c.id === req.companyId)?.name || "N/A"
+      const interventions = req.interventions || []
+      
+      const getIntNotes = (idx: number) => (interventions[idx]?.notes || "").replace(/,/g, " ")
+      const getTechName = (idx: number) => {
+        const techId = interventions[idx]?.technicianId
+        return (MOCK_TECHNICIANS.find(t => t.id === techId)?.name || "").replace(/,/g, " ")
+      }
+      const getLabor = (idx: number) => interventions[idx]?.laborCost || 0
+      const getExpenses = (idx: number) => (interventions[idx]?.detailedExpenses || []).reduce((s, e) => s + e.amount, 0)
+
+      const totalLabor = interventions.reduce((s, i) => s + i.laborCost, 0)
+      const totalExpenses = interventions.flatMap(i => i.detailedExpenses || []).reduce((s, e) => s + e.amount, 0)
+      const totalFinancial = totalLabor + totalExpenses
+      const totalCobrado = req.approvedAmount || req.requestedAmount || 0
+
+      return [
+        req.claimNumber,
+        new Date(req.createdAt || "").toLocaleDateString(),
+        companyName,
+        req.accountName,
+        req.insuredName,
+        (req.address || "").replace(/,/g, " "),
+        req.category,
+        // Reportes (1-5)
+        getIntNotes(0), getIntNotes(1), getIntNotes(2), getIntNotes(3), getIntNotes(4),
+        // Técnicos (1-5)
+        getTechName(0), getTechName(1), getTechName(2), getTechName(3), getTechName(4),
+        // Valores (1-5)
+        getLabor(0), getLabor(1), getLabor(2), getLabor(3), getLabor(4),
+        // Gastos (1-5)
+        getExpenses(0), getExpenses(1), getExpenses(2), getExpenses(3), getExpenses(4),
+        totalCobrado,
+        totalFinancial
+      ]
+    })
+
+    const csvContent = [
+      headers.join(","),
+      ...csvRows.map(row => row.join(","))
+    ].join("\n")
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement("a")
+    const url = URL.createObjectURL(blob)
+    link.setAttribute("href", url)
+    link.setAttribute("download", `Bitacora_RYS_${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    toast({
+      title: "Planilla Generada",
+      description: "Se ha descargado el reporte detallado de la bitácora."
+    })
+  }
+
   const role = profile?.roleId
   const canCreate = role === 'Administrador' || role === 'Servicio al Cliente'
+  const canExport = role === 'Administrador' || role === 'Servicio al Cliente' || role === 'Contabilidad'
   const isLoadingTotal = isUserLoading || isRequestsLoading
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">Bitácora de Servicios</h1>
           <p className="text-muted-foreground font-medium">Listado de expedientes activos e históricos de la operación.</p>
         </div>
-        {canCreate && (
-          <Button className="gap-2 shadow-lg h-12 font-bold" onClick={() => setIsCreating(true)}>
-            <Plus className="h-5 w-5" /> Crear un nuevo servicio
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {canExport && (
+            <Button variant="outline" className="gap-2 font-bold border-green-600 text-green-600 hover:bg-green-50" onClick={handleExportExcel}>
+              <FileSpreadsheet className="h-4 w-4" /> Exportar Planilla
+            </Button>
+          )}
+          {canCreate && (
+            <Button className="gap-2 shadow-lg h-10 font-bold" onClick={() => setIsCreating(true)}>
+              <Plus className="h-5 w-5" /> Crear un nuevo servicio
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card className="shadow-md border-none overflow-hidden">
