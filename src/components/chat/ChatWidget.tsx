@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { 
   MessageSquare, 
   X, 
@@ -81,6 +81,27 @@ export function ChatWidget() {
     return collection(db, "user_profiles")
   }, [db, user])
   const { data: allUsers } = useCollection(usersQuery)
+
+  // DEDUPLICATION LOGIC: Consolidate users by username
+  const uniqueUsers = useMemo(() => {
+    if (!allUsers) return []
+    const uniqueMap = new Map()
+    allUsers.forEach(u => {
+      const uname = (u.username || "").toUpperCase().trim()
+      if (!uname) return
+      
+      // If we already have this username, we keep the one that is active or has more info
+      if (!uniqueMap.has(uname)) {
+        uniqueMap.set(uname, u)
+      } else {
+        const existing = uniqueMap.get(uname)
+        if (u.isActive && !existing.isActive) {
+          uniqueMap.set(uname, u)
+        }
+      }
+    })
+    return Array.from(uniqueMap.values())
+  }, [allUsers])
 
   // 2. Fetch My Chats
   const chatsQuery = useMemoFirebase(() => {
@@ -263,7 +284,7 @@ export function ChatWidget() {
 
                     <div className="pt-2">
                       <p className="px-3 text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-2">Colaboradores</p>
-                      {allUsers?.filter(u => u.id !== user.uid && (!searchTerm || `${u.firstName} ${u.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()))).map(collab => (
+                      {uniqueUsers.filter(u => u.id !== user.uid && (!searchTerm || `${u.firstName} ${u.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()))).map(collab => (
                         <div 
                           key={collab.id} 
                           className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 cursor-pointer group transition-all"
@@ -395,7 +416,7 @@ export function ChatWidget() {
               <Label className="text-[10px] font-black uppercase tracking-widest">Seleccionar Integrantes</Label>
               <ScrollArea className="h-[200px] border rounded-xl p-2 bg-slate-50">
                 <div className="space-y-2">
-                  {allUsers?.filter(u => u.id !== user.uid).map(collab => (
+                  {uniqueUsers.filter(u => u.id !== user.uid).map(collab => (
                     <div key={collab.id} className="flex items-center space-x-3 p-2 hover:bg-white rounded-lg transition-colors">
                       <Checkbox 
                         id={collab.id} 
