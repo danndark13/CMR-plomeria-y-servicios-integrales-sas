@@ -3,7 +3,8 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * ASISTENCIAPRO CRM SECURITY RULES - PROTOTYPE VERSION
+     * ASISTENCIAPRO CRM SECURITY RULES
+     * Gestión de identidades, servicios y control de inventario RYS SAS.
      */
 
     // --- HELPER FUNCTIONS ---
@@ -13,11 +14,15 @@ service cloud.firestore {
     }
 
     function getProfile() {
-      return get(/databases/$(database)/documents/user_profiles/$(request.auth.uid)).data;
+      // Usamos exists() para prevenir errores de denegación si el documento aún no existe en el caché de reglas
+      return exists(/databases/$(database)/documents/user_profiles/$(request.auth.uid)) 
+        ? get(/databases/$(database)/documents/user_profiles/$(request.auth.uid)).data 
+        : null;
     }
 
     function hasRole(roleId) {
-      return isSignedIn() && getProfile().isActive == true && getProfile().roleId == roleId;
+      let profile = getProfile();
+      return isSignedIn() && profile != null && profile.isActive == true && profile.roleId == roleId;
     }
 
     function isAdmin() {
@@ -38,43 +43,43 @@ service cloud.firestore {
     match /user_profiles/{userProfileId} {
       allow get: if isOwner(userProfileId) || isAdmin();
       allow list: if isAdmin();
-      allow create: if (isOwner(userProfileId) || isAdmin()) && request.resource.data.id == userProfileId;
+      allow create: if isSignedIn(); // Permitir creación inicial al loguear
       allow update: if (isAdmin() || (isOwner(userProfileId) && request.resource.data.roleId == resource.data.roleId)) && resource != null;
       allow delete: if isAdmin() && resource != null;
     }
 
     match /assistance_companies/{companyId} {
       allow get, list: if isSignedIn();
-      allow create: if isAdmin() && request.resource.data.id == companyId;
-      allow update, delete: if isAdmin() && resource != null;
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
     }
 
     match /client_accounts/{clientAccountId} {
-      allow get, list: if isAdmin() || hasRole('Servicio al Cliente') || hasRole('Contabilidad');
-      allow create: if isAdmin() && request.resource.data.id == clientAccountId;
-      allow update, delete: if isAdmin() && resource != null;
+      allow get, list: if isSignedIn();
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
     }
 
     match /service_requests/{serviceRequestId} {
-      allow get, list: if isAdmin() || hasRole('Servicio al Cliente') || hasRole('Contabilidad') || (isSignedIn() && resource.data.assignedTechnicianId == request.auth.uid);
-      allow create: if (isAdmin() || hasRole('Servicio al Cliente'));
-      allow update: if (isAdmin() || hasRole('Servicio al Cliente') || (resource.data.assignedTechnicianId == request.auth.uid)) && resource != null;
+      allow get, list: if isSignedIn() && (isAdmin() || hasRole('Servicio al Cliente') || hasRole('Contabilidad') || resource.data.assignedTechnicianId == request.auth.uid);
+      allow create: if isSignedIn() && (isAdmin() || hasRole('Servicio al Cliente'));
+      allow update: if isSignedIn() && (isAdmin() || hasRole('Servicio al Cliente') || (resource.data.assignedTechnicianId == request.auth.uid)) && resource != null;
       allow delete: if isAdmin() && resource != null;
     }
 
     match /service_requests/{serviceRequestId}/service_notes/{serviceNoteId} {
-      allow get, list: if isAdmin() || hasRole('Servicio al Cliente') || resource.data.assignedTechnicianId == request.auth.uid || resource.data.authorId == request.auth.uid;
-      allow create: if (isAdmin() || hasRole('Servicio al Cliente') || hasRole('Técnico')) && request.resource.data.authorId == request.auth.uid;
-      allow update: if (resource.data.authorId == request.auth.uid || isAdmin()) && resource != null;
-      allow delete: if isAdmin() && resource != null;
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (resource.data.authorId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
     }
 
     /**
-     * @description Warehouse inventory management.
-     * @path /inventory/{itemId}
+     * @description Gestión de inventario de bodega y técnicos.
+     * Permite lectura a todo el personal activo para verificación de stock.
      */
     match /inventory/{itemId} {
-      allow get, list: if hasRole('Administrador') || hasRole('Contabilidad') || hasRole('Técnico');
+      allow get, list: if isSignedIn() && (hasRole('Administrador') || hasRole('Contabilidad') || hasRole('Técnico') || hasRole('Servicio al Cliente'));
       allow create, update, delete: if hasRole('Administrador') || hasRole('Contabilidad');
     }
   }
