@@ -9,7 +9,7 @@ export type ServiceCategory =
   | 'Instalación' 
   | 'Destaponamiento';
 
-export type InterventionType = 'Diagnóstico' | 'Reparación' | 'Seguimiento' | 'Finalización' | 'Garantía';
+export type InterventionType = 'Diagnóstico' | 'Reparación' | 'Seguimiento' | 'Finalización' | 'Garantía' | 'Visita Programada';
 
 export type BillingStatus = 'pending' | 'pre_validated' | 'validated' | 'paid';
 
@@ -55,6 +55,14 @@ export interface Advance {
   createdByUserId: string;
   isPaidInPayroll?: boolean; // Nuevo: indica si ya se descontó en una nómina
   payrollId?: string;        // ID de la nómina donde se descontó
+}
+
+export interface ScheduledVisit {
+  id: string;
+  technicianId: string;
+  date: string; // ISO String
+  notes?: string;
+  createdAt: string;
 }
 
 export interface TechnicianIntervention {
@@ -124,6 +132,9 @@ export interface ServiceRequest {
   
   // Historial de intervenciones (soporta múltiples técnicos)
   interventions: TechnicianIntervention[];
+  
+  // Visita programada actual (opcional)
+  scheduledVisit?: ScheduledVisit;
   
   // Anticipos entregados al técnico
   advances?: Advance[];

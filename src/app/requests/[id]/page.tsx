@@ -1,10 +1,9 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS } from "@/lib/mock-data"
-import { ServiceRequest, Expense, TechnicianIntervention, InterventionType, ExpenseCategory, ServiceStatus, UnitOfMeasure } from "@/lib/types"
+import { ServiceRequest, Expense, TechnicianIntervention, InterventionType, ExpenseCategory, ServiceStatus, UnitOfMeasure, ScheduledVisit } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -27,7 +26,11 @@ import {
   ClipboardList,
   X,
   Calculator,
-  FileText
+  FileText,
+  CalendarDays,
+  Clock,
+  CheckCircle2,
+  User as UserIcon
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -51,6 +54,14 @@ export default function RequestDetailPage() {
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
   
   const [showAddEntry, setShowAddEntry] = useState(false)
+  const [showScheduleVisit, setShowScheduleVisit] = useState(false)
+  
+  const [scheduleData, setScheduleData] = useState({
+    date: '',
+    time: '',
+    technicianId: ''
+  })
+
   const [newIntervention, setNewIntervention] = useState<Partial<TechnicianIntervention>>({
     type: 'Diagnóstico',
     notes: '',
@@ -81,6 +92,35 @@ export default function RequestDetailPage() {
   const profileRef = useMemoFirebase(() => (user && db ? doc(db, 'user_profiles', user.uid) : null), [user, db])
   const { data: profile, isLoading: isProfileLoading } = useDoc(profileRef)
 
+  // Logic for automatic status change (5 minutes after appointment)
+  useEffect(() => {
+    if (!localRequest || !db || !requestRef) return;
+    
+    const checkStatusUpdate = () => {
+      if (localRequest.status === 'assigned' && localRequest.scheduledVisit) {
+        const visitTime = new Date(localRequest.scheduledVisit.date).getTime();
+        const currentTime = new Date().getTime();
+        const fiveMinutes = 5 * 60 * 1000;
+
+        if (currentTime > (visitTime + fiveMinutes)) {
+          // Auto-update to in_progress
+          updateDoc(requestRef, {
+            status: 'in_progress',
+            updatedAt: new Date().toISOString()
+          }).then(() => {
+            setLocalRequest(prev => prev ? { ...prev, status: 'in_progress' } : null);
+            toast({ title: "Estado Actualizado", description: "El servicio ha pasado a 'En Proceso' automáticamente." });
+          });
+        }
+      }
+    };
+
+    const interval = setInterval(checkStatusUpdate, 60000); // Check every minute
+    checkStatusUpdate(); // Initial check
+
+    return () => clearInterval(interval);
+  }, [localRequest, db, requestRef]);
+
   useEffect(() => {
     if (firestoreRequest) {
       setLocalRequest(firestoreRequest as any)
@@ -105,21 +145,56 @@ export default function RequestDetailPage() {
     </div>
   )
 
-  // Roles y permisos
   const isAdmin = profile?.roleId === 'Administrador'
   const isGerente = profile?.username === 'GERENTE'
   const isAccounting = profile?.roleId === 'Contabilidad'
   const isCustomerService = profile?.roleId === 'Servicio al Cliente'
   const isCompleted = localRequest.status === 'completed'
-
-  // El administrador, gerente y contabilidad SIEMPRE pueden editar.
-  // Atención al cliente solo puede editar si NO está finalizado.
   const isPrivilegedRole = isAdmin || isGerente || isAccounting
   const canEdit = isPrivilegedRole || (isCustomerService && !isCompleted)
 
   const handleUpdateField = (field: keyof ServiceRequest, value: any) => {
     if (!canEdit) return
     setLocalRequest(prev => prev ? { ...prev, [field]: value } : null)
+  }
+
+  const handleScheduleVisit = () => {
+    if (!db || !requestRef || !scheduleData.date || !scheduleData.time || !scheduleData.technicianId) {
+      toast({ variant: "destructive", title: "Datos incompletos", description: "Por favor complete todos los campos de la cita." })
+      return
+    }
+
+    setIsSaving(true)
+    const scheduledDateTime = new Date(`${scheduleData.date}T${scheduleData.time}`).toISOString()
+    
+    const visit: ScheduledVisit = {
+      id: Math.random().toString(36).substring(7),
+      technicianId: scheduleData.technicianId,
+      date: scheduledDateTime,
+      createdAt: new Date().toISOString()
+    }
+
+    const updatedData = {
+      scheduledVisit: visit,
+      status: 'assigned' as ServiceStatus,
+      updatedAt: new Date().toISOString()
+    }
+
+    updateDoc(requestRef, updatedData)
+      .then(() => {
+        toast({ title: "Visita Programada", description: `Cita agendada para el ${new Date(scheduledDateTime).toLocaleString()}` })
+        setShowScheduleVisit(false)
+        setLocalRequest(prev => prev ? { ...prev, ...updatedData } : null)
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: requestRef.path,
+          operation: "update",
+          requestResourceData: updatedData,
+        })
+        errorEmitter.emit("permission-error", permissionError)
+      })
+      .finally(() => setIsSaving(false))
   }
 
   const handleAddExpense = () => {
@@ -278,23 +353,7 @@ export default function RequestDetailPage() {
                 <h1 className="text-2xl font-black text-primary uppercase">{localRequest.claimNumber}</h1>
               )}
               
-              <Select 
-                value={localRequest.status} 
-                onValueChange={(v) => handleUpdateField('status', v as ServiceStatus)}
-                disabled={!canEdit}
-              >
-                <SelectTrigger className="w-[140px] h-8 font-bold text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending">Pendiente</SelectItem>
-                  <SelectItem value="assigned">Programado</SelectItem>
-                  <SelectItem value="in_progress">En Proceso</SelectItem>
-                  <SelectItem value="warranty">Garantía</SelectItem>
-                  <SelectItem value="cancelled">Cancelado</SelectItem>
-                  <SelectItem value="completed">Finalizado</SelectItem>
-                </SelectContent>
-              </Select>
+              <StatusBadge status={localRequest.status} />
             </div>
             <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
               <CategoryIcon category={localRequest.category} className="h-3 w-3" /> {localRequest.category}
@@ -310,17 +369,95 @@ export default function RequestDetailPage() {
         </div>
       </div>
 
-      {isCompleted && isCustomerService && (
-        <Alert className="bg-orange-50 border-orange-200 text-orange-800">
-          <AlertCircle className="h-4 w-4 text-orange-600" />
-          <p className="text-xs font-bold uppercase tracking-tight">
-            Expediente Finalizado: El modo de edición está bloqueado para Servicio al Cliente.
-          </p>
-        </Alert>
-      )}
-
       <div className="grid gap-6 lg:grid-cols-12">
         <div className="lg:col-span-8 space-y-6">
+          {/* Section: Schedule Visit */}
+          <Card className="border-l-4 border-l-accent shadow-lg bg-accent/5">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-sm font-black uppercase flex items-center gap-2 tracking-widest text-accent-foreground">
+                  <CalendarDays className="h-5 w-5 text-accent" /> Programación de Visita
+                </CardTitle>
+                <CardDescription className="text-[10px] font-bold">Agenda la próxima intervención técnica.</CardDescription>
+              </div>
+              {canEdit && (
+                <Button 
+                  variant={showScheduleVisit ? "ghost" : "default"} 
+                  size="sm" 
+                  className={showScheduleVisit ? "text-slate-500" : "bg-accent hover:bg-accent/90 text-white font-black"}
+                  onClick={() => setShowScheduleVisit(!showScheduleVisit)}
+                >
+                  {showScheduleVisit ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4 mr-2" />} 
+                  {showScheduleVisit ? "Cancelar" : "Programar Cita"}
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              {showScheduleVisit ? (
+                <div className="grid gap-4 md:grid-cols-3 p-4 bg-white rounded-xl border-2 border-dashed border-accent/20 animate-in slide-in-from-top-2">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest">Fecha de Cita</Label>
+                    <Input 
+                      type="date" 
+                      value={scheduleData.date} 
+                      onChange={(e) => setScheduleData({...scheduleData, date: e.target.value})}
+                      className="h-10 font-bold"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest">Hora</Label>
+                    <Input 
+                      type="time" 
+                      value={scheduleData.time} 
+                      onChange={(e) => setScheduleData({...scheduleData, time: e.target.value})}
+                      className="h-10 font-bold"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest">Técnico que Asiste</Label>
+                    <Select value={scheduleData.technicianId} onValueChange={(v) => setScheduleData({...scheduleData, technicianId: v})}>
+                      <SelectTrigger className="h-10 font-bold"><SelectValue placeholder="Seleccionar técnico" /></SelectTrigger>
+                      <SelectContent>
+                        {MOCK_TECHNICIANS.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="md:col-span-3 pt-2">
+                    <Button className="w-full bg-accent hover:bg-accent/90 font-black h-12 shadow-lg" onClick={handleScheduleVisit} disabled={isSaving}>
+                      {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />} AGENDAR Y MARCAR COMO PROGRAMADO
+                    </Button>
+                  </div>
+                </div>
+              ) : localRequest.scheduledVisit ? (
+                <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-accent/20 shadow-sm">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-xl bg-accent/10 flex items-center justify-center text-accent">
+                      <Clock className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase text-accent tracking-widest">Visita Confirmada</p>
+                      <p className="text-lg font-black text-slate-800">
+                        {new Date(localRequest.scheduledVisit.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+                      </p>
+                      <p className="text-xs font-bold text-muted-foreground uppercase">
+                        Hora: {new Date(localRequest.scheduledVisit.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • 
+                        Técnico: {MOCK_TECHNICIANS.find(t => t.id === localRequest.scheduledVisit?.technicianId)?.name}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge className="bg-green-600 text-white font-black h-8 px-4 uppercase text-[10px] tracking-widest gap-2">
+                    <CheckCircle2 className="h-4 w-4" /> ACTIVA
+                  </Badge>
+                </div>
+              ) : (
+                <div className="py-6 text-center border-2 border-dashed rounded-xl bg-slate-50/50">
+                  <CalendarDays className="h-10 w-10 text-slate-200 mx-auto mb-2" />
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-tighter italic">Sin visitas programadas actualmente</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card className="border-l-4 border-l-primary shadow-sm">
             <CardHeader className="pb-3 border-b bg-slate-50/50">
               <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Información del Cliente</CardTitle>
@@ -541,17 +678,6 @@ export default function RequestDetailPage() {
                           })}
                         </div>
                       )}
-                      
-                      <div className="flex justify-end pt-3 border-t text-[10px] font-black uppercase tracking-widest text-slate-500 gap-6">
-                        <div className="flex flex-col items-end">
-                          <span className="opacity-50">Mano de Obra</span>
-                          <span className="text-slate-800">${(item.laborCost || 0).toLocaleString()}</span>
-                        </div>
-                        <div className="flex flex-col items-end">
-                          <span className="opacity-50">Total Reporte</span>
-                          <span className="text-primary text-sm font-black">${((item.laborCost || 0) + (item.detailedExpenses || []).reduce((s,e) => s+(e.amount || 0), 0)).toLocaleString()}</span>
-                        </div>
-                      </div>
                     </CardContent>
                   </Card>
                 )
@@ -624,17 +750,6 @@ export default function RequestDetailPage() {
                    <p className="text-2xl font-black text-slate-800 mt-2">${(localRequest.approvedAmount || 0).toLocaleString()}</p>
                 </div>
               )}
-
-              <div className="pt-4 border-t space-y-3">
-                 <div className="flex justify-between text-[11px] font-black uppercase tracking-tight">
-                    <span className="text-muted-foreground">Acumulado Mano de Obra</span>
-                    <span className="text-slate-700">${totalLabor.toLocaleString()}</span>
-                 </div>
-                 <div className="flex justify-between text-[11px] font-black uppercase tracking-tight">
-                    <span className="text-muted-foreground">Acumulado Insumos</span>
-                    <span className="text-slate-700">${totalExpenses.toLocaleString()}</span>
-                 </div>
-              </div>
             </CardContent>
           </Card>
 
