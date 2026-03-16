@@ -14,7 +14,6 @@ export const MOCK_TECHNICIANS: Technician[] = [
   { id: 't4', name: 'Mario Diaz', specialties: ['Trabajo en Alturas', 'Vidriería'], activeTasks: 3 },
 ];
 
-// Helper to get dates relative to today
 const today = new Date();
 const tomorrow = new Date(today);
 tomorrow.setDate(today.getDate() + 1);
@@ -53,6 +52,9 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
         expenses: 12000
       }
     ],
+    billingStatus: 'pending',
+    requestedAmount: 180000,
+    approvedAmount: 165000,
     createdAt: new Date(today.getTime() - 172800000).toISOString(),
     updatedAt: today.toISOString(),
   },
@@ -78,6 +80,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
         expenses: 0
       }
     ],
+    billingStatus: 'pending',
     createdAt: new Date(today.getTime() - 7200000).toISOString(),
     updatedAt: new Date(today.getTime() - 7200000).toISOString(),
   },
@@ -103,6 +106,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
         expenses: 0
       }
     ],
+    billingStatus: 'pending',
     createdAt: today.toISOString(),
     updatedAt: today.toISOString(),
   }

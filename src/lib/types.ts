@@ -11,6 +11,8 @@ export type ServiceCategory =
 
 export type InterventionType = 'Diagnóstico' | 'Reparación' | 'Seguimiento' | 'Finalización';
 
+export type BillingStatus = 'pending' | 'ready_to_bill' | 'billed' | 'paid';
+
 export interface TechnicianIntervention {
   id: string;
   technicianId: string;
@@ -64,6 +66,12 @@ export interface ServiceRequest {
   
   summary?: string;       // Resumen consolidado IA
   report?: string;        // Reporte final formal
+  
+  // Facturación
+  requestedAmount?: number; // Lo que pretendemos cobrar
+  approvedAmount?: number;  // Lo que la asistencia aprueba pagar
+  billingStatus: BillingStatus;
+  invoiceNumber?: string;
   
   createdAt: string;
   updatedAt: string;
