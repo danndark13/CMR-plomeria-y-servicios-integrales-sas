@@ -6,6 +6,7 @@ import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/s
 import { CRMSidebar } from '@/components/crm/crm-sidebar';
 import { Toaster } from '@/components/ui/toaster';
 import { usePathname, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Menu as HamburgerIcon } from 'lucide-react';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
@@ -20,6 +21,21 @@ export default function RootLayout({
   const router = useRouter();
   const isLoginPage = pathname === '/login';
   const isDashboard = pathname === '/';
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/sw.js').then(
+          function(registration) {
+            console.log('ServiceWorker registration successful with scope: ', registration.scope);
+          },
+          function(err) {
+            console.log('ServiceWorker registration failed: ', err);
+          }
+        );
+      });
+    }
+  }, []);
 
   return (
     <html lang="es">

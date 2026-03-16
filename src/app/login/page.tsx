@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { ShieldCheck, Lock, User, Loader2, Globe, Mail, Smartphone, Download, Share, PlusSquare, HelpCircle, RefreshCw } from "lucide-react"
+import { ShieldCheck, Lock, User, Loader2, Globe, Mail, Smartphone, Download, Share, PlusSquare, HelpCircle, RefreshCw, AlertCircle } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { signInAnonymously } from "firebase/auth"
 import { doc, setDoc } from "firebase/firestore"
@@ -52,6 +52,7 @@ export default function LoginPage() {
     setIsIos(isIosDevice)
 
     const handler = (e: any) => {
+      console.log('beforeinstallprompt event fired');
       e.preventDefault()
       setDeferredPrompt(e)
     }
@@ -64,13 +65,16 @@ export default function LoginPage() {
       setShowInstallHelp(true)
       toast({
         title: "Instalación Manual",
-        description: "El navegador no permite la descarga automática ahora. Revisa la ayuda abajo.",
+        description: "Sigue los pasos de ayuda que aparecen abajo.",
       })
       return
     }
     deferredPrompt.prompt()
     const { outcome } = await deferredPrompt.userChoice
-    if (outcome === 'accepted') setDeferredPrompt(null)
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null)
+      toast({ title: "¡Instalación Iniciada!", description: "RYS Gestión se está añadiendo a tu equipo." })
+    }
   }
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -149,7 +153,6 @@ export default function LoginPage() {
     <div className="min-h-screen w-full flex items-center justify-center bg-background p-4 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/20 via-background to-background">
       <div className="w-full max-w-md space-y-6 animate-in fade-in zoom-in duration-500">
         
-        {/* Sección de Instalación Fija */}
         <Card className="bg-primary text-primary-foreground border-none shadow-xl overflow-hidden ring-4 ring-white/10">
           <CardContent className="p-4">
             <div className="flex items-center gap-4">
@@ -195,12 +198,15 @@ export default function LoginPage() {
         {showInstallHelp && !isIos && (
           <Alert className="bg-white border-primary/20 animate-in slide-in-from-top-2">
             <HelpCircle className="h-4 w-4 text-primary" />
-            <AlertTitle className="text-[10px] font-black uppercase text-primary">Instalación Manual</AlertTitle>
-            <AlertDescription className="text-[10px] text-slate-600 font-medium">
-              Si ya desinstalaste la app y no aparece el botón:<br/>
-              1. Pulsa los <strong>tres puntos (⋮)</strong> de tu navegador.<br/>
-              2. Busca la opción <strong>"Instalar aplicación"</strong> o "Añadir a panta. de inicio".<br/>
-              3. Si no aparece, limpia el historial de navegación de este sitio y recarga.
+            <AlertTitle className="text-[10px] font-black uppercase text-primary">Solución de Instalación</AlertTitle>
+            <AlertDescription className="text-[10px] text-slate-600 font-medium space-y-3">
+              <p>Si el botón no funciona o dice "Ya instalada":</p>
+              <ol className="list-decimal pl-4 space-y-1">
+                <li>Pulsa los <strong>tres puntos (⋮)</strong> de tu navegador.</li>
+                <li>Busca <strong>"Instalar aplicación"</strong> o "Añadir a panta. de inicio".</li>
+                <li>Si no aparece, ve a <strong>Ajustes &gt; Privacidad &gt; Borrar datos de navegación</strong> (solo de este sitio) y recarga.</li>
+              </ol>
+              <p className="text-[9px] italic border-t pt-2">Esto sucede cuando el navegador bloquea la descarga automática tras una desinstalación previa.</p>
             </AlertDescription>
           </Alert>
         )}
