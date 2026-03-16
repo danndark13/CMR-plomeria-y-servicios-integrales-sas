@@ -12,7 +12,8 @@ import {
   ShieldCheck,
   CalendarDays,
   BarChart3,
-  UserCog
+  UserCog,
+  Receipt
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -47,6 +48,10 @@ export function CRMSidebar() {
     { title: "Calendario", icon: CalendarDays, href: "/calendar", badge: todayCount > 0 ? todayCount : null, badgeColor: "bg-accent text-accent-foreground" },
     { title: "Empresas", icon: Briefcase, href: "/companies" },
     { title: "Técnicos", icon: Users, href: "/technicians" },
+  ]
+
+  const accountingItems = [
+    { title: "Facturación", icon: Receipt, href: "/accounting/billing" },
   ]
 
   const adminItems = [
@@ -97,6 +102,34 @@ export function CRMSidebar() {
                         {item.badge}
                       </Badge>
                     )}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="px-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Contabilidad
+          </SidebarGroupLabel>
+          <SidebarMenu className="px-2 mt-2">
+            {accountingItems.map((item) => (
+              <SidebarMenuItem key={item.href}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname === item.href}
+                  tooltip={item.title}
+                  className={cn(
+                    "relative flex items-center gap-3 rounded-md px-3 py-2 transition-all duration-200",
+                    pathname === item.href 
+                      ? "bg-primary/10 text-primary font-semibold" 
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  )}
+                >
+                  <Link href={item.href}>
+                    <item.icon className="h-5 w-5" />
+                    <span>{item.title}</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
