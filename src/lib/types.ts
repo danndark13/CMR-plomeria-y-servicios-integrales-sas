@@ -15,6 +15,8 @@ export type BillingStatus = 'pending' | 'ready_to_bill' | 'billed' | 'paid';
 
 export type ExpenseCategory = 'material' | 'transporte' | 'otros';
 
+export type UnitOfMeasure = 'UND' | 'KG' | 'MTS' | 'GL' | 'PAR' | 'LB' | 'PQ' | 'VIAJE';
+
 export interface AuditEntry {
   id: string;
   userId: string;
@@ -26,9 +28,12 @@ export interface AuditEntry {
 
 export interface Expense {
   id: string;
-  amount: number;
+  amount: number; // Valor total (cantidad * valorUnitario)
   description: string;
   category: ExpenseCategory;
+  unit?: UnitOfMeasure;
+  quantity?: number;
+  unitValue?: number;
   isUnused: boolean; // Si es true, queda en inventario y no suma al costo del servicio
   isApprovedExtra?: boolean; // Si es true, permite duplicar material que ya está en inventario
   approvedByUserId?: string; // ID del usuario que aprobó el gasto extra

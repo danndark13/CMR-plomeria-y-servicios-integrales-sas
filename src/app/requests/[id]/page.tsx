@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS, MOCK_COMPANIES } from "@/lib/mock-data"
-import { ServiceRequest, Expense, TechnicianIntervention, InterventionType, ExpenseCategory, ServiceStatus } from "@/lib/types"
+import { ServiceRequest, Expense, TechnicianIntervention, InterventionType, ExpenseCategory, ServiceStatus, UnitOfMeasure } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -34,7 +34,8 @@ import {
   User,
   MapPin,
   ClipboardList,
-  X
+  X,
+  Calculator
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -45,6 +46,8 @@ import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@
 import { doc, setDoc, updateDoc, collection } from 'firebase/firestore'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
+
+const UNITS: UnitOfMeasure[] = ['UND', 'KG', 'MTS', 'GL', 'PAR', 'LB', 'PQ', 'VIAJE']
 
 export default function RequestDetailPage() {
   const { id } = useParams()
@@ -67,7 +70,9 @@ export default function RequestDetailPage() {
   })
   const [tempExpense, setTempExpense] = useState<Partial<Expense>>({
     description: '',
-    amount: 0,
+    unit: 'UND',
+    quantity: 1,
+    unitValue: 0,
     category: 'material'
   })
 
@@ -123,11 +128,18 @@ export default function RequestDetailPage() {
   }
 
   const handleAddExpense = () => {
-    if (!tempExpense.description || !tempExpense.amount) return
+    if (!tempExpense.description || !tempExpense.quantity || !tempExpense.unitValue) {
+      toast({ variant: "destructive", title: "Faltan datos", description: "Descripción, cantidad y valor unitario son obligatorios." })
+      return
+    }
+    const totalAmount = (tempExpense.quantity || 0) * (tempExpense.unitValue || 0)
     const expense: Expense = {
       id: Math.random().toString(36).substring(7),
       description: tempExpense.description,
-      amount: Number(tempExpense.amount),
+      unit: tempExpense.unit as UnitOfMeasure,
+      quantity: Number(tempExpense.quantity),
+      unitValue: Number(tempExpense.unitValue),
+      amount: totalAmount,
       category: (tempExpense.category as ExpenseCategory) || 'material',
       isUnused: false
     }
@@ -135,7 +147,7 @@ export default function RequestDetailPage() {
       ...prev,
       detailedExpenses: [...(prev.detailedExpenses || []), expense]
     }))
-    setTempExpense({ description: '', amount: 0, category: 'material' })
+    setTempExpense({ description: '', unit: 'UND', quantity: 1, unitValue: 0, category: 'material' })
   }
 
   const handleRemoveExpense = (expenseId: string) => {
@@ -388,30 +400,69 @@ export default function RequestDetailPage() {
                   </div>
 
                   <div className="space-y-4 p-4 bg-slate-50 rounded-lg border">
-                    <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Gastos y Mano de Obra</Label>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label className="text-[10px] font-black">Costo Mano de Obra ($)</Label>
-                        <Input type="number" value={newIntervention.laborCost} onChange={(e) => setNewIntervention({...newIntervention, laborCost: Number(e.target.value)})} />
+                    <div className="flex items-center justify-between border-b pb-2">
+                      <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Gastos e Insumos</Label>
+                      <div className="flex items-center gap-2">
+                        <Calculator className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-[10px] font-mono font-bold text-slate-500">Cálculo Automático</span>
                       </div>
-                      <div className="space-y-2">
-                        <Label className="text-[10px] font-black">Añadir Insumo/Gasto</Label>
-                        <div className="flex gap-2">
-                          <Input placeholder="Desc" value={tempExpense.description} onChange={(e) => setTempExpense({...tempExpense, description: e.target.value})} />
-                          <Input type="number" placeholder="$" className="w-24" value={tempExpense.amount} onChange={(e) => setTempExpense({...tempExpense, amount: Number(e.target.value)})} />
-                          <Button size="icon" onClick={handleAddExpense}><Plus className="h-4 w-4" /></Button>
-                        </div>
+                    </div>
+                    
+                    <div className="grid gap-4 md:grid-cols-12">
+                      <div className="md:col-span-12 space-y-2">
+                        <Label className="text-[10px] font-black">Mano de Obra ($)</Label>
+                        <Input type="number" value={newIntervention.laborCost} onChange={(e) => setNewIntervention({...newIntervention, laborCost: Number(e.target.value)})} className="h-8 font-mono font-bold" />
+                      </div>
+
+                      <div className="md:col-span-12 pt-2 border-t mt-2">
+                        <p className="text-[9px] font-black uppercase text-slate-400 mb-2">Agregar nuevo insumo</p>
+                      </div>
+
+                      <div className="md:col-span-5 space-y-2">
+                        <Label className="text-[9px] font-black">Descripción</Label>
+                        <Input placeholder="EJ: TUBO PVC 1/2" value={tempExpense.description} onChange={(e) => setTempExpense({...tempExpense, description: e.target.value.toUpperCase()})} className="h-8 text-xs font-bold" />
+                      </div>
+                      
+                      <div className="md:col-span-2 space-y-2">
+                        <Label className="text-[9px] font-black">Unidad</Label>
+                        <Select value={tempExpense.unit} onValueChange={(v) => setTempExpense({...tempExpense, unit: v as UnitOfMeasure})}>
+                          <SelectTrigger className="h-8 text-[10px] font-black"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {UNITS.map(u => <SelectItem key={u} value={u} className="text-[10px] font-bold">{u}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="md:col-span-1 space-y-2">
+                        <Label className="text-[9px] font-black">Cant.</Label>
+                        <Input type="number" value={tempExpense.quantity} onChange={(e) => setTempExpense({...tempExpense, quantity: Number(e.target.value)})} className="h-8 text-xs font-mono" />
+                      </div>
+
+                      <div className="md:col-span-2 space-y-2">
+                        <Label className="text-[9px] font-black">V. Unit ($)</Label>
+                        <Input type="number" value={tempExpense.unitValue} onChange={(e) => setTempExpense({...tempExpense, unitValue: Number(e.target.value)})} className="h-8 text-xs font-mono" />
+                      </div>
+
+                      <div className="md:col-span-2 flex items-end">
+                        <Button size="sm" className="w-full h-8 gap-1 font-black text-[10px]" onClick={handleAddExpense}>
+                          <Plus className="h-3 w-3" /> AÑADIR
+                        </Button>
                       </div>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-2 mt-4">
                       {newIntervention.detailedExpenses?.map(exp => (
-                        <div key={exp.id} className="flex items-center justify-between p-2 bg-white rounded border text-xs">
-                          <span className="font-bold uppercase">{exp.description}</span>
-                          <div className="flex items-center gap-3">
-                            <span className="font-mono">${exp.amount.toLocaleString()}</span>
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleRemoveExpense(exp.id)}>
-                              <Trash2 className="h-3 w-3" />
+                        <div key={exp.id} className="flex items-center justify-between p-3 bg-white rounded-lg border shadow-sm group">
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-black uppercase text-primary leading-tight">{exp.description}</span>
+                            <span className="text-[9px] font-bold text-muted-foreground">
+                              {exp.quantity} {exp.unit} x ${exp.unitValue?.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <span className="text-xs font-mono font-black text-slate-800">${exp.amount.toLocaleString()}</span>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleRemoveExpense(exp.id)}>
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>
@@ -419,7 +470,7 @@ export default function RequestDetailPage() {
                     </div>
                   </div>
 
-                  <Button className="w-full font-black shadow-lg" onClick={handleSaveIntervention} disabled={isSaving}>
+                  <Button className="w-full font-black shadow-lg h-12 text-sm uppercase tracking-widest" onClick={handleSaveIntervention} disabled={isSaving}>
                     REGISTRAR REPORTE EN BITÁCORA
                   </Button>
                 </CardContent>
@@ -460,15 +511,20 @@ export default function RequestDetailPage() {
                             return (
                               <div key={exp.id} className="flex flex-col gap-2 p-3 bg-slate-50 rounded-lg border">
                                 <div className="flex justify-between items-center">
-                                  <span className="text-xs font-bold uppercase">{exp.description}</span>
-                                  <span className="text-xs font-mono font-black">${exp.amount.toLocaleString()}</span>
+                                  <div className="flex flex-col">
+                                    <span className="text-[10px] font-black uppercase text-slate-800">{exp.description}</span>
+                                    <span className="text-[9px] font-bold text-muted-foreground">
+                                      {exp.quantity} {exp.unit} x ${exp.unitValue?.toLocaleString() || (exp.amount / (exp.quantity || 1)).toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <span className="text-xs font-mono font-black text-slate-800">${exp.amount.toLocaleString()}</span>
                                 </div>
                                 {stock && (
                                   <Alert className="bg-blue-50 border-blue-200 py-1.5 px-3">
                                     <div className="flex items-center gap-2">
                                       <Warehouse className="h-3 w-3 text-blue-600" />
-                                      <p className="text-[10px] font-bold text-blue-800">
-                                        STOCK DISPONIBLE: En bodega hay {stock.quantity} de "{stock.description}"
+                                      <p className="text-[10px] font-bold text-blue-800 uppercase">
+                                        STOCK EN BODEGA: {stock.quantity} und de "{stock.description}"
                                       </p>
                                     </div>
                                   </Alert>
@@ -479,9 +535,15 @@ export default function RequestDetailPage() {
                         </div>
                       )}
                       
-                      <div className="flex justify-end pt-2 border-t text-[10px] font-bold text-slate-500 gap-4">
-                        <span>Mano de Obra: ${item.laborCost.toLocaleString()}</span>
-                        <span className="text-primary">Subtotal: ${(item.laborCost + item.detailedExpenses.reduce((s,e) => s+e.amount, 0)).toLocaleString()}</span>
+                      <div className="flex justify-end pt-3 border-t text-[10px] font-black uppercase tracking-widest text-slate-500 gap-6">
+                        <div className="flex flex-col items-end">
+                          <span className="opacity-50">Mano de Obra</span>
+                          <span className="text-slate-800">${item.laborCost.toLocaleString()}</span>
+                        </div>
+                        <div className="flex flex-col items-end">
+                          <span className="opacity-50">Total Reporte</span>
+                          <span className="text-primary text-sm font-black">${(item.laborCost + item.detailedExpenses.reduce((s,e) => s+e.amount, 0)).toLocaleString()}</span>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -506,20 +568,22 @@ export default function RequestDetailPage() {
             </CardHeader>
             <CardContent className="pt-6 space-y-6">
               <div className="space-y-3">
-                <div className="flex justify-between text-[10px] font-black uppercase text-slate-500">
-                  <span>Costo Sugerido</span>
-                  <span>M.O + Gastos</span>
+                <div className="flex justify-between text-[10px] font-black uppercase text-slate-500 tracking-tighter">
+                  <span>Sugerido (M.O + Insumos)</span>
+                  <Badge variant="outline" className="text-[9px] border-primary/20 bg-primary/5 text-primary">Pre-Liquidado</Badge>
                 </div>
-                <div className="p-4 bg-slate-900 rounded-xl flex items-center justify-between text-white shadow-inner">
-                  <span className="text-2xl font-mono font-black">${totalSuggested.toLocaleString()}</span>
-                  <RefreshCw className="h-5 w-5 opacity-20" />
+                <div className="p-4 bg-slate-900 rounded-xl flex items-center justify-between text-white shadow-2xl border-b-4 border-primary">
+                  <span className="text-3xl font-mono font-black">${totalSuggested.toLocaleString()}</span>
+                  <div className="h-10 w-10 rounded-full bg-white/10 flex items-center justify-center">
+                    <RefreshCw className="h-5 w-5 opacity-40 animate-pulse" />
+                  </div>
                 </div>
               </div>
 
               {canEdit && (
                 <div className="space-y-4 animate-in fade-in">
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-primary">Valor de Cobro (Aprobado)</Label>
+                    <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Valor de Cobro (Aprobado)</Label>
                     <div className="relative">
                       <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-primary" />
                       <Input 
@@ -527,55 +591,59 @@ export default function RequestDetailPage() {
                         value={localRequest.approvedAmount} 
                         onChange={(e) => handleUpdateField('approvedAmount', Number(e.target.value))}
                         className="pl-10 h-14 text-2xl font-mono font-black border-primary bg-primary/5 focus-visible:ring-primary shadow-lg"
+                        placeholder="0"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase">Notas de Contabilidad</Label>
+                    <Label className="text-[10px] font-black uppercase tracking-widest">Notas de Conciliación</Label>
                     <Textarea 
-                      placeholder="Deducciones, transportes, etc..." 
-                      className="text-xs font-medium border-orange-200"
+                      placeholder="Indique si hay glosas, descuentos o notas especiales..." 
+                      className="text-xs font-medium border-orange-200 min-h-[100px]"
                       value={localRequest.accountingNotes}
                       onChange={(e) => handleUpdateField('accountingNotes', e.target.value)}
                     />
                   </div>
 
-                  <Button className="w-full h-12 font-black shadow-xl uppercase tracking-widest" onClick={handleSaveMainInfo} disabled={isSaving}>
-                    {localRequest.status === 'completed' ? 'CERRAR Y ENVIAR A FACTURACIÓN' : 'CONCILIAR VALORES'}
+                  <Button className="w-full h-14 font-black shadow-xl uppercase tracking-widest text-sm" onClick={handleSaveMainInfo} disabled={isSaving}>
+                    {localRequest.status === 'completed' ? 'CERRAR Y ENVIAR A FACTURACIÓN' : 'GUARDAR CONCILIACIÓN'}
                   </Button>
                 </div>
               )}
 
-              <div className="pt-4 border-t space-y-2">
-                 <div className="flex justify-between text-[11px] font-bold">
-                    <span className="text-muted-foreground uppercase">Mano de Obra</span>
+              <div className="pt-4 border-t space-y-3">
+                 <div className="flex justify-between text-[11px] font-black uppercase tracking-tight">
+                    <span className="text-muted-foreground">Acumulado Mano de Obra</span>
                     <span className="text-slate-700">${totalLabor.toLocaleString()}</span>
                  </div>
-                 <div className="flex justify-between text-[11px] font-bold">
-                    <span className="text-muted-foreground uppercase">Gastos Materiales</span>
+                 <div className="flex justify-between text-[11px] font-black uppercase tracking-tight">
+                    <span className="text-muted-foreground">Acumulado Insumos</span>
                     <span className="text-slate-700">${totalExpenses.toLocaleString()}</span>
                  </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-blue-600 text-white shadow-xl">
-             <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
-                   <Info className="h-4 w-4" /> Reporte Formal para Asistencia
+          <Card className="bg-blue-600 text-white shadow-xl overflow-hidden relative">
+             <div className="absolute top-0 right-0 p-2 opacity-10">
+                <Sparkles className="h-12 w-12" />
+             </div>
+             <CardHeader className="pb-2 relative z-10">
+                <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
+                   <FileText className="h-4 w-4" /> Reporte Formal de Asistencia
                 </CardTitle>
              </CardHeader>
-             <CardContent className="space-y-4">
+             <CardContent className="space-y-4 relative z-10">
                 <Textarea 
-                  className="bg-white/10 border-white/20 text-white placeholder:text-white/40 text-xs min-h-[100px] font-medium"
-                  placeholder="Redacte aquí el resumen técnico formal..."
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/40 text-xs min-h-[120px] font-medium leading-relaxed"
+                  placeholder="Redacte aquí el resumen técnico formal que se enviará a la aseguradora..."
                   value={localRequest.report}
                   onChange={(e) => handleUpdateField('report', e.target.value)}
                   disabled={!canEdit}
                 />
-                <Button variant="outline" className="w-full bg-white/10 hover:bg-white/20 border-white/30 text-white font-bold text-xs gap-2" onClick={handleGenerateSummary} disabled={!canEdit || isGeneratingSummary}>
-                   {isGeneratingSummary ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Generar con IA (Flash)
+                <Button variant="outline" className="w-full bg-white/10 hover:bg-white/20 border-white/30 text-white font-black text-[10px] uppercase h-10 gap-2" onClick={handleGenerateSummary} disabled={!canEdit || isGeneratingSummary}>
+                   {isGeneratingSummary ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Sparkles className="h-4 w-4" /> Consolidar Reportes con IA</>}
                 </Button>
              </CardContent>
           </Card>
