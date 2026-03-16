@@ -20,6 +20,7 @@ import {
 import { MOCK_REQUESTS, MOCK_COMPANIES } from "@/lib/mock-data"
 import { CategoryIcon } from "@/components/crm/category-icon"
 import { toast } from "@/hooks/use-toast"
+import { cn } from "@/lib/utils"
 import Link from "next/link"
 
 export default function BillingReportPage() {
