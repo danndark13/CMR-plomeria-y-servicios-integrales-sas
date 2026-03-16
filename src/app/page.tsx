@@ -1,6 +1,7 @@
 
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { 
   BarChart, 
@@ -35,17 +36,24 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 
-const statusData = [
-  { name: 'Pendiente', count: MOCK_REQUESTS.filter(r => r.status === 'pending').length, color: '#f59e0b' },
-  { name: 'Asignado', count: MOCK_REQUESTS.filter(r => r.status === 'assigned').length, color: '#3b82f6' },
-  { name: 'En Progreso', count: MOCK_REQUESTS.filter(r => r.status === 'in_progress').length, color: '#1F5BCC' },
-  { name: 'Completado', count: MOCK_REQUESTS.filter(r => r.status === 'completed').length, color: '#10b981' },
-]
-
 export default function DashboardPage() {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!mounted) {
+    return (
+      <div className="flex flex-col gap-8 opacity-0">
+        <h1 className="text-3xl font-bold tracking-tight text-primary uppercase">Cargando Panel...</h1>
+      </div>
+    )
+  }
+
   const activeRequests = MOCK_REQUESTS.filter(r => r.status !== 'completed' && r.status !== 'cancelled')
   
-  // Obtener visitas de hoy
+  // Obtener visitas de hoy de forma segura
   const todayStr = new Date().toLocaleDateString()
   const todayVisits = MOCK_REQUESTS.flatMap(req => 
     req.interventions
@@ -73,7 +81,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* COLUMNA 1: ALERTAS DE SOBRECARGA (Técnicos con muchos servicios) */}
+        {/* COLUMNA 1: ALERTAS DE SOBRECARGA */}
         <Card className="border-destructive/20 bg-destructive/5 shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2 text-destructive">
@@ -100,7 +108,6 @@ export default function DashboardPage() {
               </div>
             )}
             
-            {/* Otras Alertas Críticas */}
             {MOCK_REMINDERS.filter(r => r.type === 'critical' && !r.technicianId).map((reminder) => (
               <div key={reminder.id} className="p-3 rounded-lg border bg-destructive/10 border-destructive/20 flex gap-3 items-start">
                 <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
@@ -113,13 +120,13 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* COLUMNA 2: NOTIFICACIONES DE SERVICIOS PROGRAMADOS (Hoy) */}
+        {/* COLUMNA 2: NOTIFICACIONES DE SERVICIOS PROGRAMADOS */}
         <Card className="border-accent/20 bg-accent/5 shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2 text-accent-foreground">
               <CalendarDays className="h-5 w-5 text-accent" /> Servicios Hoy
             </CardTitle>
-            <CardDescription className="text-accent-foreground/70">Visitas técnicas agendadas para {todayStr}.</CardDescription>
+            <CardDescription className="text-accent-foreground/70">Visitas técnicas agendadas para hoy.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -193,7 +200,6 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* ACCESO EXCLUSIVO ADMIN/CONTABILIDAD: HUB FINANCIERO */}
       <Card className="bg-slate-900 border-none text-white shadow-xl overflow-hidden relative">
         <div className="absolute right-0 top-0 h-full w-1/3 bg-primary/20 skew-x-12 translate-x-12" />
         <CardHeader className="relative z-10">

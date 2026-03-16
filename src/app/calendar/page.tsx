@@ -1,6 +1,7 @@
+
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Calendar } from "@/components/ui/calendar"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS, MOCK_COMPANIES } from "@/lib/mock-data"
@@ -13,6 +14,13 @@ import { Button } from "@/components/ui/button"
 
 export default function CalendarPage() {
   const [date, setDate] = useState<Date | undefined>(new Date())
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!mounted) return null
 
   const selectedDateStr = date?.toLocaleDateString() || ""
   
@@ -22,7 +30,6 @@ export default function CalendarPage() {
       .map(i => ({ ...i, request: req }))
   ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
-  // Helper to find tech name
   const getTechName = (id: string) => MOCK_TECHNICIANS.find(t => t.id === id)?.name || "Sin asignar"
   const getCompanyName = (id: string) => MOCK_COMPANIES.find(c => c.id === id)?.name || "N/A"
 
