@@ -41,8 +41,8 @@ service cloud.firestore {
     }
 
     match /user_profiles/{userProfileId} {
-      allow get: if isOwner(userProfileId) || isAdmin();
-      allow list: if isAdmin();
+      // Permitir 'get' y 'list' a cualquier usuario autenticado para que la app pueda mostrar nombres y técnicos
+      allow get, list: if isSignedIn();
       allow create: if isSignedIn(); // Permitir creación inicial al loguear
       allow update: if (isAdmin() || (isOwner(userProfileId) && request.resource.data.roleId == resource.data.roleId)) && resource != null;
       allow delete: if isAdmin() && resource != null;
@@ -79,7 +79,7 @@ service cloud.firestore {
      * Permite lectura a todo el personal activo para verificación de stock.
      */
     match /inventory/{itemId} {
-      allow get, list: if isSignedIn() && (hasRole('Administrador') || hasRole('Contabilidad') || hasRole('Técnico') || hasRole('Servicio al Cliente'));
+      allow get, list: if isSignedIn();
       allow create, update, delete: if hasRole('Administrador') || hasRole('Contabilidad');
     }
   }
