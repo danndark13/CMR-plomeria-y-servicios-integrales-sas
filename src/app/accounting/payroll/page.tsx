@@ -20,26 +20,47 @@ import {
   Wrench,
   AlertCircle,
   ShieldAlert,
-  History
+  History,
+  Lock,
+  Loader2,
+  CheckCircle2
 } from "lucide-react"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS, MOCK_COMPANIES } from "@/lib/mock-data"
 import Link from "next/link"
 import { toast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
+import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase"
+import { collection } from "firebase/firestore"
 
 export default function PayrollPage() {
+  const db = useFirestore()
+  const { user, isUserLoading } = useUser()
   const [selectedTech, setSelectedTech] = useState<string>("all")
 
+  // Fetch real data from Firestore
+  const requestsQuery = useMemoFirebase(() => {
+    if (!db || !user) return null
+    return collection(db, "service_requests")
+  }, [db, user])
+
+  const { data: firestoreRequests, isLoading: isRequestsLoading } = useCollection(requestsQuery)
+
+  // Merge Firestore and Mock for demo consistency
+  const allRequests = firestoreRequests 
+    ? [...firestoreRequests, ...MOCK_REQUESTS.filter(mr => !firestoreRequests.find(fr => fr.claimNumber === mr.claimNumber))]
+    : MOCK_REQUESTS
+
   // Flatten interventions and link with their requests for the selected tech
-  const payrollData = MOCK_REQUESTS.flatMap(req => 
-    req.interventions
+  const payrollData = allRequests.flatMap(req => 
+    (req.interventions || [])
       .filter(i => selectedTech === "all" || i.technicianId === selectedTech)
       .map(i => ({
         ...i,
         request: req,
         assistanceName: MOCK_COMPANIES.find(c => c.id === req.companyId)?.name || "N/A",
-        usedExpensesTotal: i.detailedExpenses.filter(e => !e.isUnused).reduce((s, e) => s + e.amount, 0),
-        unusedExpensesTotal: i.detailedExpenses.filter(e => e.isUnused).reduce((s, e) => s + e.amount, 0),
+        isValidated: req.billingStatus === 'validated' || req.billingStatus === 'paid',
+        usedExpensesTotal: (i.detailedExpenses || []).filter(e => !e.isUnused).reduce((s, e) => s + (e.amount || 0), 0),
+        unusedExpensesTotal: (i.detailedExpenses || []).filter(e => e.isUnused).reduce((s, e) => s + (e.amount || 0), 0),
         requestAdvances: req.advances || []
       }))
   ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -53,29 +74,33 @@ export default function PayrollPage() {
     })
   }
 
-  const totalLabor = payrollData.reduce((sum, i) => sum + i.laborCost, 0)
-  const totalUsedExpenses = payrollData.reduce((sum, i) => sum + i.usedExpensesTotal, 0)
+  // ONLY sum totals for validated requests
+  const validatedData = payrollData.filter(d => d.isValidated)
+  const totalLabor = validatedData.reduce((sum, i) => sum + (i.laborCost || 0), 0)
+  const totalUsedExpenses = validatedData.reduce((sum, i) => sum + i.usedExpensesTotal, 0)
   
   const processedRequests = new Set()
-  const totalAdvances = payrollData.reduce((sum, i) => {
+  const totalAdvances = validatedData.reduce((sum, i) => {
     if (processedRequests.has(i.request.id)) return sum
     processedRequests.add(i.request.id)
-    return sum + (i.requestAdvances.reduce((s, a) => s + a.amount, 0))
+    return sum + (i.requestAdvances.reduce((s, a) => s + (a.amount || 0), 0))
   }, 0)
 
   const totalToPay = totalLabor - totalUsedExpenses - totalAdvances
 
+  const isLoadingTotal = isUserLoading || isRequestsLoading
+
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-primary">Nómina y Liquidación</h1>
-        <p className="text-muted-foreground">Control de pagos, gestión de inventario y deducción de anticipos.</p>
+        <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">Nómina y Liquidación</h1>
+        <p className="text-muted-foreground font-medium">Control de pagos basado en expedientes validados por contabilidad.</p>
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
         <div className="flex flex-1 gap-4 w-full md:max-w-md">
           <Select value={selectedTech} onValueChange={setSelectedTech}>
-            <SelectTrigger className="w-full bg-white border-primary/20">
+            <SelectTrigger className="w-full bg-white border-primary/20 h-11">
               <Users className="h-4 w-4 mr-2 text-primary" />
               <SelectValue placeholder="Seleccionar Técnico" />
             </SelectTrigger>
@@ -88,10 +113,10 @@ export default function PayrollPage() {
           </Select>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2 font-bold h-11 border-primary text-primary">
             <Printer className="h-4 w-4" /> Imprimir Recibos
           </Button>
-          <Button className="gap-2 bg-green-600 hover:bg-green-700">
+          <Button className="gap-2 bg-green-600 hover:bg-green-700 font-bold h-11 shadow-lg">
             <FileSpreadsheet className="h-4 w-4" /> Exportar Planilla
           </Button>
         </div>
@@ -100,7 +125,7 @@ export default function PayrollPage() {
       <div className="grid gap-6 md:grid-cols-4">
          <Card className="border-l-4 border-l-primary shadow-sm bg-primary/5">
             <CardHeader className="pb-2">
-              <CardTitle className="text-[10px] font-bold text-muted-foreground uppercase">Mano de Obra</CardTitle>
+              <CardTitle className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Mano de Obra Validada</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-xl font-black text-primary">
@@ -110,7 +135,7 @@ export default function PayrollPage() {
          </Card>
          <Card className="border-l-4 border-l-orange-500 shadow-sm bg-orange-50/50">
             <CardHeader className="pb-2">
-              <CardTitle className="text-[10px] font-bold text-muted-foreground uppercase">Gastos Materiales</CardTitle>
+              <CardTitle className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Gastos Deductibles</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-xl font-black text-orange-600">
@@ -120,7 +145,7 @@ export default function PayrollPage() {
          </Card>
          <Card className="border-l-4 border-l-destructive shadow-sm bg-destructive/5">
             <CardHeader className="pb-2">
-              <CardTitle className="text-[10px] font-bold text-muted-foreground uppercase">Anticipos</CardTitle>
+              <CardTitle className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Deducción Anticipos</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-xl font-black text-destructive">
@@ -128,107 +153,103 @@ export default function PayrollPage() {
               </div>
             </CardContent>
          </Card>
-         <Card className="bg-primary text-primary-foreground shadow-lg">
+         <Card className="bg-slate-900 text-white shadow-xl border-none">
             <CardHeader className="pb-2">
-              <CardTitle className="text-[10px] font-bold uppercase opacity-80">Neto a Transferir</CardTitle>
+              <CardTitle className="text-[10px] font-black uppercase opacity-60 tracking-widest">Neto a Pagar</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-black">
+              <div className="text-2xl font-black text-green-400">
                 ${totalToPay.toLocaleString()}
               </div>
             </CardContent>
          </Card>
       </div>
 
-      <Card className="overflow-hidden">
-        <CardHeader className="bg-muted/30">
-          <CardTitle className="text-lg flex items-center gap-2">
+      <Card className="overflow-hidden border-none shadow-md">
+        <CardHeader className="bg-slate-50 border-b">
+          <CardTitle className="text-sm font-black uppercase flex items-center gap-2 tracking-widest text-slate-600">
             <Wallet className="h-5 w-5 text-primary" />
             Liquidación Detallada por Técnico
           </CardTitle>
-          <CardDescription>Audite los gastos extra y determine el cobro final.</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Fecha / Técnico</TableHead>
-                  <TableHead>Expediente / Asistencia</TableHead>
-                  <TableHead>Gestión de Materiales y Auditoría</TableHead>
-                  <TableHead className="text-right">M. de Obra</TableHead>
-                  <TableHead className="text-right">Neto</TableHead>
+                <TableRow className="bg-muted/30">
+                  <TableHead className="font-black uppercase text-[10px] tracking-widest">Fecha / Técnico</TableHead>
+                  <TableHead className="font-black uppercase text-[10px] tracking-widest">Expediente</TableHead>
+                  <TableHead className="font-black uppercase text-[10px] tracking-widest text-center">Estado Contable</TableHead>
+                  <TableHead className="text-right font-black uppercase text-[10px] tracking-widest">M. Obra</TableHead>
+                  <TableHead className="text-right font-black uppercase text-[10px] tracking-widest">Deducciones</TableHead>
+                  <TableHead className="text-right font-black uppercase text-[10px] tracking-widest">Neto</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {payrollData.map((item) => {
+                {isLoadingTotal ? (
+                  <TableRow><TableCell colSpan={7} className="h-40 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary/20" /></TableCell></TableRow>
+                ) : payrollData.length === 0 ? (
+                  <TableRow><TableCell colSpan={7} className="h-40 text-center text-muted-foreground italic font-medium">No hay reportes técnicos registrados para los criterios seleccionados.</TableCell></TableRow>
+                ) : payrollData.map((item) => {
                   const tech = MOCK_TECHNICIANS.find(t => t.id === item.technicianId)
-                  const advances = item.requestAdvances.reduce((s, a) => s + a.amount, 0)
-                  const net = item.laborCost - item.usedExpensesTotal - advances
+                  const advances = item.requestAdvances.reduce((s, a) => s + (a.amount || 0), 0)
+                  const net = (item.laborCost || 0) - item.usedExpensesTotal - advances
                   
                   return (
-                    <TableRow key={item.id} className="hover:bg-muted/50 border-b">
+                    <TableRow key={item.id} className={cn("hover:bg-primary/5 border-b", !item.isValidated && "bg-slate-50/50")}>
                       <TableCell>
                         <div className="flex flex-col">
-                          <span className="text-[10px] font-bold text-muted-foreground">{new Date(item.date).toLocaleDateString()}</span>
-                          <span className="font-semibold text-xs">{tech?.name}</span>
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{new Date(item.date).toLocaleDateString()}</span>
+                          <span className="font-bold text-xs text-slate-800">{tech?.name}</span>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
-                          <span className="font-mono font-bold text-primary text-xs">{item.request.claimNumber}</span>
-                          <span className="text-[10px] text-muted-foreground">{item.assistanceName}</span>
+                          <span className="font-mono font-black text-primary text-xs">{item.request.claimNumber}</span>
+                          <span className="text-[10px] text-muted-foreground font-medium uppercase">{item.assistanceName}</span>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <div className="space-y-2 max-w-[400px]">
-                          {item.detailedExpenses.map(exp => (
-                            <div key={exp.id} className={cn(
-                              "flex flex-col p-2 rounded bg-white border text-[10px]",
-                              exp.isApprovedExtra ? "border-blue-200 bg-blue-50/20" : ""
-                            )}>
-                              <div className="flex items-center justify-between mb-1">
-                                <div className="flex flex-col">
-                                  <span className="font-bold flex items-center gap-1">
-                                    {exp.description} 
-                                    {exp.isApprovedExtra && <ShieldAlert className="h-2.5 w-2.5 text-blue-600" />}
-                                  </span>
-                                  <span className="text-muted-foreground">${exp.amount.toLocaleString()}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Label className="text-[9px]">{exp.isUnused ? 'Inventario' : 'Cobrar'}</Label>
-                                  <Switch 
-                                    size="sm"
-                                    checked={!exp.isUnused}
-                                    onCheckedChange={(v) => handleToggleInventory(exp.id, !v)}
-                                  />
-                                </div>
-                              </div>
-                              
-                              {exp.isApprovedExtra && (
-                                <div className="mt-1 flex items-center gap-1.5 p-1 bg-blue-100/50 rounded text-[8px] font-bold text-blue-700">
-                                  <History className="h-2 w-2" />
-                                  APROBACIÓN EXTRA: {exp.approvedByUserId} • {new Date(exp.approvedAt!).toLocaleDateString()}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                          {item.detailedExpenses.length === 0 && <span className="text-muted-foreground italic text-xs">Sin materiales</span>}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-xs text-green-600">
-                        ${item.laborCost.toLocaleString()}
+                      <TableCell className="text-center">
+                        {item.isValidated ? (
+                          <Badge className="bg-green-600 text-white font-black uppercase text-[9px] tracking-widest py-1 px-3">
+                            <CheckCircle2 className="h-2.5 w-2.5 mr-1" /> VALIDADO
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-600 font-black uppercase text-[9px] tracking-widest py-1 px-3">
+                            <Lock className="h-2.5 w-2.5 mr-1" /> ABIERTO
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex flex-col items-end">
-                          <span className="font-mono font-bold text-primary text-sm">${net.toLocaleString()}</span>
-                          {advances > 0 && <span className="text-[9px] text-destructive">Anticipos: -${advances.toLocaleString()}</span>}
-                        </div>
+                        {item.isValidated ? (
+                          <span className="font-mono font-bold text-xs text-green-600">${(item.laborCost || 0).toLocaleString()}</span>
+                        ) : (
+                          <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">BLOQUEADO</span>
+                        )}
                       </TableCell>
-                      <TableCell>
-                        <Link href={`/requests/${item.request.id}?mode=accounting`}>
-                          <Button variant="ghost" size="icon"><ChevronRight className="h-4 w-4" /></Button>
+                      <TableCell className="text-right">
+                        {item.isValidated ? (
+                          <div className="flex flex-col items-end">
+                            <span className="font-mono text-[10px] text-orange-600">Mat: ${item.usedExpensesTotal.toLocaleString()}</span>
+                            {advances > 0 && <span className="font-mono text-[10px] text-destructive">Ant: ${advances.toLocaleString()}</span>}
+                          </div>
+                        ) : (
+                          <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">---</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {item.isValidated ? (
+                          <span className="font-mono font-black text-primary text-sm">${net.toLocaleString()}</span>
+                        ) : (
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">PENDIENTE</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Link href={`/requests/${item.request.id}`}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary">
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
                         </Link>
                       </TableCell>
                     </TableRow>
@@ -239,37 +260,6 @@ export default function PayrollPage() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Panel de Inventario Activo del Técnico Seleccionado */}
-      {selectedTech !== "all" && (
-        <Card className="border-orange-200 bg-orange-50/20">
-          <CardHeader>
-            <CardTitle className="text-md flex items-center gap-2 text-orange-700">
-              <Package className="h-5 w-5" />
-              Inventario Activo: {MOCK_TECHNICIANS.find(t => t.id === selectedTech)?.name}
-            </CardTitle>
-            <CardDescription>Materiales que el técnico tiene en su poder y no han sido cargados a servicios.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 md:grid-cols-3">
-               {MOCK_TECHNICIANS.find(t => t.id === selectedTech)?.inventory?.map(item => (
-                 <div key={item.id} className="p-3 bg-white border rounded-lg shadow-sm flex justify-between items-center">
-                    <div className="flex flex-col">
-                      <span className="text-xs font-bold">{item.description}</span>
-                      <span className="text-[10px] text-muted-foreground">Cantidad: {item.quantity}</span>
-                    </div>
-                    <Badge variant="outline" className="text-[9px] bg-orange-100 text-orange-700">En stock</Badge>
-                 </div>
-               ))}
-               {(!MOCK_TECHNICIANS.find(t => t.id === selectedTech)?.inventory || MOCK_TECHNICIANS.find(t => t.id === selectedTech)?.inventory?.length === 0) && (
-                 <div className="col-span-3 py-6 text-center text-muted-foreground text-sm italic">
-                   Este técnico no tiene materiales registrados en inventario.
-                 </div>
-               )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   )
 }
