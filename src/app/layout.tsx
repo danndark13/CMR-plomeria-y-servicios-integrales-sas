@@ -23,14 +23,14 @@ export default function RootLayout({
   const isDashboard = pathname === '/';
 
   useEffect(() => {
-    if ('serviceWorker' in navigator) {
+    if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
       window.addEventListener('load', function() {
         navigator.serviceWorker.register('/sw.js').then(
           function(registration) {
-            console.log('ServiceWorker registration successful with scope: ', registration.scope);
+            console.log('RYS PWA: Registro exitoso:', registration.scope);
           },
           function(err) {
-            console.log('ServiceWorker registration failed: ', err);
+            console.error('RYS PWA: Error de registro:', err);
           }
         );
       });
