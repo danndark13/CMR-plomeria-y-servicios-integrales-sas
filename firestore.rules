@@ -76,11 +76,10 @@ service cloud.firestore {
 
     /**
      * @description Gestión de inventario de bodega y técnicos.
-     * Permite lectura a todo el personal activo para verificación de stock.
+     * Acceso total para todos los usuarios autenticados según requerimiento.
      */
     match /inventory/{itemId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if hasRole('Administrador') || hasRole('Contabilidad');
+      allow get, list, create, update, delete: if isSignedIn();
     }
   }
 }
