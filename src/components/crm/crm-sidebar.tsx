@@ -80,7 +80,7 @@ export function CRMSidebar() {
     { title: "Contabilidad", icon: Calculator, href: "/accounting", show: isAdmin || isAccounting },
     { title: "Bitácora", icon: ClipboardList, href: "/requests", show: true },
     { title: "Calendario", icon: CalendarDays, href: "/calendar", show: true },
-    { title: "Inventario", icon: Package, href: "/accounting/payroll", show: isAdmin || isAccounting || isTech },
+    { title: "Inventario", icon: Package, href: "/inventory", show: isAdmin || isAccounting || isTech },
   ]
 
   const adminItems = [
