@@ -64,7 +64,7 @@ export default function DashboardPage() {
   const { user, isUserLoading } = useUser()
   const db = useFirestore()
 
-  // Fetch real data for dashboard metrics
+  // 1. All hooks must be at the TOP level
   const profileRef = useMemoFirebase(() => {
     if (!user || !db) return null
     return doc(db, 'user_profiles', user.uid)
@@ -109,6 +109,26 @@ export default function DashboardPage() {
     return combined
   }, [firestoreRequests])
 
+  const allCompanies = useMemo(() => {
+    return (firestoreCompanies && firestoreCompanies.length > 0) ? firestoreCompanies : MOCK_COMPANIES
+  }, [firestoreCompanies])
+
+  const currentCompany = useMemo(() => {
+    return allCompanies.find(c => c.id === selectedCompanyId)
+  }, [allCompanies, selectedCompanyId])
+
+  const availableAccounts = useMemo(() => {
+    if (!selectedCompanyId) return []
+    
+    const mockAccounts = currentCompany?.accounts || []
+    const dbAccounts = (firestoreAccounts || [])
+      .filter(acc => acc.assistanceCompanyId === selectedCompanyId)
+      .map(acc => acc.name)
+    
+    return Array.from(new Set([...mockAccounts, ...dbAccounts])).sort()
+  }, [selectedCompanyId, currentCompany, firestoreAccounts])
+
+  // 2. Conditional return for loading states comes AFTER hooks
   if (!mounted || isUserLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
@@ -117,22 +137,6 @@ export default function DashboardPage() {
       </div>
     )
   }
-
-  const allCompanies = (firestoreCompanies && firestoreCompanies.length > 0) ? firestoreCompanies : MOCK_COMPANIES
-
-  // Dynamic accounts logic
-  const currentCompany = allCompanies.find(c => c.id === selectedCompanyId)
-  const availableAccounts = useMemo(() => {
-    if (!selectedCompanyId) return []
-    
-    // Combine mock accounts with firestore accounts
-    const mockAccounts = currentCompany?.accounts || []
-    const dbAccounts = (firestoreAccounts || [])
-      .filter(acc => acc.assistanceCompanyId === selectedCompanyId)
-      .map(acc => acc.name)
-    
-    return Array.from(new Set([...mockAccounts, ...dbAccounts])).sort()
-  }, [selectedCompanyId, currentCompany, firestoreAccounts])
 
   const handleCreateService = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -145,7 +149,6 @@ export default function DashboardPage() {
     if (isAddingNewAccount) {
       finalAccountName = (formData.get("newAccountName") as string || "").toUpperCase().trim()
       
-      // Optionally save this new account to Firestore for the company
       if (finalAccountName && selectedCompanyId) {
         const newAccId = Math.random().toString(36).substring(7).toUpperCase()
         const newAccRef = doc(db, "client_accounts", newAccId)
