@@ -6,13 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { ShieldCheck, Lock, User, Loader2, Globe, Mail, Smartphone, Download, Share, PlusSquare, ChevronRight } from "lucide-react"
+import { ShieldCheck, Lock, User, Loader2, Globe, Mail, Smartphone, Download, Share, PlusSquare, HelpCircle, RefreshCw } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { signInAnonymously } from "firebase/auth"
 import { doc, setDoc } from "firebase/firestore"
 import { useFirebase } from "@/firebase"
-import { errorEmitter } from '@/firebase/error-emitter'
-import { FirestorePermissionError } from '@/firebase/errors'
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 function RYSLogo({ className }: { className?: string }) {
   return (
@@ -46,13 +45,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
   const [isIos, setIsIos] = useState(false)
+  const [showInstallHelp, setShowInstallHelp] = useState(false)
 
   useEffect(() => {
-    // Detect iOS
     const isIosDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
     setIsIos(isIosDevice)
 
-    // Listen for PWA install prompt
     const handler = (e: any) => {
       e.preventDefault()
       setDeferredPrompt(e)
@@ -63,9 +61,10 @@ export default function LoginPage() {
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) {
+      setShowInstallHelp(true)
       toast({
-        title: "App ya instalada",
-        description: "Si no la ves, búscala en tus aplicaciones.",
+        title: "Instalación Manual",
+        description: "El navegador no permite la descarga automática ahora. Revisa la ayuda abajo.",
       })
       return
     }
@@ -171,18 +170,40 @@ export default function LoginPage() {
                   <PlusSquare className="h-4 w-4" />
                 </div>
               ) : (
-                <Button 
-                  size="sm" 
-                  variant="secondary" 
-                  className="font-bold shadow-sm h-9 px-4 rounded-xl text-primary"
-                  onClick={handleInstallClick}
-                >
-                  INSTALAR
-                </Button>
+                <div className="flex flex-col gap-1">
+                  <Button 
+                    size="sm" 
+                    variant="secondary" 
+                    className="font-bold shadow-sm h-8 px-4 rounded-xl text-primary"
+                    onClick={handleInstallClick}
+                  >
+                    INSTALAR
+                  </Button>
+                  <Button 
+                    variant="link" 
+                    className="text-[9px] text-white/60 h-auto p-0 font-bold uppercase"
+                    onClick={() => setShowInstallHelp(!showInstallHelp)}
+                  >
+                    {showInstallHelp ? "Cerrar ayuda" : "¿Problemas?"}
+                  </Button>
+                </div>
               )}
             </div>
           </CardContent>
         </Card>
+
+        {showInstallHelp && !isIos && (
+          <Alert className="bg-white border-primary/20 animate-in slide-in-from-top-2">
+            <HelpCircle className="h-4 w-4 text-primary" />
+            <AlertTitle className="text-[10px] font-black uppercase text-primary">Instalación Manual</AlertTitle>
+            <AlertDescription className="text-[10px] text-slate-600 font-medium">
+              Si ya desinstalaste la app y no aparece el botón:<br/>
+              1. Pulsa los <strong>tres puntos (⋮)</strong> de tu navegador.<br/>
+              2. Busca la opción <strong>"Instalar aplicación"</strong> o "Añadir a panta. de inicio".<br/>
+              3. Si no aparece, limpia el historial de navegación de este sitio y recarga.
+            </AlertDescription>
+          </Alert>
+        )}
 
         <div className="text-center space-y-2">
           <div className="inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-white shadow-2xl mb-2 border-2 border-slate-100 p-2">
