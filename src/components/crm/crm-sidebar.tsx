@@ -17,7 +17,8 @@ import {
   LogOut,
   User as UserIcon,
   Package,
-  RefreshCw
+  RefreshCw,
+  Receipt
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -63,23 +64,27 @@ export function CRMSidebar() {
   }
 
   // Define navigation based on role
-  const role = profile?.roleId || 'Cargando...'
+  const role = profile?.roleId || (isLoading ? 'Cargando...' : 'Sin Rol')
   const isAdmin = role === 'Administrador'
   const isTech = role === 'Técnico'
   const isAccounting = role === 'Contabilidad'
 
   const navigationItems = [
     { title: "Panel Principal", icon: LayoutDashboard, href: "/", show: true },
+    { title: "Contabilidad", icon: Calculator, href: "/accounting", show: isAdmin || isAccounting },
     { title: "Bitácora", icon: ClipboardList, href: "/requests", show: true },
     { title: "Calendario", icon: CalendarDays, href: "/calendar", show: true },
     { title: "Inventario", icon: Package, href: "/accounting/payroll", show: isAdmin || isAccounting || isTech },
-    { title: "Empresas", icon: Briefcase, href: "/companies", show: !isTech },
-    { title: "Técnicos", icon: Users, href: "/technicians", show: !isTech },
+  ]
+
+  const adminItems = [
+    { title: "Empresas", icon: Briefcase, href: "/companies", show: isAdmin },
+    { title: "Técnicos", icon: Users, href: "/technicians", show: isAdmin },
+    { title: "Gestión Usuarios", icon: UserCog, href: "/admin/users", show: isAdmin },
   ]
 
   const accountItems = [
     { title: "Actualizar datos", icon: RefreshCw, href: "/profile", show: true },
-    { title: "Gestión Usuarios", icon: UserCog, href: "/admin/users", show: isAdmin },
   ]
 
   const displayName = isLoading 
@@ -139,9 +144,38 @@ export function CRMSidebar() {
           </SidebarMenu>
         </SidebarGroup>
 
+        {isAdmin && (
+          <SidebarGroup className="mt-4">
+            <SidebarGroupLabel className="px-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">
+              Administración
+            </SidebarGroupLabel>
+            <SidebarMenu>
+              {adminItems.filter(i => i.show).map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname === item.href}
+                    className={cn(
+                      "flex items-center gap-3 rounded-xl px-4 py-6 transition-all duration-300",
+                      pathname === item.href 
+                        ? "bg-primary/10 text-primary font-bold" 
+                        : "text-slate-600 hover:bg-slate-50 hover:text-primary"
+                    )}
+                  >
+                    <Link href={item.href}>
+                      <item.icon className="h-5 w-5 text-slate-400" />
+                      <span className="text-sm font-medium">{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroup>
+        )}
+
         <SidebarGroup className="mt-4">
           <SidebarGroupLabel className="px-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">
-            Cuenta
+            Configuración
           </SidebarGroupLabel>
           <SidebarMenu>
             {accountItems.filter(i => i.show).map((item) => (
