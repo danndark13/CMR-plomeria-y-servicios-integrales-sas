@@ -4,13 +4,14 @@
 import { useState, useEffect } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS, MOCK_COMPANIES } from "@/lib/mock-data"
-import { ServiceRequest } from "@/lib/types"
+import { ServiceRequest, Expense } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { 
   ArrowLeft, 
   Sparkles, 
@@ -22,15 +23,19 @@ import {
   RefreshCw,
   ArrowRight,
   Save,
-  Lock
+  Lock,
+  Package,
+  Info,
+  Warehouse,
+  ShoppingCart
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
 import { serviceNoteSummaryGenerator } from "@/ai/flows/service-note-summary-generator"
 import { toast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
-import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
-import { doc, setDoc, updateDoc } from 'firebase/firestore'
+import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase'
+import { doc, setDoc, updateDoc, collection } from 'firebase/firestore'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 
@@ -51,6 +56,13 @@ export default function RequestDetailPage() {
   const [requestedAmount, setRequestedAmount] = useState<number>(0)
   const [approvedAmount, setApprovedAmount] = useState<number>(0)
   const [isConciliated, setIsConciliated] = useState(false)
+
+  // Fetch Inventory for cross-check
+  const inventoryQuery = useMemoFirebase(() => {
+    if (!db) return null
+    return collection(db, "inventory")
+  }, [db])
+  const { data: inventoryItems } = useCollection(inventoryQuery)
 
   const requestRef = useMemoFirebase(() => {
     if (!db || !id) return null
@@ -106,6 +118,13 @@ export default function RequestDetailPage() {
   const allExpenses = localRequest.interventions.flatMap(i => i.detailedExpenses.filter(e => !e.isUnused))
   const totalUsedExpenses = allExpenses.reduce((s, e) => s + e.amount, 0)
   const totalSuggested = totalLabor + totalUsedExpenses
+
+  // Helper to check if an expense matches warehouse items
+  const checkWarehouseStock = (expenseDescription: string) => {
+    if (!inventoryItems) return null
+    const search = expenseDescription.toUpperCase().trim()
+    return inventoryItems.find(item => search.includes(item.description.toUpperCase()) || item.description.toUpperCase().includes(search))
+  }
 
   const handleGenerateSummary = async () => {
     if (!canEditReport) return;
@@ -277,7 +296,7 @@ export default function RequestDetailPage() {
 
           <div className="space-y-4">
             <h2 className="text-xl font-black tracking-tighter flex items-center gap-2 text-slate-800 uppercase">
-              <Wrench className="h-5 w-5 text-primary" /> Intervenciones Técnicas
+              <Wrench className="h-5 w-5 text-primary" /> Intervenciones y Gastos
             </h2>
             {localRequest.interventions.map((intervention) => (
               <Card key={intervention.id} className="overflow-hidden border-none shadow-md">
@@ -288,8 +307,49 @@ export default function RequestDetailPage() {
                     <span className="font-black text-[11px] text-slate-600 uppercase">{MOCK_TECHNICIANS.find(t => t.id === intervention.technicianId)?.name}</span>
                   </div>
                 </CardHeader>
-                <CardContent className="pt-4">
+                <CardContent className="pt-4 space-y-4">
                   <p className="text-sm text-slate-700 italic leading-relaxed">"{intervention.notes}"</p>
+                  
+                  {/* Expense Checking Logic */}
+                  {intervention.detailedExpenses.length > 0 && (
+                    <div className="space-y-3 pt-2">
+                      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest border-b pb-1">Análisis de Gastos de Campo</p>
+                      {intervention.detailedExpenses.map(exp => {
+                        const warehouseItem = checkWarehouseStock(exp.description)
+                        return (
+                          <div key={exp.id} className="flex flex-col gap-2 p-3 bg-slate-50 rounded-lg border">
+                            <div className="flex justify-between items-start">
+                              <div className="flex flex-col">
+                                <span className="text-xs font-bold text-slate-800">{exp.description}</span>
+                                <span className="text-[10px] text-muted-foreground">Valor solicitado: ${exp.amount.toLocaleString()}</span>
+                              </div>
+                              <Badge variant="outline" className="text-[9px] font-black uppercase bg-white">
+                                {exp.category}
+                              </Badge>
+                            </div>
+
+                            {warehouseItem && (
+                              <Alert className="bg-blue-50 border-blue-200 text-blue-800 py-2">
+                                <Warehouse className="h-4 w-4 text-blue-600" />
+                                <AlertTitle className="text-[10px] font-black uppercase mb-1">Stock Disponible en Bodega</AlertTitle>
+                                <AlertDescription className="text-[11px] leading-tight flex flex-col gap-2">
+                                  <span>Contamos con <strong>{warehouseItem.quantity} unidades</strong> de "{warehouseItem.description}" en bodega central.</span>
+                                  <div className="flex gap-2 mt-1">
+                                    <Button variant="outline" size="sm" className="h-7 text-[9px] font-black uppercase bg-white border-blue-300 text-blue-700 hover:bg-blue-100 gap-1">
+                                      <Warehouse className="h-3 w-3" /> Tomar de Bodega
+                                    </Button>
+                                    <Button variant="outline" size="sm" className="h-7 text-[9px] font-black uppercase bg-white border-slate-300 text-slate-600 hover:bg-slate-100 gap-1">
+                                      <ShoppingCart className="h-3 w-3" /> Comprar Externo
+                                    </Button>
+                                  </div>
+                                </AlertDescription>
+                              </Alert>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}
