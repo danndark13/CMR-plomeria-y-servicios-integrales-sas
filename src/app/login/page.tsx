@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { ShieldCheck, Lock, User, Loader2, Info } from "lucide-react"
+import { ShieldCheck, Lock, User, Loader2 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { signInAnonymously } from "firebase/auth"
 import { doc, setDoc } from "firebase/firestore"
@@ -36,7 +36,7 @@ export default function LoginPage() {
       toast({
         variant: "destructive",
         title: "Acceso Denegado",
-        description: "ID de usuario o contraseña incorrectos. Use RYS2025.",
+        description: "ID de usuario o contraseña incorrectos.",
       })
       setIsLoading(false)
       return
@@ -76,7 +76,6 @@ export default function LoginPage() {
         cedula
       }
       
-      // CRITICAL: No await here. Optimistic update and background sync.
       setDoc(profileRef, profileData, { merge: true })
         .catch(async (error) => {
           const permissionError = new FirestorePermissionError({
@@ -125,13 +124,6 @@ export default function LoginPage() {
           </CardHeader>
           <form onSubmit={handleLogin}>
             <CardContent className="space-y-6 pt-6">
-              <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg flex items-start gap-3">
-                <Info className="h-4 w-4 text-primary mt-0.5" />
-                <div className="text-[10px] text-primary font-medium leading-tight">
-                  IDs de prueba: <strong>ADMIN01</strong>, <strong>GERENTE</strong>, <strong>CON01</strong>, <strong>SER01</strong><br/>
-                  Clave: <strong>RYS2025</strong>
-                </div>
-              </div>
               <div className="space-y-2">
                 <Label htmlFor="userId" className="text-[10px] uppercase font-black tracking-widest">ID de Usuario</Label>
                 <div className="relative">
@@ -147,7 +139,7 @@ export default function LoginPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password" title="Clave: RYS2025" className="text-[10px] uppercase font-black tracking-widest">Contraseña</Label>
+                <Label htmlFor="password" className="text-[10px] uppercase font-black tracking-widest">Contraseña</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input 
