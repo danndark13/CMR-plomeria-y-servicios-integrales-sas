@@ -23,7 +23,6 @@ export default function AdminUsersPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
 
-  // Fetch all users from Firestore
   const usersQuery = useMemoFirebase(() => {
     if (!db) return null
     return collection(db, "user_profiles")
@@ -80,6 +79,15 @@ export default function AdminUsersPage() {
 
   const toggleUserStatus = async (user: any) => {
     if (!db) return
+    if (user.username === 'GERENTE') {
+      toast({
+        variant: "destructive",
+        title: "Acción Protegida",
+        description: "El usuario Gerente no puede ser desactivado por seguridad del sistema."
+      })
+      return
+    }
+
     setIsProcessing(true)
     try {
       await updateDoc(doc(db, "user_profiles", user.id), {
@@ -255,7 +263,7 @@ export default function AdminUsersPage() {
                         <div className="max-w-[300px] mx-auto">
                           <p className="text-sm font-bold text-slate-800">No hay perfiles activos</p>
                           <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                            Recuerda que para que aparezcan <strong>SER01</strong> y <strong>CON01</strong>, primero debes iniciar sesión con esos IDs una vez.
+                            Recuerda que para que aparezcan <strong>SER01</strong>, <strong>CON01</strong> y <strong>GERENTE</strong>, primero debes iniciar sesión con esos IDs una vez.
                           </p>
                         </div>
                       </div>
@@ -311,7 +319,7 @@ export default function AdminUsersPage() {
                           <DropdownMenuItem 
                             className={user.isActive ? "text-destructive font-bold" : "text-green-600 font-bold"} 
                             onClick={() => toggleUserStatus(user)}
-                            disabled={isProcessing}
+                            disabled={isProcessing || user.username === 'GERENTE'}
                           >
                             <Power className="h-4 w-4 mr-2" /> {user.isActive ? "Suspender Acceso" : "Reactivar"}
                           </DropdownMenuItem>

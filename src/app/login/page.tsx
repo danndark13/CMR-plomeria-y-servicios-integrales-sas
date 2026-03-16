@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { ShieldCheck, Lock, User, Loader2, Info } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { signInAnonymously } from "firebase/auth"
@@ -27,10 +26,11 @@ export default function LoginPage() {
 
     const isCorrectPassword = password === "RYS2025"
     const inputId = userId.toUpperCase().trim()
+    const isGerente = inputId === "GERENTE"
     const rolePrefix = inputId.substring(0, 3)
     const validPrefixes = ["ADM", "CON", "SER"]
     
-    if (!validPrefixes.includes(rolePrefix) || !isCorrectPassword) {
+    if (!isCorrectPassword || (!isGerente && !validPrefixes.includes(rolePrefix))) {
       toast({
         variant: "destructive",
         title: "Acceso Denegado",
@@ -41,33 +41,43 @@ export default function LoginPage() {
     }
 
     try {
-      // 1. Iniciar sesión anónima
       const userCredential = await signInAnonymously(auth)
       const user = userCredential.user
 
-      // 2. Determinar rol según prefijo
       let roleId = "Servicio al Cliente"
-      if (rolePrefix === "ADM") roleId = "Administrador"
-      if (rolePrefix === "CON") roleId = "Contabilidad"
+      let firstName = "Daniel"
+      let lastName = "Cespedes"
+      let email = "danielcorecspds@gmail.com"
+      let cedula = "1110564748"
 
-      // 3. Crear o actualizar el perfil de Daniel para este ID específico en Firestore
+      if (isGerente) {
+        roleId = "Administrador"
+        firstName = "YULIETH VANESA"
+        lastName = "RAMIREZ"
+        email = "gerente@rysplomeria.com"
+        cedula = "0000000000" // Cédula genérica para gerente si no se especificó
+      } else {
+        if (rolePrefix === "ADM") roleId = "Administrador"
+        if (rolePrefix === "CON") roleId = "Contabilidad"
+      }
+
       const profileRef = doc(firestore, "user_profiles", user.uid)
       
       await setDoc(profileRef, {
         id: user.uid,
         username: inputId,
-        firstName: "Daniel",
-        lastName: "Cespedes",
-        email: "danielcorecspds@gmail.com",
+        firstName,
+        lastName,
+        email,
         phoneNumber: "3167533657",
-        roleId: roleId,
+        roleId,
         isActive: true,
-        cedula: "1110564748"
+        cedula
       }, { merge: true })
 
       toast({
         title: "Bienvenido a RYS SAS",
-        description: `Sesión iniciada como Daniel Céspedes (${roleId}).`,
+        description: `Sesión iniciada como ${firstName} (${roleId}).`,
       })
       
       router.push("/")
@@ -107,7 +117,7 @@ export default function LoginPage() {
               <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg flex items-start gap-3">
                 <Info className="h-4 w-4 text-primary mt-0.5" />
                 <div className="text-[10px] text-primary font-medium leading-tight">
-                  IDs de prueba: <strong>ADMIN01</strong>, <strong>CON01</strong>, <strong>SER01</strong><br/>
+                  IDs de prueba: <strong>ADMIN01</strong>, <strong>GERENTE</strong>, <strong>CON01</strong>, <strong>SER01</strong><br/>
                   Clave: <strong>RYS2025</strong>
                 </div>
               </div>
