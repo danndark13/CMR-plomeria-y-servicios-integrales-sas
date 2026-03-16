@@ -5,55 +5,54 @@ export const MOCK_COMPANIES: AssistanceCompany[] = [
     id: '1', 
     name: 'IKE Asistencia', 
     accounts: [
-      'HDI (AL) Coomeva', 
-      'HDI', 
-      'HDI Coomeva', 
-      'Nexus', 
-      'Previsora', 
-      'HDI (AL) Livianos Coomeva', 
-      'HDI Hogar Dulce Hogar', 
-      'Popular Downgrade', 
-      'Previsora Hogar 2024', 
-      'HDI (AL) Hogar Coomeva', 
-      'Previsora Areas Comunes', 
-      'HDI (AL) Hogar Basico+Plus', 
-      'HDI (AL) Hogar Basico+Plus+Especializado', 
-      'Previsora Areas Comunes 2024', 
-      'Banco Popular Cuentabientes 2019', 
-      'Colmena Cartera BCS', 
-      'HDI (AL) Generales Administrativos', 
-      'HDI (AL) Livianos', 
-      'Popular Cuentahabientes Plus', 
-      'Banco Popular Vital',
-      'Coomeva'
+      'HDI (AL) COOMEVA', 
+      'HDI COOMEVA', 
+      'NEXUS', 
+      'PREVISORA', 
+      'HDI (AL) LIVIANOS COOMEVA', 
+      'HDI HOGAR DULCE HOGAR', 
+      'POPULAR DOWNGRADE', 
+      'PREVISORA HOGAR 2024', 
+      'HDI (AL) HOGAR COOMEVA', 
+      'PREVISORA AREAS COMUNES', 
+      'HDI (AL) HOGAR BASICO+PLUS', 
+      'HDI (AL) HOGAR BASICO+PLUS+ESPECIALIZADO', 
+      'PREVISORA AREAS COMUNES 2024', 
+      'BANCO POPULAR CUENTABIENTES 2019', 
+      'COLMENA CARTERA BCS', 
+      'HDI (AL) GENERALES ADMINISTRATIVOS', 
+      'HDI (AL) LIVIANOS', 
+      'POPULAR CUENTAHABIENTES PLUS', 
+      'BANCO POPULAR VITAL',
+      'COOMEVA'
     ] 
   },
   { 
     id: '2', 
     name: 'IGS', 
     accounts: [
-      'Allianz', 
-      'Bancolombia', 
-      'Claro', 
-      'Confama', 
-      'Davivienda', 
-      'Ser Finanzas', 
-      'Tuya', 
-      'Mapfre', 
+      'ALLIANZ', 
+      'BANCOLOMBIA', 
+      'CLARO', 
+      'CONFAMA', 
+      'DAVIVIENDA', 
+      'SER FINANZAS', 
+      'TUYA', 
+      'MAPFRE', 
       'BBVA',
-      'Sura',
-      'Seguros Bolivar'
+      'SURA',
+      'SEGUROS BOLIVAR'
     ] 
   },
   { 
     id: '3', 
-    name: 'Mawdy', 
-    accounts: ['Davivienda', 'Sura', 'Bolivar', 'Mapfre', 'Axa Colpatria'] 
+    name: 'MAWDY', 
+    accounts: ['DAVIVIENDA', 'SURA', 'BOLIVAR', 'MAPFRE', 'AXA COLPATRIA'] 
   },
   { 
     id: '4', 
-    name: 'Assisprex', 
-    accounts: ['Generali', 'Liberty Seguros', 'Allianz', 'La Equidad'] 
+    name: 'ASSISPREX', 
+    accounts: ['GENERALI', 'LIBERTY SEGUROS', 'ALLIANZ', 'LA EQUIDAD'] 
   },
 ];
 
@@ -70,78 +69,240 @@ export const MOCK_TECHNICIANS: Technician[] = [
 ];
 
 const today = new Date();
+const getDate = (daysAgo: number) => new Date(today.getTime() - (daysAgo * 86400000)).toISOString();
 
 export const MOCK_REQUESTS: ServiceRequest[] = [
   {
     id: 'REQ-001',
     category: 'Plomería',
     companyId: '1',
-    accountName: 'HDI (AL) Coomeva',
+    accountName: 'HDI (AL) COOMEVA',
     status: 'in_progress',
-    insuredName: 'Ana Maria Restrepo',
-    claimNumber: 'EXP-998822',
-    address: 'Calle 100 #15-30, Apt 502, Bogotá',
-    phoneNumber: '310 555 1234',
-    description: 'Fuga de agua en baño principal, goteo constante.',
-    accountingNotes: 'Pendiente descontar $5.000 de transporte por no presentar recibo.',
+    insuredName: 'MARIA FERNANDA ROJAS',
+    claimNumber: 'EXP-2025-001',
+    address: 'CALLE 127 #45-20, APT 402',
+    phoneNumber: '310 456 7890',
+    description: 'FUGA EN EL REGISTRO PRINCIPAL DEL APARTAMENTO.',
+    billingStatus: 'pending',
+    requestedAmount: 150000,
+    approvedAmount: 0,
     interventions: [
       {
         id: 'v1',
         technicianId: 'WILMAR',
         type: 'Diagnóstico',
-        date: new Date(today.getTime() - 86400000).toISOString(),
-        notes: 'Se realizó visita técnica inicial. Se identifica que la fuga proviene del sello de la brida.',
+        date: getDate(1),
+        notes: 'SE IDENTIFICA ROTURA EN TUBO DE 1/2 PULGADA.',
         laborCost: 45000,
-        detailedExpenses: [
-          { id: 'e1', amount: 5000, description: 'Transporte Urbano', category: 'transporte', isUnused: false }
-        ]
-      },
+        detailedExpenses: [{ id: 'e1', amount: 15000, description: 'TUBO PVC 1/2', category: 'material', isUnused: false }]
+      }
+    ],
+    createdAt: getDate(2),
+    updatedAt: getDate(0),
+  },
+  {
+    id: 'REQ-002',
+    category: 'Cerrajería',
+    companyId: '2',
+    accountName: 'ALLIANZ',
+    status: 'assigned',
+    insuredName: 'CARLOS ANDRES GOMEZ',
+    claimNumber: 'EXP-998877',
+    address: 'CRA 15 #100-30',
+    phoneNumber: '315 222 3344',
+    description: 'APERTURA DE PUERTA PRINCIPAL POR EXTRAVIO DE LLAVES.',
+    billingStatus: 'pending',
+    scheduledVisit: {
+      id: 'sv1',
+      technicianId: 'ANDRES',
+      date: new Date(today.getTime() + 3600000).toISOString(),
+      createdAt: getDate(0)
+    },
+    interventions: [],
+    createdAt: getDate(0),
+    updatedAt: getDate(0),
+  },
+  {
+    id: 'REQ-003',
+    category: 'Impermeabilización',
+    companyId: '2',
+    accountName: 'BANCOLOMBIA',
+    status: 'pending',
+    insuredName: 'JUAN PABLO BELTRAN',
+    claimNumber: 'IGS-554433',
+    address: 'AV. BOYACA #138-10',
+    phoneNumber: '300 111 2233',
+    description: 'FILTRACION EN TECHO POR LLUVIAS RECIENTES.',
+    billingStatus: 'pending',
+    interventions: [],
+    createdAt: getDate(1),
+    updatedAt: getDate(1),
+  },
+  {
+    id: 'REQ-004',
+    category: 'Electricidad',
+    companyId: '1',
+    accountName: 'PREVISORA',
+    status: 'completed',
+    insuredName: 'ALICIA MEJIA',
+    claimNumber: 'IKE-776655',
+    address: 'CALLE 80 #68-40',
+    phoneNumber: '320 999 8877',
+    description: 'CORTO CIRCUITO EN TOMA CORRIENTE DE LA COCINA.',
+    billingStatus: 'validated',
+    invoiceNumber: 'FE-1020',
+    billingConsecutive: '2025-005',
+    requestedAmount: 85000,
+    approvedAmount: 85000,
+    interventions: [
       {
         id: 'v2',
-        technicianId: 'WILMAR',
-        type: 'Reparación',
-        date: today.toISOString(),
-        notes: 'Programado para cambio de sellos hoy.',
-        laborCost: 65000,
-        detailedExpenses: [
-          { 
-            id: 'e2', 
-            amount: 12000, 
-            description: 'Kit de Sellos Brida', 
-            category: 'material', 
-            isUnused: false,
-            isApprovedExtra: true,
-            approvedByUserId: 'Andrés Castro (Admin)',
-            approvedAt: new Date(today.getTime() - 3600000).toISOString()
-          },
-          { id: 'e3', amount: 8000, description: 'Pegante PVC', category: 'material', isUnused: true }
-        ]
+        technicianId: 'NORVEY',
+        type: 'Finalización',
+        date: getDate(3),
+        notes: 'CAMBIO DE TOMA CORRIENTE Y REVISION DE TACOS.',
+        laborCost: 60000,
+        detailedExpenses: [{ id: 'e2', amount: 25000, description: 'TOMA CORRIENTE LEVITON', category: 'material', isUnused: false }]
       }
     ],
-    advances: [
-      {
-        id: 'adv1',
-        amount: 20000,
-        reason: 'Anticipo para transporte y materiales menores',
-        date: today.toISOString(),
-        createdByUserId: 'user-admin'
-      }
-    ],
+    createdAt: getDate(5),
+    updatedAt: getDate(3),
+  },
+  {
+    id: 'REQ-005',
+    category: 'Destaponamiento',
+    companyId: '1',
+    accountName: 'NEXUS',
+    status: 'in_progress',
+    insuredName: 'ROBERTO CANO',
+    claimNumber: 'EXP-443322',
+    address: 'CRA 7 #72-10',
+    phoneNumber: '311 444 5566',
+    description: 'TAPONAMIENTO DE SIFON EN PATIO DE ROPAS.',
     billingStatus: 'pending',
-    requestedAmount: 180000,
-    approvedAmount: 165000,
-    auditLogs: [
+    interventions: [
       {
-        id: 'log1',
-        userId: 'admin-1',
-        userName: 'Andrés Castro',
-        action: 'Actualización Financiera',
-        timestamp: new Date(today.getTime() - 3600000).toISOString(),
-        details: 'Cambio de Valor Solicitado: $150k -> $180k. Valor Aprobado: $165k.'
+        id: 'v3',
+        technicianId: 'NEIDER',
+        type: 'Diagnóstico',
+        date: getDate(0),
+        notes: 'SE REQUIERE USO DE SONDA ELECTRICA.',
+        laborCost: 55000,
+        detailedExpenses: []
       }
     ],
-    createdAt: new Date(today.getTime() - 172800000).toISOString(),
-    updatedAt: today.toISOString(),
+    createdAt: getDate(1),
+    updatedAt: getDate(0),
+  },
+  {
+    id: 'REQ-006',
+    category: 'Garantía',
+    companyId: '2',
+    accountName: 'SURA',
+    status: 'warranty',
+    insuredName: 'SANDRA MILENA PAEZ',
+    claimNumber: 'GAR-001',
+    address: 'CALLE 134 #19-50',
+    phoneNumber: '318 777 6655',
+    description: 'REINCIDENCIA DE GOTEO EN LLAVE DE LAVAMANOS REPARADA HACE 1 SEMANA.',
+    billingStatus: 'pending',
+    interventions: [],
+    createdAt: getDate(2),
+    updatedAt: getDate(2),
+  },
+  {
+    id: 'REQ-007',
+    category: 'Plomería',
+    companyId: '3',
+    accountName: 'DAVIVIENDA',
+    status: 'completed',
+    insuredName: 'FERNANDO ARANGO',
+    claimNumber: 'MAW-112233',
+    address: 'CRA 50 #120-15',
+    phoneNumber: '301 555 4433',
+    description: 'INSTALACION DE CALENTADOR ELECTRICO.',
+    billingStatus: 'validated',
+    invoiceNumber: 'FE-1021',
+    billingConsecutive: '2025-006',
+    requestedAmount: 120000,
+    approvedAmount: 110000,
+    interventions: [
+      {
+        id: 'v4',
+        technicianId: 'URBEY',
+        type: 'Finalización',
+        date: getDate(4),
+        notes: 'INSTALACION EXITOSA Y PRUEBA DE FUNCIONAMIENTO.',
+        laborCost: 90000,
+        detailedExpenses: [{ id: 'e3', amount: 20000, description: 'ACCESORIOS GALVANIZADOS', category: 'material', isUnused: false }]
+      }
+    ],
+    createdAt: getDate(6),
+    updatedAt: getDate(4),
+  },
+  {
+    id: 'REQ-008',
+    category: 'Vidriería',
+    companyId: '2',
+    accountName: 'TUYA',
+    status: 'assigned',
+    insuredName: 'GLORIA ESTELLA',
+    claimNumber: 'IGS-887766',
+    address: 'CRA 9 #150-20',
+    phoneNumber: '316 333 2211',
+    description: 'RUPTURA DE VIDRIO DE VENTANA PRINCIPAL.',
+    billingStatus: 'pending',
+    scheduledVisit: {
+      id: 'sv2',
+      technicianId: 'HECTOR',
+      date: new Date(today.getTime() + 172800000).toISOString(),
+      createdAt: getDate(0)
+    },
+    interventions: [],
+    createdAt: getDate(1),
+    updatedAt: getDate(0),
+  },
+  {
+    id: 'REQ-009',
+    category: 'Electricidad',
+    companyId: '1',
+    accountName: 'HDI COOMEVA',
+    status: 'pending',
+    insuredName: 'DANIEL CASTAÑO',
+    claimNumber: 'EXP-556677',
+    address: 'CALLE 170 #50-10',
+    phoneNumber: '312 888 7766',
+    description: 'REVISION DE TABLERO DE BREAKERS POR SOBRECARGA.',
+    billingStatus: 'pending',
+    interventions: [],
+    createdAt: getDate(0),
+    updatedAt: getDate(0),
+  },
+  {
+    id: 'REQ-010',
+    category: 'Plomería',
+    companyId: '2',
+    accountName: 'MAPFRE',
+    status: 'in_progress',
+    insuredName: 'JIMENA SUAREZ',
+    claimNumber: 'IGS-332211',
+    address: 'CRA 11 #93-40',
+    phoneNumber: '314 666 5544',
+    description: 'HUMEDAD EN PARED COLINDANTE CON BAÑO SOCIAL.',
+    billingStatus: 'pending',
+    interventions: [
+      {
+        id: 'v5',
+        technicianId: 'JORGE',
+        type: 'Diagnóstico',
+        date: getDate(1),
+        notes: 'SE REALIZA EXPLORACION, SE DETECTA PORO EN TUBO DE COBRE.',
+        laborCost: 50000,
+        detailedExpenses: []
+      }
+    ],
+    createdAt: getDate(2),
+    updatedAt: getDate(1),
   }
 ];
 
