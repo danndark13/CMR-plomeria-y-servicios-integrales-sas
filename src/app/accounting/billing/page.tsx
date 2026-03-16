@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
@@ -15,24 +15,38 @@ import {
   ChevronRight,
   ArrowLeft,
   FileText,
-  DollarSign
+  DollarSign,
+  Loader2
 } from "lucide-react"
 import { MOCK_REQUESTS, MOCK_COMPANIES } from "@/lib/mock-data"
 import { toast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { collection } from "firebase/firestore"
 
 export default function BillingReportPage() {
+  const db = useFirestore()
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
 
+  const requestsQuery = useMemoFirebase(() => {
+    if (!db) return null
+    return collection(db, "service_requests")
+  }, [db])
+
+  const { data: firestoreRequests, isLoading } = useCollection(requestsQuery)
+
+  // Fusionamos los datos de Firestore con los Mocks para tener siempre data visible
+  const allRequests = firestoreRequests ? [...firestoreRequests, ...MOCK_REQUESTS.filter(mr => !firestoreRequests.find(fr => fr.claimNumber === mr.claimNumber))] : MOCK_REQUESTS
+
   const selectedCompany = MOCK_COMPANIES.find(c => c.id === selectedCompanyId)
 
-  const filteredRequests = MOCK_REQUESTS.filter(req => {
+  const filteredRequests = allRequests.filter(req => {
     const matchesCompany = !selectedCompanyId || req.companyId === selectedCompanyId
-    const matchesSearch = req.claimNumber.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          req.insuredName.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSearch = (req.claimNumber || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          (req.insuredName || "").toLowerCase().includes(searchTerm.toLowerCase())
     return matchesCompany && matchesSearch
   })
 
@@ -89,7 +103,7 @@ export default function BillingReportPage() {
                   <Building2 className="h-6 w-6" />
                 </div>
                 <CardTitle className="text-lg uppercase font-black">{company.name}</CardTitle>
-                <CardDescription>{MOCK_REQUESTS.filter(r => r.companyId === company.id).length} expedientes listos</CardDescription>
+                <CardDescription>{allRequests.filter(r => r.companyId === company.id).length} expedientes listos</CardDescription>
               </CardHeader>
               <CardContent>
                 <Button variant="ghost" className="w-full justify-between text-xs font-bold p-0 group-hover:text-primary">
@@ -151,9 +165,15 @@ export default function BillingReportPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredRequests.map((req) => {
-                const totalLabor = req.interventions.reduce((sum, i) => sum + i.laborCost, 0)
-                const expensesBreakdown = req.interventions.flatMap(i => i.detailedExpenses.filter(e => !e.isUnused))
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-40 text-center">
+                    <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary/20" />
+                  </TableCell>
+                </TableRow>
+              ) : filteredRequests.map((req) => {
+                const totalLabor = (req.interventions || []).reduce((sum, i) => sum + i.laborCost, 0)
+                const expensesBreakdown = (req.interventions || []).flatMap(i => (i.detailedExpenses || []).filter(e => !e.isUnused))
                 const totalExpenses = expensesBreakdown.reduce((s, e) => s + e.amount, 0)
                 const finalAmount = req.approvedAmount || req.requestedAmount || 0
                 const hasBeenConciliated = !!req.approvedAmount && req.approvedAmount !== req.requestedAmount

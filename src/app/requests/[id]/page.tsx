@@ -24,7 +24,8 @@ import {
   Wallet,
   AlertCircle,
   FileText,
-  RefreshCw
+  RefreshCw,
+  TrendingDown
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -32,7 +33,7 @@ import { serviceNoteSummaryGenerator } from "@/ai/flows/service-note-summary-gen
 import { toast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
-import { doc } from 'firebase/firestore'
+import { doc, updateDoc, setDoc } from 'firebase/firestore'
 
 export default function RequestDetailPage() {
   const { id } = useParams()
@@ -40,38 +41,50 @@ export default function RequestDetailPage() {
   const { user } = useUser()
   const db = useFirestore()
   
-  const [request, setRequest] = useState<ServiceRequest | null>(null)
+  const [localRequest, setLocalRequest] = useState<ServiceRequest | null>(null)
   const [report, setReport] = useState("")
   const [accountingNotes, setAccountingNotes] = useState("")
   const [isSummarizing, setIsSummarizing] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   
   // Billing States
   const [requestedAmount, setRequestedAmount] = useState<number>(0)
   const [approvedAmount, setApprovedAmount] = useState<number>(0)
   const [isConciliated, setIsConciliated] = useState(false)
-  const [currentStatus, setCurrentStatus] = useState<ServiceStatus>('pending')
-  
-  const profileRef = useMemoFirebase(() => {
-    if (!user || !db) return null
-    return doc(db, 'user_profiles', user.uid)
-  }, [user, db])
 
-  const { data: profile, isLoading: isProfileLoading } = useDoc(profileRef)
+  const requestRef = useMemoFirebase(() => {
+    if (!db || !id) return null
+    return doc(db, 'service_requests', id as string)
+  }, [db, id])
+
+  const { data: firestoreRequest, isLoading: isRequestLoading } = useDoc(requestRef)
+  const { data: profile, isLoading: isProfileLoading } = useDoc(
+    useMemoFirebase(() => (user && db ? doc(db, 'user_profiles', user.uid) : null), [user, db])
+  )
 
   useEffect(() => {
-    const found = MOCK_REQUESTS.find(r => r.id === id || r.claimNumber === id)
-    if (found) {
-      setRequest(found)
-      setReport(found.report || "")
-      setAccountingNotes(found.accountingNotes || "")
-      setRequestedAmount(found.requestedAmount || 0)
-      setApprovedAmount(found.approvedAmount || 0)
-      setIsConciliated(!!found.approvedAmount && found.approvedAmount > 0)
-      setCurrentStatus(found.status || 'pending')
+    // Primero intentamos cargar de Firestore, si no, usamos Mock
+    if (firestoreRequest) {
+      setLocalRequest(firestoreRequest as any)
+      setReport(firestoreRequest.report || "")
+      setAccountingNotes(firestoreRequest.accountingNotes || "")
+      setRequestedAmount(firestoreRequest.requestedAmount || 0)
+      setApprovedAmount(firestoreRequest.approvedAmount || firestoreRequest.requestedAmount || 0)
+      setIsConciliated(!!firestoreRequest.approvedAmount && firestoreRequest.approvedAmount !== firestoreRequest.requestedAmount)
+    } else {
+      const found = MOCK_REQUESTS.find(r => r.id === id || r.claimNumber === id)
+      if (found) {
+        setLocalRequest(found)
+        setReport(found.report || "")
+        setAccountingNotes(found.accountingNotes || "")
+        setRequestedAmount(found.requestedAmount || 0)
+        setApprovedAmount(found.approvedAmount || found.requestedAmount || 0)
+        setIsConciliated(!!found.approvedAmount && found.approvedAmount !== found.requestedAmount)
+      }
     }
-  }, [id])
+  }, [firestoreRequest, id])
 
-  if (!request || isProfileLoading) return (
+  if (!localRequest || isProfileLoading || isRequestLoading) return (
     <div className="p-20 text-center flex flex-col items-center gap-4">
       <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
       <p className="text-muted-foreground font-bold tracking-tighter uppercase text-xs">Cargando expediente...</p>
@@ -86,18 +99,15 @@ export default function RequestDetailPage() {
   const canEditAccounting = isAdmin || isAccounting
   const canSeeFinancials = isAdmin || isAccounting || isCustomerService
 
-  const allNotes = request.interventions.map(i => `[${i.type} - ${MOCK_TECHNICIANS.find(t => t.id === i.technicianId)?.name}]: ${i.notes}`).join('\n')
+  const allNotes = localRequest.interventions.map(i => `[${i.type} - ${MOCK_TECHNICIANS.find(t => t.id === i.technicianId)?.name}]: ${i.notes}`).join('\n')
   
-  const totalLabor = request.interventions.reduce((sum, i) => sum + i.laborCost, 0)
-  const allExpenses = request.interventions.flatMap(i => i.detailedExpenses.filter(e => !e.isUnused))
+  const totalLabor = localRequest.interventions.reduce((sum, i) => sum + i.laborCost, 0)
+  const allExpenses = localRequest.interventions.flatMap(i => i.detailedExpenses.filter(e => !e.isUnused))
   const totalUsedExpenses = allExpenses.reduce((s, e) => s + e.amount, 0)
   const totalOperative = totalLabor + totalUsedExpenses
 
   const handleGenerateSummary = async () => {
-    if (!canEditGeneral) {
-      toast({ variant: "destructive", title: "Acceso denegado", description: "Solo Servicio al Cliente o Admin pueden generar reportes técnicos." });
-      return;
-    }
+    if (!canEditGeneral) return;
     setIsSummarizing(true)
     try {
       const result = await serviceNoteSummaryGenerator({ notes: allNotes })
@@ -110,21 +120,49 @@ export default function RequestDetailPage() {
     }
   }
 
-  const handleSaveAccountingNotes = () => {
-    if (!canEditAccounting) return;
-    toast({ 
-      title: "Notas de Pago Guardadas", 
-      description: "Los comentarios de liquidación se han actualizado correctamente." 
-    })
+  const handleSaveAll = async () => {
+    if (!db || !id) return
+    setIsSaving(true)
+    try {
+      // Si no existe el documento en Firestore (porque es mock), lo creamos
+      const dataToSave = {
+        ...localRequest,
+        report,
+        accountingNotes,
+        requestedAmount,
+        approvedAmount,
+        updatedAt: new Date().toISOString()
+      }
+      await setDoc(doc(db, 'service_requests', id as string), dataToSave, { merge: true })
+      
+      toast({ title: "Cambios Guardados", description: "El expediente ha sido actualizado en la nube." })
+    } catch (error) {
+      toast({ variant: "destructive", title: "Error al guardar", description: "No se pudieron persistir los cambios." })
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  const handleSaveBilling = () => {
-    if (!isAdmin && !isAccounting) return;
-    setIsConciliated(true)
-    toast({ 
-      title: "Valores Conciliados", 
-      description: `Se ha fijado el valor de cobro en $${approvedAmount.toLocaleString()}.` 
-    })
+  const handleUpdateBilling = async () => {
+    if (!isAdmin && !isAccounting || !db) return;
+    setIsSaving(true)
+    try {
+      await updateDoc(doc(db, 'service_requests', id as string), {
+        approvedAmount: approvedAmount,
+        billingStatus: 'ready_to_bill',
+        updatedAt: new Date().toISOString()
+      })
+      setIsConciliated(true)
+      toast({ 
+        title: "Valores Conciliados", 
+        description: `Se ha fijado el valor de cobro en $${approvedAmount.toLocaleString()}.` 
+      })
+    } catch (error) {
+      // Si falla es porque el doc no existe, lo creamos completo
+      handleSaveAll()
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -136,20 +174,23 @@ export default function RequestDetailPage() {
           </Button>
           <div className="flex flex-col">
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-black tracking-tighter text-primary uppercase">{request.claimNumber}</h1>
-              <StatusBadge status={currentStatus} />
+              <h1 className="text-2xl font-black tracking-tighter text-primary uppercase">{localRequest.claimNumber}</h1>
+              <StatusBadge status={localRequest.status} />
             </div>
             <p className="text-muted-foreground flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
-              <CategoryIcon category={request.category} className="h-4 w-4 text-primary" />
-              {request.category}
+              <CategoryIcon category={localRequest.category} className="h-4 w-4 text-primary" />
+              {localRequest.category}
             </p>
           </div>
         </div>
-        {(isAdmin || isCustomerService) && (
-          <Button className="gap-2 bg-green-600 hover:bg-green-700 font-bold shadow-lg">
-            <CheckCircle2 className="h-4 w-4" /> Finalizar Servicio
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {(isAdmin || isCustomerService) && (
+            <Button className="gap-2 bg-green-600 hover:bg-green-700 font-bold shadow-lg" onClick={handleSaveAll} disabled={isSaving}>
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} 
+              Finalizar y Guardar
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -160,11 +201,11 @@ export default function RequestDetailPage() {
                 <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Asegurado</CardTitle>
               </CardHeader>
               <CardContent className="pt-4 space-y-1">
-                <p className="font-black text-xl text-slate-800">{request.insuredName}</p>
+                <p className="font-black text-xl text-slate-800">{localRequest.insuredName}</p>
                 <div className="flex items-center gap-4">
-                  <span className="text-xs font-bold text-slate-500">{request.phoneNumber}</span>
+                  <span className="text-xs font-bold text-slate-500">{localRequest.phoneNumber}</span>
                   <Badge variant="outline" className="text-[10px] uppercase font-black bg-blue-50 text-blue-700 border-blue-200">
-                    {request.accountName}
+                    {localRequest.accountName}
                   </Badge>
                 </div>
               </CardContent>
@@ -175,7 +216,7 @@ export default function RequestDetailPage() {
                 <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Descripción Operativa</CardTitle>
               </CardHeader>
               <CardContent className="pt-4">
-                <p className="text-sm font-medium text-slate-700 leading-relaxed">{request.description}</p>
+                <p className="text-sm font-medium text-slate-700 leading-relaxed">{localRequest.description}</p>
               </CardContent>
             </Card>
           </div>
@@ -193,7 +234,7 @@ export default function RequestDetailPage() {
                   <span className="text-xs font-black uppercase text-slate-600">Concepto de Mano de Obra</span>
                   <span className="font-mono font-black text-slate-800">${totalLabor.toLocaleString()}</span>
                 </div>
-                {request.interventions.map((inv, idx) => (
+                {localRequest.interventions.map((inv, idx) => (
                   <div key={inv.id} className="flex justify-between text-[11px] pl-4 opacity-70 italic">
                     <span>Int. #{idx + 1} - {inv.type} ({MOCK_TECHNICIANS.find(t => t.id === inv.technicianId)?.name})</span>
                     <span>${inv.laborCost.toLocaleString()}</span>
@@ -229,7 +270,7 @@ export default function RequestDetailPage() {
             <h2 className="text-xl font-black tracking-tighter flex items-center gap-2 text-slate-800 uppercase">
               <Wrench className="h-5 w-5 text-primary" /> Intervenciones Técnicas
             </h2>
-            {request.interventions.map((intervention) => (
+            {localRequest.interventions.map((intervention) => (
               <Card key={intervention.id} className="overflow-hidden border-none shadow-md">
                 <CardHeader className="bg-slate-50 py-3 border-b flex flex-row items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -271,13 +312,6 @@ export default function RequestDetailPage() {
                     {report || "No hay un reporte técnico cargado todavía."}
                   </div>
                 )}
-                {canEditGeneral && (
-                  <div className="flex justify-end mt-4">
-                    <Button className="gap-2 font-black shadow-lg">
-                      <Save className="h-4 w-4" /> Guardar Reporte
-                    </Button>
-                  </div>
-                )}
               </CardContent>
             </Card>
 
@@ -298,13 +332,6 @@ export default function RequestDetailPage() {
                     onChange={(e) => setAccountingNotes(e.target.value)}
                     disabled={!canEditAccounting}
                   />
-                  {canEditAccounting && (
-                    <div className="flex justify-end">
-                      <Button className="gap-2 font-black bg-orange-600 hover:bg-orange-700 shadow-lg" onClick={handleSaveAccountingNotes}>
-                        <Save className="h-4 w-4" /> Guardar Notas Contables
-                      </Button>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             )}
@@ -313,45 +340,61 @@ export default function RequestDetailPage() {
 
         <div className="space-y-6">
           {(isAdmin || isAccounting) && (
-            <Card className="shadow-lg border-t-8 border-t-primary sticky top-24">
+            <Card className="shadow-lg border-t-8 border-t-primary sticky top-24 overflow-hidden">
               <CardHeader className="bg-slate-50/50 border-b">
-                <CardTitle className="text-xs font-black uppercase tracking-widest">Módulo de Conciliación</CardTitle>
+                <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                  <RefreshCw className="h-3 w-3 text-primary" /> Módulo de Conciliación
+                </CardTitle>
               </CardHeader>
               <CardContent className="pt-6 space-y-6">
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase text-muted-foreground">Valor Inicial Solicitado</Label>
                   <div className={cn(
-                    "text-xl font-mono font-black py-2 px-3 bg-slate-50 rounded-lg border",
-                    isConciliated ? "text-slate-400 line-through decoration-red-500 decoration-2" : "text-primary"
+                    "text-xl font-mono font-black py-2 px-3 bg-slate-50 rounded-lg border transition-all",
+                    isConciliated ? "text-slate-400 line-through decoration-red-500/50 decoration-2" : "text-primary"
                   )}>
                     ${requestedAmount.toLocaleString()}
                   </div>
                 </div>
                 
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-800">Valor real de cobro final</Label>
-                  <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
-                    <Input 
-                      type="number" 
-                      className="pl-10 h-14 text-2xl font-mono font-black border-primary bg-primary/5 focus-visible:ring-primary shadow-inner" 
-                      value={approvedAmount} 
-                      onChange={(e) => setApprovedAmount(Number(e.target.value))} 
-                    />
+                <div className="space-y-4 animate-in slide-in-from-top-2">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-800">Valor real de cobro final</Label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
+                      <Input 
+                        type="number" 
+                        className="pl-10 h-14 text-2xl font-mono font-black border-primary bg-primary/5 focus-visible:ring-primary shadow-inner" 
+                        value={approvedAmount} 
+                        onChange={(e) => setApprovedAmount(Number(e.target.value))} 
+                      />
+                    </div>
                   </div>
-                  <p className="text-[9px] font-bold text-muted-foreground italic">Este valor es el que se exportará en el Excel de cobros.</p>
-                </div>
 
-                <Button className="w-full h-14 bg-primary hover:bg-primary/90 font-black uppercase tracking-widest shadow-xl text-lg gap-2" onClick={handleSaveBilling}>
-                  <RefreshCw className="h-5 w-5" /> ACTUALIZAR COBRO
-                </Button>
+                  {isConciliated && (
+                    <div className="p-4 bg-green-50 rounded-xl border-2 border-green-200 flex flex-col items-center justify-center gap-1 animate-in zoom-in-95">
+                      <span className="text-[10px] font-black text-green-600 uppercase tracking-widest">Valor Conciliado</span>
+                      <span className="text-3xl font-mono font-black text-green-700">${approvedAmount.toLocaleString()}</span>
+                      <div className="flex items-center gap-1 mt-1">
+                        <CheckCircle2 className="h-3 w-3 text-green-600" />
+                        <span className="text-[9px] font-bold text-green-600 uppercase">Listo para Cobro</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <Button 
+                    className="w-full h-14 bg-primary hover:bg-primary/90 font-black uppercase tracking-widest shadow-xl text-lg gap-2" 
+                    onClick={handleUpdateBilling}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />} 
+                    ACTUALIZAR COBRO
+                  </Button>
+                </div>
                 
-                {isConciliated && (
-                  <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-100 animate-in fade-in zoom-in">
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    <span className="text-[10px] font-bold text-green-700 uppercase">Valor Conciliado: ${approvedAmount.toLocaleString()}</span>
-                  </div>
-                )}
+                <p className="text-[9px] font-bold text-muted-foreground italic text-center px-4">
+                  Este valor es el que se exportará en el Excel de cobros por aseguradora.
+                </p>
               </CardContent>
             </Card>
           )}
