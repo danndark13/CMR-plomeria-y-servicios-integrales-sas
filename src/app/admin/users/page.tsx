@@ -9,15 +9,39 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { UserPlus, Mail, Shield, MoreVertical, Key, Power, UserCog } from "lucide-react"
+import { UserPlus, Mail, Shield, MoreVertical, Key, Power, UserCog, Phone, Fingerprint } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { toast } from "@/hooks/use-toast"
 
 const MOCK_USERS = [
-  { id: 'ADMIN01', name: 'Administrador Principal', email: 'admin@asistenciapro.com', role: 'Administrador', status: 'active' },
-  { id: 'SER01', name: 'Andrés Castro', email: 'ser01@asistenciapro.com', role: 'Servicio al Cliente', status: 'active' },
-  { id: 'CON01', name: 'Maria Lopez', email: 'con01@asistenciapro.com', role: 'Contabilidad', status: 'active' },
-  { id: 'SER02', name: 'Laura Martinez', email: 'ser02@asistenciapro.com', role: 'Servicio al Cliente', status: 'inactive' },
+  { 
+    id: 'ADMIN01', 
+    name: 'Daniel Cespedes', 
+    email: 'danielcorecspds@gmail.com', 
+    role: 'Administrador', 
+    status: 'active',
+    cedula: '1110564748',
+    phone: '3167533657'
+  },
+  { 
+    id: 'CON01', 
+    name: 'Daniel Cespedes', 
+    email: 'danielcorecspds@gmail.com', 
+    role: 'Contabilidad', 
+    status: 'active',
+    cedula: '1110564748',
+    phone: '3167533657'
+  },
+  { 
+    id: 'SER01', 
+    name: 'Daniel Cespedes', 
+    email: 'danielcorecspds@gmail.com', 
+    role: 'Servicio al Cliente', 
+    status: 'active',
+    cedula: '1110564748',
+    phone: '3167533657'
+  },
+  { id: 'SER02', name: 'Laura Martinez', email: 'ser02@rys-sas.com', role: 'Servicio al Cliente', status: 'inactive' },
 ]
 
 export default function AdminUsersPage() {
@@ -71,7 +95,7 @@ export default function AdminUsersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>ID / Nombre</TableHead>
-                  <TableHead>Rol</TableHead>
+                  <TableHead>Rol / Información</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -83,15 +107,23 @@ export default function AdminUsersPage() {
                       <div className="flex flex-col">
                         <span className="font-mono font-bold text-primary">{user.id}</span>
                         <span className="font-medium text-sm">{user.name}</span>
-                        <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                          <Mail className="h-2.5 w-2.5" /> {user.email}
-                        </span>
+                        {user.cedula && (
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                            <Fingerprint className="h-2.5 w-2.5" /> CC: {user.cedula}
+                          </span>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="flex w-fit gap-1 items-center bg-primary/5 border-primary/20">
-                        <Shield className="h-3 w-3" /> {user.role}
-                      </Badge>
+                      <div className="flex flex-col gap-1.5">
+                        <Badge variant="outline" className="flex w-fit gap-1 items-center bg-primary/5 border-primary/20">
+                          <Shield className="h-3 w-3" /> {user.role}
+                        </Badge>
+                        <div className="flex flex-col text-[10px] text-muted-foreground">
+                          <span className="flex items-center gap-1"><Mail className="h-2.5 w-2.5" /> {user.email}</span>
+                          {user.phone && <span className="flex items-center gap-1"><Phone className="h-2.5 w-2.5" /> {user.phone}</span>}
+                        </div>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge variant={user.status === 'active' ? 'secondary' : 'destructive'} className={user.status === 'active' ? "bg-green-50 text-green-700" : ""}>
@@ -132,17 +164,29 @@ export default function AdminUsersPage() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleCreateUser} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="id">ID de Usuario</Label>
-                  <Input id="id" placeholder="Ej. SER05" defaultValue={editingUser?.id} required />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="id">ID de Usuario</Label>
+                    <Input id="id" placeholder="Ej. SER05" defaultValue={editingUser?.id} required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="cedula">Cédula</Label>
+                    <Input id="cedula" placeholder="1110564748" defaultValue={editingUser?.cedula} />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="name">Nombre Completo</Label>
-                  <Input id="name" placeholder="Ej. Andrés Castro" defaultValue={editingUser?.name} required />
+                  <Input id="name" placeholder="Ej. Daniel Cespedes" defaultValue={editingUser?.name} required />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Corporativo</Label>
-                  <Input id="email" type="email" placeholder="usuario@rys-sas.com" defaultValue={editingUser?.email} required />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input id="email" type="email" placeholder="usuario@gmail.com" defaultValue={editingUser?.email} required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Teléfono</Label>
+                    <Input id="phone" placeholder="3167533657" defaultValue={editingUser?.phone} />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="role">Rol en el Sistema</Label>
