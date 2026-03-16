@@ -50,7 +50,7 @@ import { MOCK_REQUESTS, MOCK_COMPANIES } from "@/lib/mock-data"
 import { StatusBadge } from "@/components/crm/status-badge"
 import Link from "next/link"
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase'
-import { collection, doc, addDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, doc, addDoc } from 'firebase/firestore'
 import { toast } from "@/hooks/use-toast"
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
@@ -60,7 +60,7 @@ export default function RequestsPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   
-  const { user } = useUser()
+  const { user, isUserLoading } = useUser()
   const db = useFirestore()
 
   // Fetch current user profile
@@ -70,12 +70,12 @@ export default function RequestsPage() {
   }, [user, db])
   const { data: profile } = useDoc(profileRef)
 
-  // Fetch real requests from Firestore
+  // Fetch real requests from Firestore - Only when user is authenticated
   const requestsQuery = useMemoFirebase(() => {
-    if (!db) return null
+    if (!db || !user) return null
     return collection(db, "service_requests")
-  }, [db])
-  const { data: firestoreRequests, isLoading } = useCollection(requestsQuery)
+  }, [db, user])
+  const { data: firestoreRequests, isLoading: isRequestsLoading } = useCollection(requestsQuery)
 
   // Combined requests (Firestore + Mocks for demo)
   const allRequests = firestoreRequests 
@@ -89,13 +89,16 @@ export default function RequestsPage() {
   ).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
 
   // Fetch Companies for the form
-  const companiesQuery = useMemoFirebase(() => db ? collection(db, "assistance_companies") : null, [db])
+  const companiesQuery = useMemoFirebase(() => {
+    if (!db || !user) return null
+    return collection(db, "assistance_companies")
+  }, [db, user])
   const { data: companies } = useCollection(companiesQuery)
   const allCompanies = companies || MOCK_COMPANIES
 
   const handleCreateService = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!db) return
+    if (!db || !user) return
 
     setIsProcessing(true)
     const formData = new FormData(e.currentTarget)
@@ -113,7 +116,7 @@ export default function RequestsPage() {
       interventions: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      createdBy: user?.uid
+      createdBy: user.uid
     }
 
     const colRef = collection(db, "service_requests")
@@ -135,6 +138,7 @@ export default function RequestsPage() {
 
   const role = profile?.roleId
   const canCreate = role === 'Administrador' || role === 'Servicio al Cliente'
+  const isLoadingTotal = isUserLoading || isRequestsLoading
 
   return (
     <div className="flex flex-col gap-6">
@@ -180,7 +184,7 @@ export default function RequestsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
+              {isLoadingTotal ? (
                 <TableRow>
                   <TableCell colSpan={4} className="h-40 text-center">
                     <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary/20" />
@@ -220,7 +224,7 @@ export default function RequestsPage() {
               })}
             </TableBody>
           </Table>
-          {!isLoading && filteredRequests.length === 0 && (
+          {!isLoadingTotal && filteredRequests.length === 0 && (
             <div className="py-20 text-center flex flex-col items-center justify-center">
               <ClipboardList className="h-12 w-12 text-slate-200 mb-4" />
               <p className="text-lg font-bold text-slate-400">No se encontraron servicios</p>

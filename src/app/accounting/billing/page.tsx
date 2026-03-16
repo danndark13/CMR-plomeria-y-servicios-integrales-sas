@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from "react"
@@ -22,20 +23,21 @@ import { toast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase"
 import { collection } from "firebase/firestore"
 
 export default function BillingReportPage() {
   const db = useFirestore()
+  const { user, isUserLoading } = useUser()
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
 
   const requestsQuery = useMemoFirebase(() => {
-    if (!db) return null
+    if (!db || !user) return null
     return collection(db, "service_requests")
-  }, [db])
+  }, [db, user])
 
-  const { data: firestoreRequests, isLoading } = useCollection(requestsQuery)
+  const { data: firestoreRequests, isLoading: isRequestsLoading } = useCollection(requestsQuery)
 
   const allRequests = firestoreRequests ? [...firestoreRequests, ...MOCK_REQUESTS.filter(mr => !firestoreRequests.find(fr => fr.claimNumber === mr.claimNumber))] : MOCK_REQUESTS
 
@@ -80,6 +82,8 @@ export default function BillingReportPage() {
       description: `Se ha descargado el archivo de cobros para ${selectedCompany.name}.`
     })
   }
+
+  const isLoadingTotal = isUserLoading || isRequestsLoading
 
   if (!selectedCompanyId) {
     return (
@@ -162,7 +166,7 @@ export default function BillingReportPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
+              {isLoadingTotal ? (
                 <TableRow>
                   <TableCell colSpan={5} className="h-40 text-center">
                     <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary/20" />

@@ -33,21 +33,21 @@ import { cn } from "@/lib/utils"
 
 export default function InventoryPage() {
   const db = useFirestore()
-  const { user } = useUser()
+  const { user, isUserLoading } = useUser()
   const [searchTerm, setSearchTerm] = useState("")
   const [isAddingItem, setIsAddingItem] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
 
   const inventoryQuery = useMemoFirebase(() => {
-    if (!db) return null
+    if (!db || !user) return null
     return collection(db, "inventory")
-  }, [db])
-  const { data: inventoryItems, isLoading } = useCollection(inventoryQuery)
+  }, [db, user])
+  const { data: inventoryItems, isLoading: isInventoryLoading } = useCollection(inventoryQuery)
 
   const techsQuery = useMemoFirebase(() => {
-    if (!db) return null
+    if (!db || !user) return null
     return collection(db, "user_profiles")
-  }, [db])
+  }, [db, user])
   const { data: allUsers } = useCollection(techsQuery)
   const technicians = allUsers?.filter(u => u.roleId === 'Técnico') || []
 
@@ -57,7 +57,7 @@ export default function InventoryPage() {
 
   const handleAddItem = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!db) return
+    if (!db || !user) return
 
     setIsProcessing(true)
     const formData = new FormData(e.currentTarget)
@@ -66,7 +66,7 @@ export default function InventoryPage() {
       quantity: Number(formData.get("quantity")),
       unitValue: Number(formData.get("unitValue")),
       updatedAt: serverTimestamp(),
-      lastModifiedBy: user?.uid
+      lastModifiedBy: user.uid
     }
 
     const colRef = collection(db, "inventory")
@@ -87,6 +87,7 @@ export default function InventoryPage() {
   }
 
   const totalValue = inventoryItems?.reduce((sum, item) => sum + (item.quantity * item.unitValue), 0) || 0
+  const isLoadingTotal = isUserLoading || isInventoryLoading
 
   return (
     <div className="flex flex-col gap-8">
@@ -166,11 +167,11 @@ export default function InventoryPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {isLoading ? (
+                  {isLoadingTotal ? (
                     <TableRow>
                       <TableCell colSpan={4} className="h-40 text-center">
                         <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary/20" />
-                        <p className="mt-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sincronizando bodega...</p>
+                        <p className="mt-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest">Sincronizando bodega...</p>
                       </TableCell>
                     </TableRow>
                   ) : filteredItems?.length === 0 ? (
