@@ -191,20 +191,26 @@ export default function BillingReportPage() {
       </div>
 
       <Tabs defaultValue="conciliation" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-[500px] mb-6">
-          <TabsTrigger value="conciliation" className="font-bold gap-2">
-            <Calculator className="h-4 w-4" /> Por Conciliar (Pre-validar)
+        <TabsList className="grid w-full grid-cols-2 max-w-[500px] mb-6 h-12 bg-slate-100 p-1">
+          <TabsTrigger 
+            value="conciliation" 
+            className="font-black uppercase tracking-widest text-[11px] data-[state=active]:bg-blue-600 data-[state=active]:text-white h-full transition-all"
+          >
+            PREVALIDADO
           </TabsTrigger>
-          <TabsTrigger value="validated" className="font-bold gap-2">
-            <CheckCircle2 className="h-4 w-4" /> Conciliados (Validados)
+          <TabsTrigger 
+            value="validated" 
+            className="font-black uppercase tracking-widest text-[11px] data-[state=active]:bg-green-600 data-[state=active]:text-white h-full transition-all"
+          >
+            VALIDADO
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="conciliation">
-          <Card className="overflow-hidden border-t-4 border-t-orange-500 shadow-xl">
+          <Card className="overflow-hidden border-t-4 border-t-blue-500 shadow-xl">
             <CardHeader className="bg-slate-50/80 border-b">
               <CardTitle className="text-sm font-black flex items-center gap-2 uppercase tracking-wider">
-                <Clock className="h-4 w-4 text-orange-500" /> Expedientes en Conciliación
+                <Clock className="h-4 w-4 text-blue-500" /> Expedientes en Conciliación
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
@@ -241,7 +247,7 @@ export default function BillingReportPage() {
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-primary"><FileText className="h-4 w-4" /></Button>
                           </Link>
                           <Button 
-                            className="h-8 font-black text-[10px] uppercase tracking-tighter"
+                            className="h-8 font-black text-[10px] uppercase tracking-tighter bg-blue-600 hover:bg-blue-700 text-white"
                             onClick={() => setValidatingRequest(req)}
                           >
                             VALIDAR CARGO
@@ -292,7 +298,7 @@ export default function BillingReportPage() {
                     </div>
                     <div className="text-right">
                       <p className="text-[9px] font-black uppercase text-white/40 tracking-widest">Total Facturado</p>
-                      <p className="text-xl font-black text-primary-foreground">${totalFactura.toLocaleString()}</p>
+                      <p className="text-xl font-black text-green-400">${totalFactura.toLocaleString()}</p>
                     </div>
                   </CardHeader>
                   <CardContent className="p-0">
@@ -368,7 +374,7 @@ export default function BillingReportPage() {
             </div>
             <DialogFooter className="gap-2">
               <Button type="button" variant="outline" onClick={() => setValidatingRequest(null)} disabled={isProcessing} className="font-bold">CANCELAR</Button>
-              <Button type="submit" disabled={isProcessing} className="font-black gap-2 shadow-lg h-12">
+              <Button type="submit" disabled={isProcessing} className="font-black gap-2 shadow-lg h-12 bg-green-600 hover:bg-green-700">
                 {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} VALIDAR Y FACTURAR
               </Button>
             </DialogFooter>
