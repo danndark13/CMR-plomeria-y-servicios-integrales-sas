@@ -13,6 +13,16 @@ export type InterventionType = 'Diagnóstico' | 'Reparación' | 'Seguimiento' | 
 
 export type BillingStatus = 'pending' | 'ready_to_bill' | 'billed' | 'paid';
 
+export type ExpenseCategory = 'material' | 'transporte' | 'otros';
+
+export interface Expense {
+  id: string;
+  amount: number;
+  description: string;
+  category: ExpenseCategory;
+  isUnused: boolean; // Si es true, queda en inventario y no suma al costo del servicio
+}
+
 export interface Advance {
   id: string;
   amount: number;
@@ -28,7 +38,7 @@ export interface TechnicianIntervention {
   date: string;
   notes: string;
   laborCost: number;     // Costo de mano de obra para este técnico
-  expenses: number;      // Gastos (materiales, transporte, etc.)
+  detailedExpenses: Expense[]; // Lista de gastos detallados
 }
 
 export interface AssistanceCompany {

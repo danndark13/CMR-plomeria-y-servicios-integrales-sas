@@ -13,7 +13,8 @@ import {
   Printer,
   FileSpreadsheet,
   HandCoins,
-  ArrowDown
+  ArrowDown,
+  Package
 } from "lucide-react"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS, MOCK_COMPANIES } from "@/lib/mock-data"
 import Link from "next/link"
@@ -29,14 +30,15 @@ export default function PayrollPage() {
         ...i,
         request: req,
         assistanceName: MOCK_COMPANIES.find(c => c.id === req.companyId)?.name || "N/A",
-        // Only attribute the full request advances to the intervention if it's the primary/only one shown
-        // In a real app, advances would be linked more precisely.
+        // Total expenses that were actually USED for the technician (deducted from their labor pay usually)
+        usedExpensesTotal: i.detailedExpenses.filter(e => !e.isUnused).reduce((s, e) => s + e.amount, 0),
+        unusedExpensesTotal: i.detailedExpenses.filter(e => e.isUnused).reduce((s, e) => s + e.amount, 0),
         requestAdvances: req.advances || []
       }))
   ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
   const totalLabor = payrollData.reduce((sum, i) => sum + i.laborCost, 0)
-  const totalExpenses = payrollData.reduce((sum, i) => sum + i.expenses, 0)
+  const totalUsedExpenses = payrollData.reduce((sum, i) => sum + i.usedExpensesTotal, 0)
   
   // To avoid double-counting advances if a request has multiple interventions by same tech
   const processedRequests = new Set()
@@ -46,20 +48,20 @@ export default function PayrollPage() {
     return sum + (i.requestAdvances.reduce((s, a) => s + a.amount, 0))
   }, 0)
 
-  const totalToPay = totalLabor - totalExpenses - totalAdvances
+  const totalToPay = totalLabor - totalUsedExpenses - totalAdvances
 
   return (
     <div className="flex flex-col gap-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-primary">Nómina y Liquidación</h1>
-        <p className="text-muted-foreground">Control de pagos descontando gastos y anticipos entregados.</p>
+        <p className="text-muted-foreground">Control de pagos descontando gastos utilizados y anticipos entregados.</p>
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
         <div className="flex flex-1 gap-4 w-full md:max-w-md">
           <Select value={selectedTech} onValueChange={setSelectedTech}>
-            <SelectTrigger className="w-full bg-white">
-              <Users className="h-4 w-4 mr-2 text-muted-foreground" />
+            <SelectTrigger className="w-full bg-white border-primary/20">
+              <Users className="h-4 w-4 mr-2 text-primary" />
               <SelectValue placeholder="Seleccionar Técnico" />
             </SelectTrigger>
             <SelectContent>
@@ -81,7 +83,7 @@ export default function PayrollPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-4">
-         <Card className="border-l-4 border-l-primary shadow-sm">
+         <Card className="border-l-4 border-l-primary shadow-sm bg-primary/5">
             <CardHeader className="pb-2">
               <CardTitle className="text-[10px] font-bold text-muted-foreground uppercase">Mano de Obra</CardTitle>
             </CardHeader>
@@ -91,17 +93,17 @@ export default function PayrollPage() {
               </div>
             </CardContent>
          </Card>
-         <Card className="border-l-4 border-l-orange-500 shadow-sm">
+         <Card className="border-l-4 border-l-orange-500 shadow-sm bg-orange-50/50">
             <CardHeader className="pb-2">
-              <CardTitle className="text-[10px] font-bold text-muted-foreground uppercase">Gastos/Mat.</CardTitle>
+              <CardTitle className="text-[10px] font-bold text-muted-foreground uppercase">Gastos Materiales</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-xl font-black text-orange-600">
-                ${totalExpenses.toLocaleString()}
+                ${totalUsedExpenses.toLocaleString()}
               </div>
             </CardContent>
          </Card>
-         <Card className="border-l-4 border-l-destructive shadow-sm">
+         <Card className="border-l-4 border-l-destructive shadow-sm bg-destructive/5">
             <CardHeader className="pb-2">
               <CardTitle className="text-[10px] font-bold text-muted-foreground uppercase">Anticipos</CardTitle>
             </CardHeader>
@@ -113,7 +115,7 @@ export default function PayrollPage() {
          </Card>
          <Card className="bg-primary text-primary-foreground shadow-lg">
             <CardHeader className="pb-2">
-              <CardTitle className="text-[10px] font-bold uppercase opacity-80">Neto a Pagar</CardTitle>
+              <CardTitle className="text-[10px] font-bold uppercase opacity-80">Neto a Transferir</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-black">
@@ -127,7 +129,7 @@ export default function PayrollPage() {
         <CardHeader className="bg-muted/30">
           <CardTitle className="text-lg flex items-center gap-2">
             <Wallet className="h-5 w-5 text-primary" />
-            Liquidación por Intervención y Expediente
+            Liquidación por Intervención
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -137,7 +139,7 @@ export default function PayrollPage() {
                 <TableHead>Fecha / Técnico</TableHead>
                 <TableHead>Expediente / Asistencia</TableHead>
                 <TableHead className="text-right">M. de Obra</TableHead>
-                <TableHead className="text-right">Gastos</TableHead>
+                <TableHead className="text-right">Gastos Usados</TableHead>
                 <TableHead className="text-right">Anticipos</TableHead>
                 <TableHead className="text-right font-bold text-primary">Neto</TableHead>
                 <TableHead></TableHead>
@@ -147,7 +149,7 @@ export default function PayrollPage() {
               {payrollData.map((item) => {
                 const tech = MOCK_TECHNICIANS.find(t => t.id === item.technicianId)
                 const advances = item.requestAdvances.reduce((s, a) => s + a.amount, 0)
-                const net = item.laborCost - item.expenses - advances
+                const net = item.laborCost - item.usedExpensesTotal - advances
                 return (
                   <TableRow key={item.id} className="hover:bg-muted/50">
                     <TableCell>
@@ -158,7 +160,14 @@ export default function PayrollPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span className="font-mono font-bold text-primary text-xs">{item.request.claimNumber}</span>
+                        <div className="flex items-center gap-2">
+                           <span className="font-mono font-bold text-primary text-xs">{item.request.claimNumber}</span>
+                           {item.unusedExpensesTotal > 0 && (
+                             <Badge variant="outline" className="text-[8px] h-3 bg-orange-50 text-orange-600 border-orange-200">
+                               <Package className="h-2 w-2 mr-1" /> Inventario
+                             </Badge>
+                           )}
+                        </div>
                         <span className="text-[10px] text-muted-foreground">{item.assistanceName}</span>
                       </div>
                     </TableCell>
@@ -166,7 +175,7 @@ export default function PayrollPage() {
                       ${item.laborCost.toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs text-orange-600">
-                      -${item.expenses.toLocaleString()}
+                      -${item.usedExpensesTotal.toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs text-destructive">
                       -${advances.toLocaleString()}

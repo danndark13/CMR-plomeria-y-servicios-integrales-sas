@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS, MOCK_COMPANIES } from "@/lib/mock-data"
-import { ServiceRequest, BillingStatus, Advance } from "@/lib/types"
+import { ServiceRequest, BillingStatus, Advance, Expense, ExpenseCategory } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
+import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
   ArrowLeft, 
@@ -33,7 +34,11 @@ import {
   Receipt,
   Save,
   Calculator,
-  HandCoins
+  HandCoins,
+  Package,
+  Truck,
+  MoreHorizontal,
+  Trash2
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -58,6 +63,15 @@ export default function RequestDetailPage() {
   const [newAdvanceAmount, setNewAdvanceAmount] = useState("")
   const [newAdvanceReason, setNewAdvanceReason] = useState("")
 
+  // Detailed Expense State for adding to an intervention
+  const [activeInterventionId, setActiveInterventionId] = useState<string | null>(null)
+  const [newExpense, setNewExpense] = useState<{amount: string, description: string, category: ExpenseCategory, isUnused: boolean}>({
+    amount: "",
+    description: "",
+    category: "material",
+    isUnused: false
+  })
+
   useEffect(() => {
     const found = MOCK_REQUESTS.find(r => r.id === id)
     if (found) {
@@ -74,10 +88,20 @@ export default function RequestDetailPage() {
 
   const company = MOCK_COMPANIES.find(c => c.id === request.companyId)
   const allNotes = request.interventions.map(i => `[${i.type} - ${MOCK_TECHNICIANS.find(t => t.id === i.technicianId)?.name}]: ${i.notes}`).join('\n')
+  
   const totalLabor = request.interventions.reduce((sum, i) => sum + i.laborCost, 0)
-  const totalExpenses = request.interventions.reduce((sum, i) => sum + i.expenses, 0)
+  
+  // Only count expenses that were actually USED for the operative cost
+  const totalUsedExpenses = request.interventions.reduce((sum, i) => 
+    sum + i.detailedExpenses.filter(e => !e.isUnused).reduce((s, e) => s + e.amount, 0), 0
+  )
+  
+  const totalInInventory = request.interventions.reduce((sum, i) => 
+    sum + i.detailedExpenses.filter(e => e.isUnused).reduce((s, e) => s + e.amount, 0), 0
+  )
+
   const totalAdvances = request.advances?.reduce((sum, a) => sum + a.amount, 0) || 0
-  const totalOperative = totalLabor + totalExpenses
+  const totalOperative = totalLabor + totalUsedExpenses
 
   const handleGenerateSummary = async () => {
     if (!allNotes) {
@@ -96,8 +120,14 @@ export default function RequestDetailPage() {
     }
   }
 
-  const handleSaveBilling = () => {
-    toast({ title: "Valores Conciliados", description: "Los valores para facturación electrónica han sido actualizados." })
+  const handleAddExpense = (intId: string) => {
+    if (!newExpense.amount || !newExpense.description) {
+      toast({ title: "Error", description: "Monto y descripción son obligatorios.", variant: "destructive" })
+      return
+    }
+    toast({ title: "Gasto Registrado", description: `${newExpense.description} por $${newExpense.amount} añadido.` })
+    setActiveInterventionId(null)
+    setNewExpense({ amount: "", description: "", category: "material", isUnused: false })
   }
 
   const handleAddAdvance = () => {
@@ -216,12 +246,16 @@ export default function RequestDetailPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Monto del Anticipo</Label>
-                      <Input 
-                        type="number" 
-                        placeholder="0.00" 
-                        value={newAdvanceAmount}
-                        onChange={(e) => setNewAdvanceAmount(e.target.value)}
-                      />
+                      <div className="relative">
+                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input 
+                          type="number" 
+                          placeholder="0.00" 
+                          className="pl-9"
+                          value={newAdvanceAmount}
+                          onChange={(e) => setNewAdvanceAmount(e.target.value)}
+                        />
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <Label>Motivo</Label>
@@ -257,90 +291,17 @@ export default function RequestDetailPage() {
             </CardContent>
           </Card>
 
-          <Card className="shadow-md border-t-4 border-t-accent bg-accent/5">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-lg flex items-center gap-2 text-accent-foreground font-bold">
-                    <Receipt className="h-5 w-5" />
-                    Conciliación Contable
-                  </CardTitle>
-                  <CardDescription>Ajuste de valores para facturación electrónica.</CardDescription>
-                </div>
-                <Badge variant="outline" className="border-accent text-accent">Área Contable</Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase text-muted-foreground">Costo Operativo Base</Label>
-                  <div className="h-10 flex items-center px-3 bg-muted rounded-md border font-mono font-bold text-lg">
-                    ${totalOperative.toLocaleString()}
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="requested" className="text-xs font-bold uppercase text-primary">Valor Cobrado</Label>
-                  <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
-                    <Input 
-                      id="requested" 
-                      type="number" 
-                      className="pl-9 font-mono font-bold border-primary/30"
-                      value={requestedAmount}
-                      onChange={(e) => setRequestedAmount(Number(e.target.value))}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="approved" className="text-xs font-bold uppercase text-green-600">Valor Aprobado</Label>
-                  <div className="relative">
-                    <Calculator className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-green-600" />
-                    <Input 
-                      id="approved" 
-                      type="number" 
-                      className="pl-9 font-mono font-bold border-green-600/30"
-                      value={approvedAmount}
-                      onChange={(e) => setApprovedAmount(Number(e.target.value))}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col md:flex-row gap-4 items-end">
-                <div className="flex-1 space-y-2">
-                  <Label className="text-xs font-bold uppercase text-muted-foreground">Estado de Facturación</Label>
-                  <Select value={billingStatus} onValueChange={(v) => setBillingStatus(v as BillingStatus)}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Seleccionar estado" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pending">Pendiente Conciliar</SelectItem>
-                      <SelectItem value="ready_to_bill">Listo para Facturar</SelectItem>
-                      <SelectItem value="billed">Facturado</SelectItem>
-                      <SelectItem value="paid">Pagado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button onClick={handleSaveBilling} className="gap-2 bg-accent hover:bg-accent/90">
-                  <Save className="h-4 w-4" /> Guardar Ajuste
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
           <div className="flex items-center justify-between mb-2">
              <h2 className="text-xl font-bold flex items-center gap-2">
                <Wrench className="h-5 w-5 text-primary" />
-               Bitácora de Intervenciones
+               Bitácora e Inventario
              </h2>
              <Button size="sm" variant="outline" className="gap-2">
                <Plus className="h-4 w-4" /> Nueva Visita
              </Button>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-6">
             {request.interventions.map((intervention) => {
               const tech = MOCK_TECHNICIANS.find(t => t.id === intervention.technicianId)
               return (
@@ -350,24 +311,112 @@ export default function RequestDetailPage() {
                       <div className="flex items-center gap-3">
                         <Badge variant="secondary" className="bg-primary/10 text-primary">{intervention.type}</Badge>
                         <span className="text-[10px] text-muted-foreground">{new Date(intervention.date).toLocaleDateString()}</span>
+                        <Separator orientation="vertical" className="h-4" />
+                        <div className="flex items-center gap-1">
+                          <User className="h-3 w-3 text-muted-foreground" />
+                          <span className="font-bold text-xs">{tech?.name}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                         <span className="text-[10px] font-bold text-muted-foreground">Mano de Obra:</span>
+                         <span className="text-xs font-mono font-bold">${intervention.laborCost.toLocaleString()}</span>
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="pt-4 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <User className="h-3 w-3 text-muted-foreground" />
-                      <span className="font-bold text-xs">{tech?.name}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                      {intervention.notes}
+                  <CardContent className="pt-4 space-y-4">
+                    <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap italic">
+                      "{intervention.notes}"
                     </p>
+                    
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Gastos y Materiales</Label>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-6 text-[10px] gap-1 text-primary hover:bg-primary/5"
+                          onClick={() => setActiveInterventionId(activeInterventionId === intervention.id ? null : intervention.id)}
+                        >
+                          <Plus className="h-3 w-3" /> Añadir Gasto
+                        </Button>
+                      </div>
+
+                      {activeInterventionId === intervention.id && (
+                        <div className="p-3 border rounded-md bg-muted/20 space-y-3 animate-in slide-in-from-top-2">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <Label className="text-[10px]">Descripción del Gasto</Label>
+                              <Input 
+                                placeholder="Ej. Tubo PVC 1/2..." 
+                                className="h-8 text-xs"
+                                value={newExpense.description}
+                                onChange={(e) => setNewExpense({...newExpense, description: e.target.value})}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px]">Monto</Label>
+                              <div className="relative">
+                                <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                                <Input 
+                                  type="number" 
+                                  placeholder="0" 
+                                  className="h-8 text-xs pl-6"
+                                  value={newExpense.amount}
+                                  onChange={(e) => setNewExpense({...newExpense, amount: e.target.value})}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              <Switch 
+                                id="unused" 
+                                checked={newExpense.isUnused}
+                                onCheckedChange={(v) => setNewExpense({...newExpense, isUnused: v})}
+                              />
+                              <Label htmlFor="unused" className="text-[10px] cursor-pointer">Material no usado (Inventario)</Label>
+                            </div>
+                            <Button size="sm" className="h-7 text-[10px]" onClick={() => handleAddExpense(intervention.id)}>Guardar Gasto</Button>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        {intervention.detailedExpenses.length > 0 ? (
+                          intervention.detailedExpenses.map((exp) => (
+                            <div key={exp.id} className={cn(
+                              "flex items-center justify-between p-2 rounded text-xs border",
+                              exp.isUnused ? "bg-orange-50/50 border-orange-200 border-dashed" : "bg-white border-muted"
+                            )}>
+                              <div className="flex items-center gap-2">
+                                {exp.isUnused ? <Package className="h-3 w-3 text-orange-500" /> : <Truck className="h-3 w-3 text-muted-foreground" />}
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{exp.description}</span>
+                                  {exp.isUnused && <span className="text-[9px] font-bold text-orange-600 uppercase">Queda en Inventario</span>}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className={cn("font-mono font-bold", exp.isUnused ? "text-orange-600" : "text-foreground")}>
+                                  ${exp.amount.toLocaleString()}
+                                </span>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive">
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-[10px] text-muted-foreground italic text-center py-2">Sin gastos registrados en esta visita.</p>
+                        )}
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               )
             })}
           </div>
 
-          <Card className="shadow-sm border-t-4 border-t-green-500">
+          <Card className="shadow-md border-t-4 border-t-green-500">
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-lg flex items-center gap-2 text-green-700">
@@ -393,31 +442,80 @@ export default function RequestDetailPage() {
         </div>
 
         <div className="flex flex-col gap-6">
-          <Card className="bg-primary text-primary-foreground overflow-hidden">
-            <div className="bg-white/10 p-4 border-b border-white/20">
+          <Card className="bg-primary text-primary-foreground overflow-hidden shadow-xl">
+            <div className="bg-white/10 p-4 border-b border-white/20 flex justify-between items-center">
                <CardTitle className="text-xs font-bold uppercase tracking-widest opacity-80">Caja y Operatividad</CardTitle>
+               <Receipt className="h-4 w-4 opacity-50" />
             </div>
             <CardContent className="p-6 space-y-4">
               <div className="space-y-3">
                 <div className="flex justify-between text-xs">
-                  <span className="opacity-70">Mano de Obra (Bruto):</span>
+                  <span className="opacity-70">Mano de Obra (Total):</span>
                   <span className="font-mono font-bold">${totalLabor.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="opacity-70">Gastos Materiales:</span>
-                  <span className="font-mono font-bold">${totalExpenses.toLocaleString()}</span>
+                  <span className="opacity-70">Gastos Materiales (Usados):</span>
+                  <span className="font-mono font-bold">${totalUsedExpenses.toLocaleString()}</span>
                 </div>
+                {totalInInventory > 0 && (
+                  <div className="flex justify-between text-[10px] text-orange-200 bg-white/10 p-1 px-2 rounded">
+                    <span className="flex items-center gap-1"><Package className="h-3 w-3" /> En Inventario (No cobrable):</span>
+                    <span className="font-mono font-bold">${totalInInventory.toLocaleString()}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-xs text-red-300">
-                  <span className="opacity-70">Anticipos (Descuento):</span>
+                  <span className="opacity-70">Anticipos Entregados:</span>
                   <span className="font-mono font-bold">-${totalAdvances.toLocaleString()}</span>
                 </div>
                 <Separator className="bg-white/20" />
                 <div className="space-y-1">
-                   <p className="text-[10px] opacity-60 font-bold">TOTAL COSTO OPERATIVO</p>
+                   <p className="text-[10px] opacity-60 font-bold">TOTAL COSTO OPERATIVO DEL SERVICIO</p>
                    <p className="text-3xl font-mono font-black">${(totalOperative).toLocaleString()}</p>
-                   <p className="text-[10px] opacity-60 italic">Nota: Anticipos ya descontados del neto técnico.</p>
+                   <p className="text-[10px] opacity-60 italic leading-tight mt-2">
+                     * El valor en inventario no se suma al costo del servicio pero queda registrado como gasto de la empresa.
+                   </p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-md border-t-4 border-t-accent bg-accent/5">
+            <CardHeader className="pb-3">
+               <CardTitle className="text-sm font-bold flex items-center gap-2">
+                 <Calculator className="h-4 w-4 text-accent" /> Conciliación Facturación
+               </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+               <div className="space-y-1">
+                 <Label className="text-[10px] text-muted-foreground uppercase">Valor Solicitado</Label>
+                 <Input 
+                   type="number" 
+                   className="h-8 font-mono" 
+                   value={requestedAmount}
+                   onChange={(e) => setRequestedAmount(Number(e.target.value))}
+                 />
+               </div>
+               <div className="space-y-1">
+                 <Label className="text-[10px] text-muted-foreground uppercase">Valor Aprobado Asistencia</Label>
+                 <Input 
+                   type="number" 
+                   className="h-8 font-mono border-green-500" 
+                   value={approvedAmount}
+                   onChange={(e) => setApprovedAmount(Number(e.target.value))}
+                 />
+               </div>
+               <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground uppercase">Margen Bruto Ajustado</Label>
+                  <div className={cn(
+                    "h-8 px-3 flex items-center rounded-md font-mono font-bold text-sm",
+                    (approvedAmount - totalOperative) >= 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                  )}>
+                    ${(approvedAmount - totalOperative).toLocaleString()}
+                  </div>
+               </div>
+               <Button className="w-full h-8 text-xs gap-2 bg-accent hover:bg-accent/90" onClick={handleSaveBilling}>
+                 <Save className="h-4 w-4" /> Guardar Ajustes
+               </Button>
             </CardContent>
           </Card>
 

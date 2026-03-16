@@ -36,7 +36,9 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
         date: new Date(today.getTime() - 86400000).toISOString(),
         notes: 'Se realizó visita técnica inicial. Se identifica que la fuga proviene del sello de la brida.',
         laborCost: 45000,
-        expenses: 5000
+        detailedExpenses: [
+          { id: 'e1', amount: 5000, description: 'Transporte Urbano', category: 'transporte', isUnused: false }
+        ]
       },
       {
         id: 'v2',
@@ -45,7 +47,10 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
         date: today.toISOString(),
         notes: 'Programado para cambio de sellos hoy.',
         laborCost: 65000,
-        expenses: 12000
+        detailedExpenses: [
+          { id: 'e2', amount: 12000, description: 'Kit de Sellos Brida', category: 'material', isUnused: false },
+          { id: 'e3', amount: 8000, description: 'Pegante PVC (No usado)', category: 'material', isUnused: true }
+        ]
       }
     ],
     advances: [
@@ -82,7 +87,7 @@ export const MOCK_REQUESTS: ServiceRequest[] = [
         date: new Date(today.getTime() + 86400000).toISOString(),
         notes: 'Visita programada para revisión de cableado.',
         laborCost: 40000,
-        expenses: 0
+        detailedExpenses: []
       }
     ],
     billingStatus: 'pending',

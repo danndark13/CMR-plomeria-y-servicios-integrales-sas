@@ -15,7 +15,8 @@ import {
   TrendingDown, 
   FileCheck,
   Building2,
-  ChevronRight
+  ChevronRight,
+  Package
 } from "lucide-react"
 import { MOCK_REQUESTS, MOCK_COMPANIES } from "@/lib/mock-data"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -36,7 +37,7 @@ export default function BillingReportPage() {
     <div className="flex flex-col gap-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-primary">Facturación y Conciliación</h1>
-        <p className="text-muted-foreground">Control de valores cobrados vs. gastos operativos por asistencia.</p>
+        <p className="text-muted-foreground">Control de valores cobrados vs. gastos operativos utilizados por asistencia.</p>
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
@@ -51,8 +52,8 @@ export default function BillingReportPage() {
             />
           </div>
           <Select value={filterCompany} onValueChange={setFilterCompany}>
-            <SelectTrigger className="w-[200px]">
-              <Building2 className="h-4 w-4 mr-2 text-muted-foreground" />
+            <SelectTrigger className="w-[200px] border-primary/20">
+              <Building2 className="h-4 w-4 mr-2 text-primary" />
               <SelectValue placeholder="Asistencia" />
             </SelectTrigger>
             <SelectContent>
@@ -68,13 +69,13 @@ export default function BillingReportPage() {
         </Button>
       </div>
 
-      <Card className="overflow-hidden border-t-4 border-t-primary">
+      <Card className="overflow-hidden border-t-4 border-t-primary shadow-lg">
         <CardHeader className="bg-muted/30">
           <CardTitle className="text-lg flex items-center gap-2">
             <Receipt className="h-5 w-5 text-primary" />
             Servicios Listos para Facturar
           </CardTitle>
-          <CardDescription>Consolidado de expedientes con intervenciones cerradas.</CardDescription>
+          <CardDescription>Consolidado de expedientes con intervenciones cerradas (Excluye materiales en inventario).</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -84,7 +85,7 @@ export default function BillingReportPage() {
                 <TableHead className="font-bold">Asistencia / Cuenta</TableHead>
                 <TableHead className="font-bold">Servicio</TableHead>
                 <TableHead className="text-right font-bold">Valor Cobrado</TableHead>
-                <TableHead className="text-right font-bold">Gastos (Costo)</TableHead>
+                <TableHead className="text-right font-bold">Gastos (Costo Real)</TableHead>
                 <TableHead className="text-right font-bold">Margen</TableHead>
                 <TableHead className="text-right"></TableHead>
               </TableRow>
@@ -92,9 +93,19 @@ export default function BillingReportPage() {
             <TableBody>
               {filteredRequests.map((req) => {
                 const company = MOCK_COMPANIES.find(c => c.id === req.companyId)
+                
                 const totalLabor = req.interventions.reduce((sum, i) => sum + i.laborCost, 0)
-                const totalExpenses = req.interventions.reduce((sum, i) => sum + i.expenses, 0)
-                const totalCost = totalLabor + totalExpenses
+                
+                // Only count expenses USED in the service for the billing margin
+                const totalUsedExpenses = req.interventions.reduce((sum, i) => 
+                  sum + i.detailedExpenses.filter(e => !e.isUnused).reduce((s, e) => s + e.amount, 0), 0
+                )
+                
+                const totalUnused = req.interventions.reduce((sum, i) => 
+                  sum + i.detailedExpenses.filter(e => e.isUnused).reduce((s, e) => s + e.amount, 0), 0
+                )
+
+                const totalCost = totalLabor + totalUsedExpenses
                 const margin = (req.requestedAmount || 0) - totalCost
 
                 return (
@@ -120,8 +131,15 @@ export default function BillingReportPage() {
                     <TableCell className="text-right font-mono font-bold text-blue-600">
                       ${(req.requestedAmount || 0).toLocaleString()}
                     </TableCell>
-                    <TableCell className="text-right font-mono text-muted-foreground">
-                      ${totalCost.toLocaleString()}
+                    <TableCell className="text-right font-mono">
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">${totalCost.toLocaleString()}</span>
+                        {totalUnused > 0 && (
+                          <span className="text-[9px] text-orange-600 font-bold flex items-center justify-end gap-1">
+                            <Package className="h-2 w-2" /> +${totalUnused.toLocaleString()} Inv.
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <span className={`font-mono font-bold ${margin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -162,25 +180,28 @@ export default function BillingReportPage() {
          </Card>
          <Card className="bg-destructive/5 border-destructive/20">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground uppercase">Costo Operativo Acumulado</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase">Costo Operativo Real</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-destructive">
                 ${filteredRequests.reduce((sum, r) => {
-                  const cost = r.interventions.reduce((s, i) => s + i.laborCost + i.expenses, 0)
-                  return sum + cost
+                  const labor = r.interventions.reduce((s, i) => s + i.laborCost, 0)
+                  const expenses = r.interventions.reduce((s, i) => s + i.detailedExpenses.filter(e => !e.isUnused).reduce((se, e) => se + e.amount, 0), 0)
+                  return sum + labor + expenses
                 }, 0).toLocaleString()}
               </div>
             </CardContent>
          </Card>
          <Card className="bg-green-50 border-green-200">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground uppercase">Utilidad Bruta Estimada</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase">Utilidad Bruta Ajustada</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-700">
                 ${filteredRequests.reduce((sum, r) => {
-                  const cost = r.interventions.reduce((s, i) => s + i.laborCost + i.expenses, 0)
+                   const labor = r.interventions.reduce((s, i) => s + i.laborCost, 0)
+                   const expenses = r.interventions.reduce((s, i) => s + i.detailedExpenses.filter(e => !e.isUnused).reduce((se, e) => se + e.amount, 0), 0)
+                   const cost = labor + expenses
                   return sum + ((r.requestedAmount || 0) - cost)
                 }, 0).toLocaleString()}
               </div>
