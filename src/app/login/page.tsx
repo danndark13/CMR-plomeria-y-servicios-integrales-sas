@@ -12,6 +12,8 @@ import { toast } from "@/hooks/use-toast"
 import { signInAnonymously } from "firebase/auth"
 import { doc, setDoc } from "firebase/firestore"
 import { useFirebase } from "@/firebase"
+import { errorEmitter } from '@/firebase/error-emitter'
+import { FirestorePermissionError } from '@/firebase/errors'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -55,15 +57,14 @@ export default function LoginPage() {
         firstName = "YULIETH VANESA"
         lastName = "RAMIREZ"
         email = "gerente@rysplomeria.com"
-        cedula = "0000000000" // Cédula genérica para gerente si no se especificó
+        cedula = "0000000000"
       } else {
         if (rolePrefix === "ADM") roleId = "Administrador"
         if (rolePrefix === "CON") roleId = "Contabilidad"
       }
 
       const profileRef = doc(firestore, "user_profiles", user.uid)
-      
-      await setDoc(profileRef, {
+      const profileData = {
         id: user.uid,
         username: inputId,
         firstName,
@@ -73,7 +74,18 @@ export default function LoginPage() {
         roleId,
         isActive: true,
         cedula
-      }, { merge: true })
+      }
+      
+      // CRITICAL: No await here. Optimistic update and background sync.
+      setDoc(profileRef, profileData, { merge: true })
+        .catch(async (error) => {
+          const permissionError = new FirestorePermissionError({
+            path: profileRef.path,
+            operation: "write",
+            requestResourceData: profileData,
+          })
+          errorEmitter.emit("permission-error", permissionError)
+        })
 
       toast({
         title: "Bienvenido a RYS SAS",
@@ -87,7 +99,6 @@ export default function LoginPage() {
         title: "Error de Sistema",
         description: "No se pudo validar el perfil en la base de datos.",
       })
-    } finally {
       setIsLoading(false)
     }
   }

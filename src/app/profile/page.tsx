@@ -6,15 +6,17 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { User, Mail, Phone, Shield, Fingerprint, Save, Lock } from "lucide-react"
+import { User, Mail, Phone, Shield, Fingerprint, Save, Lock, Loader2 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
 import { doc, updateDoc } from 'firebase/firestore'
+import { errorEmitter } from '@/firebase/error-emitter'
+import { FirestorePermissionError } from '@/firebase/errors'
 
 export default function ProfilePage() {
   const { user } = useUser()
   const db = useFirestore()
-  const [isLoading, setIsLoading] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
   
   const profileRef = useMemoFirebase(() => {
     if (!user || !db) return null
@@ -41,31 +43,35 @@ export default function ProfilePage() {
     }
   }, [profile])
 
-  const handleUpdate = async (e: React.FormEvent) => {
+  const handleUpdate = (e: React.FormEvent) => {
     e.preventDefault()
     if (!profileRef) return
 
-    setIsLoading(true)
-    try {
-      await updateDoc(profileRef, {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        email: formData.email,
-        phoneNumber: formData.phoneNumber,
-      })
-      toast({
-        title: "Perfil Actualizado",
-        description: "Tus datos personales han sido guardados exitosamente."
-      })
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "No se pudieron actualizar los datos."
-      })
-    } finally {
-      setIsLoading(false)
+    setIsProcessing(true)
+    const updateData = {
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      email: formData.email,
+      phoneNumber: formData.phoneNumber,
     }
+
+    // CRITICAL: No await here.
+    updateDoc(profileRef, updateData)
+      .then(() => {
+        toast({
+          title: "Perfil Actualizado",
+          description: "Tus datos personales han sido guardados exitosamente."
+        })
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: profileRef.path,
+          operation: "update",
+          requestResourceData: updateData,
+        })
+        errorEmitter.emit("permission-error", permissionError)
+      })
+      .finally(() => setIsProcessing(false))
   }
 
   return (
@@ -88,7 +94,6 @@ export default function ProfilePage() {
           </CardHeader>
           <form onSubmit={handleUpdate}>
             <CardContent className="space-y-6 pt-6">
-              {/* SECCIÓN PROTEGIDA: Solo Admin gestiona esto */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-xl border border-dashed">
                 <div className="space-y-2">
                   <Label className="text-[10px] text-muted-foreground uppercase font-black tracking-widest flex items-center gap-1">
@@ -172,8 +177,8 @@ export default function ProfilePage() {
               </div>
             </CardContent>
             <CardFooter className="bg-slate-50/50 border-t p-6">
-              <Button type="submit" className="gap-2 w-full md:w-auto font-bold shadow-lg h-11" disabled={isLoading}>
-                {isLoading ? "Guardando..." : <><Save className="h-5 w-5" /> Actualizar Perfil</>}
+              <Button type="submit" className="gap-2 w-full md:w-auto font-bold shadow-lg h-11" disabled={isProcessing}>
+                {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="h-5 w-5" /> Actualizar Perfil</>}
               </Button>
             </CardFooter>
           </form>
