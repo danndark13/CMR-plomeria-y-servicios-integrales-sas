@@ -14,15 +14,14 @@ import {
   Building2,
   ChevronRight,
   ArrowLeft,
-  CheckCircle2,
-  Calculator,
-  Download
+  FileText,
+  DollarSign
 } from "lucide-react"
 import { MOCK_REQUESTS, MOCK_COMPANIES } from "@/lib/mock-data"
-import { CategoryIcon } from "@/components/crm/category-icon"
 import { toast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 export default function BillingReportPage() {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
@@ -113,7 +112,7 @@ export default function BillingReportPage() {
           </Button>
           <div>
             <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">{selectedCompany.name}</h1>
-            <p className="text-muted-foreground font-medium">Conciliación de valores finales para cobro.</p>
+            <p className="text-muted-foreground font-medium">Gestión financiera y desglose de cobros por expediente.</p>
           </div>
         </div>
         <Button onClick={handleExportExcel} className="gap-2 bg-green-600 hover:bg-green-700 font-bold shadow-lg h-12">
@@ -136,7 +135,7 @@ export default function BillingReportPage() {
       <Card className="overflow-hidden border-t-4 border-t-primary shadow-xl">
         <CardHeader className="bg-slate-50/80 border-b">
           <CardTitle className="text-sm font-black flex items-center gap-2 uppercase tracking-wider">
-            <Receipt className="h-4 w-4 text-primary" /> Historial de Conciliación
+            <Receipt className="h-4 w-4 text-primary" /> Historial de Conciliación Financiera
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -145,21 +144,18 @@ export default function BillingReportPage() {
               <TableRow className="bg-muted/30">
                 <TableHead className="font-black uppercase text-[10px]">Expediente</TableHead>
                 <TableHead className="font-black uppercase text-[10px]">Asegurado / Cuenta</TableHead>
-                <TableHead className="font-black uppercase text-[10px]">Servicio</TableHead>
-                <TableHead className="text-right font-black uppercase text-[10px]">Conciliación (Inicial vs Real)</TableHead>
-                <TableHead className="text-right font-black uppercase text-[10px]">Utilidad</TableHead>
+                <TableHead className="font-black uppercase text-[10px]">Reporte Técnico</TableHead>
+                <TableHead className="font-black uppercase text-[10px]">Desglose de Cobro</TableHead>
+                <TableHead className="text-right font-black uppercase text-[10px]">Conciliación</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredRequests.map((req) => {
                 const totalLabor = req.interventions.reduce((sum, i) => sum + i.laborCost, 0)
-                const totalUsedExpenses = req.interventions.reduce((sum, i) => 
-                  sum + i.detailedExpenses.filter(e => !e.isUnused).reduce((s, e) => s + e.amount, 0), 0
-                )
-                const totalCost = totalLabor + totalUsedExpenses
+                const expensesBreakdown = req.interventions.flatMap(i => i.detailedExpenses.filter(e => !e.isUnused))
+                const totalExpenses = expensesBreakdown.reduce((s, e) => s + e.amount, 0)
                 const finalAmount = req.approvedAmount || req.requestedAmount || 0
-                const margin = finalAmount - totalCost
                 const hasBeenConciliated = !!req.approvedAmount && req.approvedAmount !== req.requestedAmount
 
                 return (
@@ -174,10 +170,32 @@ export default function BillingReportPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="flex items-center gap-1 w-fit bg-slate-50 border-slate-200">
-                        <CategoryIcon category={req.category} className="h-3 w-3 text-primary" />
-                        <span className="text-[9px] font-black uppercase">{req.category}</span>
-                      </Badge>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 cursor-help bg-slate-100 px-2 py-1 rounded max-w-[150px] truncate">
+                              <FileText className="h-3 w-3 text-primary shrink-0" />
+                              {req.report || req.summary || "Sin reporte"}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-[300px] p-4 text-xs">
+                            <p className="font-black uppercase mb-2 border-b pb-1">Reporte Consolidado</p>
+                            <p>{req.report || req.summary || "No hay un reporte final cargado todavía."}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex justify-between items-center text-[9px] gap-4">
+                          <span className="text-muted-foreground uppercase">M. de Obra:</span>
+                          <span className="font-bold text-slate-700">${totalLabor.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-[9px] gap-4">
+                          <span className="text-muted-foreground uppercase">Gastos:</span>
+                          <span className="font-bold text-slate-700">${totalExpenses.toLocaleString()}</span>
+                        </div>
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex flex-col items-end">
@@ -187,20 +205,12 @@ export default function BillingReportPage() {
                           </span>
                         )}
                         <span className={cn(
-                          "font-mono font-black text-lg",
+                          "font-mono font-black text-base",
                           hasBeenConciliated ? "text-green-600" : "text-primary"
                         )}>
                           ${finalAmount.toLocaleString()}
                         </span>
                       </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge className={cn(
-                        "font-mono font-black",
-                        margin >= 0 ? "bg-green-100 text-green-700" : "bg-destructive/10 text-destructive"
-                      )}>
-                        ${margin.toLocaleString()}
-                      </Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <Link href={`/requests/${req.id}`}>

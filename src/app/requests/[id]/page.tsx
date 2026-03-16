@@ -23,7 +23,8 @@ import {
   CheckCircle2,
   Wallet,
   AlertCircle,
-  FileText
+  FileText,
+  RefreshCw
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -79,7 +80,6 @@ export default function RequestDetailPage() {
   const isAccounting = profile?.roleId === 'Contabilidad'
   const isCustomerService = profile?.roleId === 'Servicio al Cliente'
   
-  // Contabilidad puede ver financieros pero no editar reporte técnico
   const canEditGeneral = isAdmin || isCustomerService
   const canEditAccounting = isAdmin || isAccounting
   const canSeeFinancials = isAdmin || isAccounting || isCustomerService
@@ -87,9 +87,8 @@ export default function RequestDetailPage() {
   const allNotes = request.interventions.map(i => `[${i.type} - ${MOCK_TECHNICIANS.find(t => t.id === i.technicianId)?.name}]: ${i.notes}`).join('\n')
   
   const totalLabor = request.interventions.reduce((sum, i) => sum + i.laborCost, 0)
-  const totalUsedExpenses = request.interventions.reduce((sum, i) => 
-    sum + i.detailedExpenses.filter(e => !e.isUnused).reduce((s, e) => s + e.amount, 0), 0
-  )
+  const allExpenses = request.interventions.flatMap(i => i.detailedExpenses.filter(e => !e.isUnused))
+  const totalUsedExpenses = allExpenses.reduce((s, e) => s + e.amount, 0)
   const totalOperative = totalLabor + totalUsedExpenses
 
   const handleGenerateSummary = async () => {
@@ -159,22 +158,70 @@ export default function RequestDetailPage() {
               </CardHeader>
               <CardContent className="pt-4 space-y-1">
                 <p className="font-black text-xl text-slate-800">{request.insuredName}</p>
-                <p className="text-xs font-bold text-slate-500">{request.phoneNumber}</p>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs font-bold text-slate-500">{request.phoneNumber}</span>
+                  <Badge variant="outline" className="text-[10px] uppercase font-black bg-blue-50 text-blue-700 border-blue-200">
+                    {request.accountName}
+                  </Badge>
+                </div>
               </CardContent>
             </Card>
 
             <Card className="shadow-sm border-l-4 border-l-primary overflow-hidden">
               <CardHeader className="pb-3 bg-slate-50/50">
-                <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Ubicación</CardTitle>
+                <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Descripción Operativa</CardTitle>
               </CardHeader>
-              <CardContent className="pt-4 space-y-1">
-                <p className="font-bold text-sm text-slate-700">{request.address}</p>
-                <div className="flex items-center gap-1 text-[10px] text-primary font-bold uppercase">
-                  <MapPin className="h-3 w-3" /> Ver en Mapa
-                </div>
+              <CardContent className="pt-4">
+                <p className="text-sm font-medium text-slate-700 leading-relaxed">{request.description}</p>
               </CardContent>
             </Card>
           </div>
+
+          {/* DESGLOSE FINANCIERO PARA COBRO */}
+          <Card className="shadow-lg border-t-4 border-t-slate-800">
+            <CardHeader className="bg-slate-50">
+              <CardTitle className="text-lg font-black uppercase flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-primary" /> Detalle de Cobro a Asistencia
+              </CardTitle>
+              <CardDescription className="text-xs font-medium">Especificación de rubros para generación de cobro.</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6 space-y-4">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <span className="text-xs font-black uppercase text-slate-600">Concepto de Mano de Obra</span>
+                  <span className="font-mono font-black text-slate-800">${totalLabor.toLocaleString()}</span>
+                </div>
+                {request.interventions.map((inv, idx) => (
+                  <div key={inv.id} className="flex justify-between text-[11px] pl-4 opacity-70 italic">
+                    <span>Int. #{idx + 1} - {inv.type} ({MOCK_TECHNICIANS.find(t => t.id === inv.technicianId)?.name})</span>
+                    <span>${inv.laborCost.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <span className="text-xs font-black uppercase text-slate-600">Materiales y Otros Gastos</span>
+                  <span className="font-mono font-black text-slate-800">${totalUsedExpenses.toLocaleString()}</span>
+                </div>
+                {allExpenses.length > 0 ? (
+                  allExpenses.map((exp) => (
+                    <div key={exp.id} className="flex justify-between text-[11px] pl-4 opacity-70 italic">
+                      <span>{exp.description} ({exp.category})</span>
+                      <span>${exp.amount.toLocaleString()}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-[10px] text-muted-foreground italic pl-4">No se registraron materiales o gastos adicionales.</p>
+                )}
+              </div>
+
+              <div className="flex justify-between items-center bg-primary/5 p-4 rounded-xl border border-primary/10 mt-4">
+                <span className="text-sm font-black uppercase text-primary">Sugerido para cobro</span>
+                <span className="text-2xl font-mono font-black text-primary">${totalOperative.toLocaleString()}</span>
+              </div>
+            </CardContent>
+          </Card>
 
           <div className="space-y-4">
             <h2 className="text-xl font-black tracking-tighter flex items-center gap-2 text-slate-800 uppercase">
@@ -188,9 +235,6 @@ export default function RequestDetailPage() {
                     <span className="text-[10px] font-bold text-slate-400">{new Date(intervention.date).toLocaleDateString()}</span>
                     <span className="font-black text-[11px] text-slate-600 uppercase">{MOCK_TECHNICIANS.find(t => t.id === intervention.technicianId)?.name}</span>
                   </div>
-                  {canSeeFinancials && (
-                    <span className="text-[11px] font-mono font-black text-green-600">${intervention.laborCost.toLocaleString()}</span>
-                  )}
                 </CardHeader>
                 <CardContent className="pt-4">
                   <p className="text-sm text-slate-700 italic leading-relaxed">"{intervention.notes}"</p>
@@ -213,13 +257,18 @@ export default function RequestDetailPage() {
                 )}
               </CardHeader>
               <CardContent>
-                <Textarea 
-                  placeholder="Redacte aquí el reporte para la asistencia..."
-                  className="min-h-[150px] text-sm font-medium"
-                  value={report}
-                  onChange={(e) => setReport(e.target.value)}
-                  disabled={!canEditGeneral}
-                />
+                {canEditGeneral ? (
+                  <Textarea 
+                    placeholder="Redacte aquí el reporte para la asistencia..."
+                    className="min-h-[150px] text-sm font-medium"
+                    value={report}
+                    onChange={(e) => setReport(e.target.value)}
+                  />
+                ) : (
+                  <div className="p-4 bg-slate-50 rounded-lg border text-sm text-slate-700 leading-relaxed italic">
+                    {report || "No hay un reporte técnico cargado todavía."}
+                  </div>
+                )}
                 {canEditGeneral && (
                   <div className="flex justify-end mt-4">
                     <Button className="gap-2 font-black shadow-lg">
@@ -254,11 +303,6 @@ export default function RequestDetailPage() {
                       </Button>
                     </div>
                   )}
-                  {!canEditAccounting && !canSeeFinancials && (
-                    <div className="p-3 bg-muted rounded-lg flex items-center gap-2 text-xs text-muted-foreground">
-                      <AlertCircle className="h-4 w-4" /> Esta sección es exclusiva de Contabilidad y Gerencia.
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             )}
@@ -266,31 +310,8 @@ export default function RequestDetailPage() {
         </div>
 
         <div className="space-y-6">
-          {canSeeFinancials && (
-            <Card className="bg-slate-900 text-white overflow-hidden shadow-2xl">
-              <CardHeader className="bg-white/5 border-b border-white/5">
-                <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-400">Resumen Operativo</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6 space-y-4">
-                <div className="flex justify-between text-xs">
-                  <span className="opacity-70">Costo Mano de Obra</span>
-                  <span className="font-mono font-bold">${totalLabor.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="opacity-70">Costo Materiales</span>
-                  <span className="font-mono font-bold">${totalUsedExpenses.toLocaleString()}</span>
-                </div>
-                <Separator className="bg-white/10" />
-                <div className="text-center pt-2">
-                  <p className="text-[10px] font-black uppercase text-primary mb-1">Inversión RYS</p>
-                  <p className="text-3xl font-mono font-black">${totalOperative.toLocaleString()}</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
           {(isAdmin || isAccounting) && (
-            <Card className="shadow-lg border-t-8 border-t-primary">
+            <Card className="shadow-lg border-t-8 border-t-primary sticky top-24">
               <CardHeader className="bg-slate-50/50 border-b">
                 <CardTitle className="text-xs font-black uppercase tracking-widest">Módulo de Conciliación</CardTitle>
               </CardHeader>
@@ -306,7 +327,7 @@ export default function RequestDetailPage() {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-800">Valor que voy a cobrar realmente</Label>
+                  <Label className="text-[10px] font-black uppercase text-slate-800">Valor real de cobro final</Label>
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
                     <Input 
@@ -316,11 +337,11 @@ export default function RequestDetailPage() {
                       onChange={(e) => setApprovedAmount(Number(e.target.value))} 
                     />
                   </div>
-                  <p className="text-[9px] font-bold text-muted-foreground italic">Al actualizar, el valor inicial quedará tachado como referencia histórica.</p>
+                  <p className="text-[9px] font-bold text-muted-foreground italic">Este valor es el que se exportará en el Excel de cobros.</p>
                 </div>
 
-                <Button className="w-full h-14 bg-primary hover:bg-primary/90 font-black uppercase tracking-widest shadow-xl text-lg" onClick={handleSaveBilling}>
-                  <RefreshCw className="h-5 w-5 mr-2" /> ACTUALIZAR CONCILIACIÓN
+                <Button className="w-full h-14 bg-primary hover:bg-primary/90 font-black uppercase tracking-widest shadow-xl text-lg gap-2" onClick={handleSaveBilling}>
+                  <RefreshCw className="h-5 w-5" /> ACTUALIZAR COBRO
                 </Button>
               </CardContent>
             </Card>
@@ -328,26 +349,5 @@ export default function RequestDetailPage() {
         </div>
       </div>
     </div>
-  )
-}
-
-function RefreshCw({ className }: { className?: string }) {
-  return (
-    <svg 
-      className={className} 
-      xmlns="http://www.w3.org/2000/svg" 
-      width="24" height="24" 
-      viewBox="0 0 24 24" 
-      fill="none" 
-      stroke="currentColor" 
-      strokeWidth="2" 
-      strokeLinecap="round" 
-      strokeLinejoin="round"
-    >
-      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-      <path d="M21 3v5h-5" />
-      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-      <path d="M3 21v-5h5" />
-    </svg>
   )
 }
