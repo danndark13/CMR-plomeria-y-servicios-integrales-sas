@@ -58,6 +58,7 @@ export interface TechnicianIntervention {
   notes: string;
   laborCost: number;     // Costo de mano de obra para este técnico
   detailedExpenses: Expense[]; // Lista de gastos detallados
+  authorName?: string;   // Nombre de quien hizo el reporte
 }
 
 export interface AssistanceCompany {
