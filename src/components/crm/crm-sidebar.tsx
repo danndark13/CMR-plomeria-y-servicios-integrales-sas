@@ -50,7 +50,7 @@ export function CRMSidebar() {
     return doc(db, 'user_profiles', user.uid)
   }, [user, db])
 
-  const { data: profile } = useDoc(profileRef)
+  const { data: profile, isLoading } = useDoc(profileRef)
 
   const handleLogout = () => {
     signOut(auth).then(() => {
@@ -63,7 +63,7 @@ export function CRMSidebar() {
   }
 
   // Define navigation based on role
-  const role = profile?.roleId || 'Servicio al Cliente'
+  const role = profile?.roleId || 'Cargando...'
   const isAdmin = role === 'Administrador'
   const isTech = role === 'Técnico'
   const isAccounting = role === 'Contabilidad'
@@ -85,22 +85,22 @@ export function CRMSidebar() {
   return (
     <Sidebar variant="sidebar" collapsible="offcanvas" className="bg-white border-r shadow-xl">
       <SidebarHeader className="p-6">
-        <div className="flex items-center gap-4">
-          <Avatar className="h-12 w-12 border-2 border-primary/20 shadow-md">
+        <Link href="/profile" className="flex items-center gap-4 group transition-all hover:bg-slate-50 p-2 rounded-xl">
+          <Avatar className="h-12 w-12 border-2 border-primary/20 shadow-md group-hover:scale-105 transition-transform">
             <AvatarImage src={`https://picsum.photos/seed/${user?.uid}/100/100`} />
-            <AvatarFallback className="bg-primary text-primary-foreground font-bold">
-              {profile?.firstName?.charAt(0)}{profile?.lastName?.charAt(0)}
+            <AvatarFallback className="bg-primary text-primary-foreground font-bold text-lg">
+              {profile?.firstName?.charAt(0) || 'U'}
             </AvatarFallback>
           </Avatar>
           <div className="flex flex-col overflow-hidden">
-            <span className="text-sm font-bold truncate text-slate-900">
-              {profile?.firstName} {profile?.lastName}
+            <span className="text-sm font-black truncate text-slate-900 group-hover:text-primary transition-colors">
+              {isLoading ? 'Cargando...' : `${profile?.firstName} ${profile?.lastName}`}
             </span>
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
               {role}
             </span>
           </div>
-        </div>
+        </Link>
       </SidebarHeader>
       
       <SidebarSeparator className="mx-4 opacity-50" />
