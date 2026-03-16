@@ -2,7 +2,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { 
   LayoutDashboard, 
   Briefcase, 
@@ -13,7 +13,9 @@ import {
   CalendarDays,
   BarChart3,
   UserCog,
-  Calculator
+  Calculator,
+  LogOut,
+  User as UserIcon
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -30,9 +32,18 @@ import {
 } from "@/components/ui/sidebar"
 import { MOCK_REQUESTS, MOCK_REMINDERS } from "@/lib/mock-data"
 import { Badge } from "@/components/ui/badge"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator
+} from "@/components/ui/dropdown-menu"
+import { toast } from "@/hooks/use-toast"
 
 export function CRMSidebar() {
   const pathname = usePathname()
+  const router = useRouter()
   
   const today = new Date().toLocaleDateString()
   const todayCount = MOCK_REQUESTS.reduce((acc, req) => {
@@ -55,6 +66,14 @@ export function CRMSidebar() {
     { title: "Usuarios", icon: UserCog, href: "/admin/users" },
     { title: "Productividad", icon: BarChart3, href: "/admin/reports" },
   ]
+
+  const handleLogout = () => {
+    toast({
+      title: "Sesión cerrada",
+      description: "Has salido del sistema exitosamente."
+    })
+    router.push("/login")
+  }
 
   return (
     <Sidebar variant="sidebar" collapsible="icon">
@@ -136,23 +155,40 @@ export function CRMSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="p-4">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton tooltip="Configuración" className="text-muted-foreground">
-              <Settings className="h-5 w-5" />
-              <span>Configuración</span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <SidebarMenuButton className="h-fit py-3 px-3 border bg-accent/30 hover:bg-accent/50 rounded-lg group-data-[collapsible=icon]:p-2 transition-all">
+              <div className="flex items-center gap-3 w-full">
+                <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                  DC
+                </div>
+                <div className="flex flex-col overflow-hidden text-left group-data-[collapsible=icon]:hidden">
+                  <span className="truncate text-sm font-semibold">Daniel Céspedes</span>
+                  <span className="truncate text-[10px] text-muted-foreground">danielcorecspds@gmail.com</span>
+                </div>
+              </div>
             </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-        <div className="mt-4 flex items-center gap-3 rounded-lg border bg-accent/30 p-3 group-data-[collapsible=icon]:hidden">
-          <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">
-            AD
-          </div>
-          <div className="flex flex-col overflow-hidden">
-            <span className="truncate text-sm font-semibold">Administrador</span>
-            <span className="truncate text-xs text-muted-foreground">admin@asistenciapro.com</span>
-          </div>
-        </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="right" align="end" className="w-56">
+            <DropdownMenuItem asChild>
+              <Link href="/profile" className="flex items-center gap-2 cursor-pointer">
+                <UserIcon className="h-4 w-4" />
+                <span>Mi Perfil</span>
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/settings" className="flex items-center gap-2 cursor-pointer">
+                <Settings className="h-4 w-4" />
+                <span>Configuración</span>
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleLogout} className="text-destructive flex items-center gap-2 cursor-pointer focus:bg-destructive/10 focus:text-destructive">
+              <LogOut className="h-4 w-4" />
+              <span>Cerrar Sesión</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </SidebarFooter>
     </Sidebar>
   )
