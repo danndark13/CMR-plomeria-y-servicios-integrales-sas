@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -30,7 +30,8 @@ import {
   Car,
   Trash2,
   FileSpreadsheet,
-  Download
+  Download,
+  FileDown
 } from "lucide-react"
 import { MOCK_TECHNICIANS } from "@/lib/mock-data"
 import { toast } from "@/hooks/use-toast"
@@ -38,6 +39,8 @@ import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from "@
 import { collection, doc, writeBatch, deleteDoc, query, where, orderBy } from "firebase/firestore"
 import { TechnicianIntervention, ServiceRequest, PayrollRecord, Advance } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { jsPDF } from "jspdf"
+import autoTable from "jspdf-autotable"
 
 export default function PayrollHubPage() {
   const db = useFirestore()
@@ -138,6 +141,133 @@ export default function PayrollHubPage() {
     return { totalGross, totalExpenses, totalRentals, totalFee, accumulatedToSplit, totalAdvances, technicianBase, netPaid, totalSimpleVisitBonus }
   }, [pendingInterventions, pendingAdvances, adjustmentAmount])
 
+  const generatePayrollPDF = (records: PayrollRecord[]) => {
+    const doc = new jsPDF()
+    
+    records.forEach((record, index) => {
+      if (index > 0) doc.addPage()
+      
+      const techName = MOCK_TECHNICIANS.find(t => t.id === record.technicianId)?.name || record.technicianId
+      const dateStr = new Date(record.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
+
+      // HEADER
+      doc.setFontSize(18)
+      doc.setTextColor(31, 91, 204)
+      doc.text("PLOMERÍA Y SERVICIOS RYS SAS", 105, 20, { align: 'center' })
+      
+      doc.setFontSize(10)
+      doc.setTextColor(100)
+      doc.text("Nit: 901.456.789-0 | Comprobante de Liquidación Técnico", 105, 26, { align: 'center' })
+      
+      doc.setDrawColor(200)
+      doc.line(20, 32, 190, 32)
+
+      // INFO SECTION
+      doc.setFontSize(11)
+      doc.setTextColor(0)
+      doc.setFont("helvetica", "bold")
+      doc.text("TÉCNICO:", 20, 45)
+      doc.setFont("helvetica", "normal")
+      doc.text(techName.toUpperCase(), 50, 45)
+
+      doc.setFont("helvetica", "bold")
+      doc.text("FECHA:", 20, 52)
+      doc.setFont("helvetica", "normal")
+      doc.text(dateStr, 50, 52)
+
+      doc.setFont("helvetica", "bold")
+      doc.text("REF LIQ:", 20, 59)
+      doc.setFont("helvetica", "normal")
+      doc.text(record.id, 50, 59)
+
+      // ITEMS TABLE
+      const tableRows: any[] = []
+      
+      // Add Interventions
+      const relatedRequests = (allRequests || []).filter(r => 
+        r.interventions?.some(i => i.payrollId === record.id)
+      )
+
+      relatedRequests.forEach(req => {
+        const myIntervs = req.interventions.filter(i => i.payrollId === record.id)
+        myIntervs.forEach(i => {
+          const matCost = i.detailedExpenses?.filter(e => !e.isUnused).reduce((s, e) => s + (e.amount || 0), 0) || 0
+          let rentals = 0
+          if (i.usedRotomartillo) rentals += 80000
+          if (i.usedGeofono) rentals += 120000
+          
+          let techNet = 0
+          const subtotal = i.reportedValue - (matCost + rentals)
+          // Hide fee calculation from view, show only net result for the tech
+          const internalFee = subtotal > 0 ? subtotal * 0.10 : 0
+          if (i.isSimpleVisit) {
+            techNet = (20000 / 2) + ((Math.max(0, i.reportedValue - 20000) - (matCost + rentals) - internalFee) / 2)
+          } else {
+            techNet = (subtotal - internalFee) / 2
+          }
+
+          tableRows.push([
+            req.claimNumber,
+            `${i.type}${i.isSimpleVisit ? ' (VISITA)' : ''}`,
+            `$${i.reportedValue.toLocaleString()}`,
+            `-$${(matCost + rentals).toLocaleString()}`,
+            `$${techNet.toLocaleString()}`
+          ])
+        })
+      })
+
+      autoTable(doc, {
+        startY: 70,
+        head: [['EXPEDIENTE', 'TIPO SERVICIO', 'VALOR BRUTO', 'DEDUCCIONES', 'PAGO NETO (50%)']],
+        body: tableRows,
+        theme: 'striped',
+        headStyles: { fillStyle: 'fill', fillColor: [31, 91, 204], textColor: [255, 255, 255], fontStyle: 'bold' },
+        styles: { fontSize: 9, cellPadding: 3 },
+        columnStyles: {
+          2: { halign: 'right' },
+          3: { halign: 'right', textColor: [200, 0, 0] },
+          4: { halign: 'right', fontStyle: 'bold' }
+        }
+      })
+
+      // FINALS SECTION
+      const finalY = (doc as any).lastAutoTable.finalY + 15
+      
+      doc.setDrawColor(230)
+      doc.setFillColor(245, 245, 245)
+      doc.rect(120, finalY, 70, 45, 'F')
+
+      doc.setFontSize(10)
+      doc.setTextColor(80)
+      doc.text("SUBTOTAL SERVICIOS:", 125, finalY + 10)
+      doc.text(`$${(record.netPaid + record.totalAdvances - (record.adjustmentAmount || 0)).toLocaleString()}`, 185, finalY + 10, { align: 'right' })
+
+      doc.text("ADELANTOS RECIBIDOS:", 125, finalY + 18)
+      doc.text(`-$${record.totalAdvances.toLocaleString()}`, 185, finalY + 18, { align: 'right' })
+
+      if (record.adjustmentAmount !== 0) {
+        doc.text("AJUSTES / BONOS:", 125, finalY + 26)
+        doc.text(`${record.adjustmentAmount > 0 ? '+' : '-'}$${Math.abs(record.adjustmentAmount).toLocaleString()}`, 185, finalY + 26, { align: 'right' })
+      }
+
+      doc.setFontSize(14)
+      doc.setTextColor(31, 91, 204)
+      doc.setFont("helvetica", "bold")
+      doc.text("TOTAL PAGADO:", 125, finalY + 38)
+      doc.text(`$${record.netPaid.toLocaleString()}`, 185, finalY + 38, { align: 'right' })
+
+      // FOOTER
+      doc.setFontSize(8)
+      doc.setTextColor(150)
+      doc.setFont("helvetica", "italic")
+      doc.text("Nota: Los descuentos de materiales y alquileres se restan del valor reportado antes de la partición del 50%.", 20, 280)
+      doc.text("Este documento es un soporte interno de liquidación corporativa.", 20, 285)
+    })
+
+    doc.save(`Nomina_RYS_${new Date().toISOString().split('T')[0]}.pdf`)
+    toast({ title: "PDF Generado", description: "El reporte se ha descargado correctamente." })
+  }
+
   const handleGeneratePayroll = async () => {
     if (!db || !selectedTechId || (pendingInterventions.length === 0 && pendingAdvances.length === 0)) return
     
@@ -233,33 +363,6 @@ export default function PayrollHubPage() {
     }
   }
 
-  const handleExportSelected = () => {
-    if (selectedHistoryItems.length === 0) return
-    const records = (payrollHistory || []).filter(r => selectedHistoryItems.includes(r.id))
-    
-    const headers = ["ID", "TECNICO", "FECHA", "BRUTO", "GASTOS", "FEE", "ADELANTOS", "AJUSTE", "NETO PAGADO"]
-    const rows = records.map(r => [
-      r.id,
-      r.technicianId,
-      new Date(r.date).toLocaleDateString(),
-      r.totalGross,
-      r.totalExpenses + r.totalRentals,
-      r.feeAmount,
-      r.totalAdvances,
-      r.adjustmentAmount,
-      r.netPaid
-    ])
-
-    const csvContent = [headers.join(","), ...rows.map(e => e.join(","))].join("\n")
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.href = url
-    link.download = `Reporte_Nomina_${new Date().toISOString().split('T')[0]}.csv`
-    link.click()
-    toast({ title: "Exportación Exitosa" })
-  }
-
   if (!selectedTechId) {
     return (
       <div className="flex flex-col gap-8">
@@ -305,18 +408,23 @@ export default function PayrollHubPage() {
 
           <TabsContent value="historial">
             <Card className="shadow-md border-none overflow-hidden">
-              <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between">
+              <CardHeader className="bg-slate-50 border-b flex flex-col md:flex-row items-center justify-between gap-4">
                 <div>
                   <CardTitle className="text-lg font-black uppercase">Registros de Pago</CardTitle>
                   <CardDescription className="text-[10px] font-bold">Consolidado histórico de nóminas liquidadas.</CardDescription>
                 </div>
-                <Button 
-                  disabled={selectedHistoryItems.length === 0} 
-                  onClick={handleExportSelected}
-                  className="bg-green-600 hover:bg-green-700 font-black text-[10px] uppercase gap-2 h-10 shadow-lg"
-                >
-                  <FileSpreadsheet className="h-4 w-4" /> EXPORTAR SELECCIONADOS ({selectedHistoryItems.length})
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    disabled={selectedHistoryItems.length === 0} 
+                    onClick={() => {
+                      const records = (payrollHistory || []).filter(r => selectedHistoryItems.includes(r.id))
+                      generatePayrollPDF(records)
+                    }}
+                    className="bg-primary hover:bg-primary/90 font-black text-[10px] uppercase gap-2 h-10 shadow-lg"
+                  >
+                    <FileDown className="h-4 w-4" /> DESCARGAR PDF SELECCIONADOS ({selectedHistoryItems.length})
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 <Table>
@@ -344,7 +452,7 @@ export default function PayrollHubPage() {
                           />
                         </TableCell>
                         <TableCell><Badge variant="outline" className="font-mono font-black text-primary border-primary/20">{liq.id}</Badge></TableCell>
-                        <TableCell><span className="font-bold uppercase text-xs">{liq.technicianId}</span></TableCell>
+                        <TableCell><span className="font-bold uppercase text-xs">{(MOCK_TECHNICIANS.find(t => t.id === liq.technicianId)?.name || liq.technicianId).toUpperCase()}</span></TableCell>
                         <TableCell><span className="text-[10px] font-bold text-slate-500 uppercase">{new Date(liq.date).toLocaleDateString()}</span></TableCell>
                         <TableCell className="text-right font-mono font-black text-green-600">${liq.netPaid.toLocaleString()}</TableCell>
                         <TableCell className="text-right">
@@ -354,7 +462,7 @@ export default function PayrollHubPage() {
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             )}
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => generatePayrollPDF([liq])}>
                               <Download className="h-4 w-4" />
                             </Button>
                           </div>
