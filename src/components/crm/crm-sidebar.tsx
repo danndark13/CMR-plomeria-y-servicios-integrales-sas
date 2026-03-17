@@ -37,18 +37,18 @@ import {
   SidebarSeparator,
   useSidebar
 } from "@/components/ui/sidebar"
-import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
+import { useUser, useFirestore, useDoc, useMemoFirebase, useAuth } from '@/firebase'
 import { doc } from 'firebase/firestore'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "@/hooks/use-toast"
-import { getAuth, signOut } from "firebase/auth"
+import { signOut } from "firebase/auth"
 
 export function CRMSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { user } = useUser()
   const db = useFirestore()
-  const auth = getAuth()
+  const auth = useAuth()
   const { setOpenMobile } = useSidebar()
 
   const profileRef = useMemoFirebase(() => {
@@ -59,6 +59,7 @@ export function CRMSidebar() {
   const { data: profile, isLoading } = useDoc(profileRef)
 
   const handleLogout = () => {
+    if (!auth) return
     signOut(auth).then(() => {
       toast({
         title: "Sesión cerrada",

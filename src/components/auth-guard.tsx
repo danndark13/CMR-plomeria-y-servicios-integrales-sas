@@ -3,9 +3,9 @@
 
 import { useEffect, useState, useCallback, useRef } from "react"
 import { useRouter, usePathname } from "next/navigation"
-import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase"
+import { useUser, useFirestore, useDoc, useMemoFirebase, useAuth } from "@/firebase"
 import { doc } from "firebase/firestore"
-import { getAuth, signOut } from "firebase/auth"
+import { signOut } from "firebase/auth"
 import { Loader2, ShieldAlert } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 
@@ -14,11 +14,11 @@ const INACTIVITY_TIMEOUT = 30 * 60 * 1000 // 30 minutos en milisegundos
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, isUserLoading } = useUser()
   const db = useFirestore()
+  const auth = useAuth()
   const router = useRouter()
   const pathname = usePathname()
   const [isChecking, setIsChecking] = useState(true)
   const lastActivity = useRef<number>(Date.now())
-  const auth = getAuth()
 
   // 1. Fetch profile to ensure user is fully authorized
   const profileRef = useMemoFirebase(() => {
@@ -42,7 +42,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     } else if (user && !isProfileLoading && !profile && !isLoginPage) {
       // Usuario autenticado pero sin perfil en Firestore (sesión huérfana)
       // Forzar cierre de sesión para limpiar el estado
-      signOut(auth).then(() => router.push("/login"))
+      if (auth) {
+        signOut(auth).then(() => router.push("/login"))
+      }
     } else {
       setIsChecking(false)
     }
@@ -54,7 +56,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
-    if (!user) return
+    if (!user || !auth) return
 
     const events = ["mousedown", "mousemove", "keypress", "scroll", "touchstart"]
     events.forEach(name => window.addEventListener(name, handleActivity))
