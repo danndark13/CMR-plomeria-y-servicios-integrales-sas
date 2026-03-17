@@ -35,7 +35,8 @@ import {
   HandCoins,
   MapPin,
   Car,
-  DollarSign
+  DollarSign,
+  Info
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -52,7 +53,7 @@ export default function RequestDetailPage() {
   const { user } = useUser()
   const db = useFirestore()
   
-  const [localRequest, setLocalRequest] = useState<ServiceRequest | null>(null)
+  const [localRequest, setLocalRequest] = setDoc<ServiceRequest | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [showAddEntry, setShowAddEntry] = useState(false)
   const [showAddAdvance, setShowAddAdvance] = useState(false)
@@ -92,12 +93,14 @@ export default function RequestDetailPage() {
   const profileRef = useMemoFirebase(() => (user && db ? doc(db, 'user_profiles', user.uid) : null), [user, db])
   const { data: profile, isLoading: isProfileLoading } = useDoc(profileRef)
 
+  const [localStateRequest, setLocalStateRequest] = useState<ServiceRequest | null>(null)
+
   useEffect(() => {
     if (firestoreRequest) {
-      setLocalRequest(firestoreRequest as any)
+      setLocalStateRequest(firestoreRequest as any)
     } else if (isRequestLoading === false) {
       const found = MOCK_REQUESTS.find(r => r.id === id || r.claimNumber === id)
-      if (found) setLocalRequest(found as any)
+      if (found) setLocalStateRequest(found as any)
     }
   }, [firestoreRequest, id, isRequestLoading])
 
@@ -105,19 +108,24 @@ export default function RequestDetailPage() {
   const isAccounting = profile?.roleId === 'Contabilidad'
   const isCustomerService = profile?.roleId === 'Servicio al Cliente'
   const isTech = profile?.roleId === 'Técnico'
-  const isCompleted = localRequest?.status === 'completed'
+  const isCompleted = localStateRequest?.status === 'completed'
   const isPrivilegedRole = isAdmin || isAccounting
   const canEdit = isPrivilegedRole || (isCustomerService && !isCompleted) || (isTech && !isCompleted)
 
-  const handleUpdateField = (field: keyof ServiceRequest, value: any) => {
-    if (!canEdit || isTech) return
-    setLocalRequest(prev => prev ? { ...prev, [field]: value } : null)
+  const handleUpdateStatus = (newStatus: ServiceStatus) => {
+    if (!db || !requestRef || !canEdit) return
+    setIsSaving(true)
+    updateDoc(requestRef, { status: newStatus, updatedAt: new Date().toISOString() })
+      .then(() => {
+        toast({ title: "Estado Actualizado" })
+      })
+      .finally(() => setIsSaving(false))
   }
 
   const handleToggleExpenseUsage = (interventionId: string, expenseId: string, currentUnused: boolean) => {
-    if (!db || !requestRef || !canEdit || !localRequest || isTech) return
+    if (!db || !requestRef || !canEdit || !localStateRequest || isTech) return
 
-    const updatedInterventions = (localRequest.interventions || []).map(interv => {
+    const updatedInterventions = (localStateRequest.interventions || []).map(interv => {
       if (interv.id === interventionId) {
         const updatedExpenses = (interv.detailedExpenses || []).map(exp => {
           if (exp.id === expenseId) {
@@ -136,7 +144,18 @@ export default function RequestDetailPage() {
     }
 
     updateDoc(requestRef, updatedData)
-    setLocalRequest(prev => prev ? { ...prev, ...updatedData } : null)
+  }
+
+  const handleApproveForPayroll = (interventionId: string) => {
+    if (!db || !requestRef || !isPrivilegedRole || !localStateRequest) return
+    
+    const updatedInterventions = (localStateRequest.interventions || []).map(i => {
+      if (i.id === interventionId) return { ...i, isReadyForPayroll: true }
+      return i
+    })
+
+    updateDoc(requestRef, { interventions: updatedInterventions, updatedAt: new Date().toISOString() })
+      .then(() => toast({ title: "Reporte Aprobado", description: "Este reporte ya aparecerá en la nómina del técnico." }))
   }
 
   const handleAddExpense = () => {
@@ -160,7 +179,7 @@ export default function RequestDetailPage() {
   }
 
   const handleSaveIntervention = () => {
-    if (!db || !requestRef || !profile || !canEdit || !localRequest) return
+    if (!db || !requestRef || !profile || !canEdit || !localStateRequest) return
     
     const targetTechId = isTech ? profile.username : newIntervention.technicianId
     if (!targetTechId || !newIntervention.notes) {
@@ -185,7 +204,7 @@ export default function RequestDetailPage() {
       payrollStatus: 'pending'
     }
 
-    const updatedInterventions = [...(localRequest.interventions || []), intervention]
+    const updatedInterventions = [...(localStateRequest.interventions || []), intervention]
     const updatedData = { 
       interventions: updatedInterventions,
       updatedAt: new Date().toISOString()
@@ -195,14 +214,13 @@ export default function RequestDetailPage() {
       .then(() => {
         toast({ title: "Reporte Añadido" })
         setShowAddEntry(false)
-        setLocalRequest(prev => prev ? { ...prev, ...updatedData } : null)
         setNewIntervention({ type: 'Diagnóstico', notes: '', reportedValue: 0, usedRotomartillo: false, usedGeofono: false, isSimpleVisit: false, detailedExpenses: [] })
       })
       .finally(() => setIsSaving(false))
   }
 
   const handleSaveAdvance = () => {
-    if (!db || !requestRef || !newAdvance.technicianId || !newAdvance.amount || !localRequest) return
+    if (!db || !requestRef || !newAdvance.technicianId || !newAdvance.amount || !localStateRequest) return
     
     setIsSaving(true)
     const advance: Advance = {
@@ -215,7 +233,7 @@ export default function RequestDetailPage() {
       isPaidInPayroll: false
     }
 
-    const updatedAdvances = [...(localRequest.advances || []), advance]
+    const updatedAdvances = [...(localStateRequest.advances || []), advance]
     const updatedData = {
       advances: updatedAdvances,
       updatedAt: new Date().toISOString()
@@ -225,7 +243,6 @@ export default function RequestDetailPage() {
       .then(() => {
         toast({ title: "Adelanto Registrado" })
         setShowAddAdvance(false)
-        setLocalRequest(prev => prev ? { ...prev, ...updatedData } : null)
         setNewAdvance({ amount: 0, reason: '', technicianId: '' })
       })
       .finally(() => setIsSaving(false))
@@ -238,7 +255,7 @@ export default function RequestDetailPage() {
     </div>
   )
 
-  if (!localRequest) return (
+  if (!localStateRequest) return (
     <div className="p-20 text-center flex flex-col items-center gap-4">
       <AlertCircle className="h-12 w-12 text-destructive opacity-40" />
       <h2 className="text-xl font-black uppercase text-slate-800">Expediente no encontrado</h2>
@@ -246,10 +263,9 @@ export default function RequestDetailPage() {
     </div>
   )
 
-  const interventions = localRequest.interventions || []
-  const advances = localRequest.advances || []
+  const interventions = localStateRequest.interventions || []
+  const advances = localStateRequest.advances || []
 
-  // Technician View Filter: Only see their own data if they are a tech
   const visibleInterventions = isTech 
     ? interventions.filter(i => i.technicianId === profile?.username)
     : interventions
@@ -267,23 +283,32 @@ export default function RequestDetailPage() {
           </Button>
           <div className="space-y-1">
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-black text-primary uppercase">{localRequest.claimNumber}</h1>
-              <StatusBadge status={localRequest.status} />
+              <h1 className="text-2xl font-black text-primary uppercase">{localStateRequest.claimNumber}</h1>
+              <StatusBadge status={localStateRequest.status} />
             </div>
             <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
-              <CategoryIcon category={localRequest.category} className="h-3 w-3" /> {localRequest.category}
+              <CategoryIcon category={localStateRequest.category} className="h-3 w-3" /> {localStateRequest.category}
             </p>
           </div>
         </div>
+        
         {canEdit && !isTech && (
-          <Button className="gap-2 font-black shadow-lg" onClick={() => {
-            setIsSaving(true);
-            updateDoc(requestRef!, { ...localRequest, updatedAt: new Date().toISOString() })
-              .then(() => toast({ title: "Cambios Guardados" }))
-              .finally(() => setIsSaving(false))
-          }} disabled={isSaving}>
-            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} GUARDAR CAMBIOS
-          </Button>
+          <div className="flex items-center gap-2">
+            <p className="text-[10px] font-black uppercase text-muted-foreground mr-2">Estado Operativo:</p>
+            <Select value={localStateRequest.status} onValueChange={(v) => handleUpdateStatus(v as ServiceStatus)}>
+              <SelectTrigger className="w-[180px] font-black uppercase h-10 border-primary/20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pending">Pendiente</SelectItem>
+                <SelectItem value="assigned">Programado</SelectItem>
+                <SelectItem value="in_progress">En Proceso</SelectItem>
+                <SelectItem value="completed">Finalizado</SelectItem>
+                <SelectItem value="cancelled">Cancelado</SelectItem>
+                <SelectItem value="warranty">Garantía</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         )}
       </div>
 
@@ -296,19 +321,19 @@ export default function RequestDetailPage() {
             <CardContent className="pt-6 grid gap-4 md:grid-cols-2">
               <div className="space-y-1">
                 <p className="text-[10px] font-black uppercase text-slate-400">Asegurado</p>
-                <p className="font-bold uppercase">{localRequest.insuredName}</p>
+                <p className="font-bold uppercase">{localStateRequest.insuredName}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-[10px] font-black uppercase text-slate-400">Teléfono</p>
-                <p className="font-medium">{localRequest.phoneNumber}</p>
+                <p className="font-medium">{localStateRequest.phoneNumber}</p>
               </div>
               <div className="space-y-1 md:col-span-2">
                 <p className="text-[10px] font-black uppercase text-slate-400">Dirección</p>
-                <p className="font-medium uppercase flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-primary" /> {localRequest.address}</p>
+                <p className="font-medium uppercase flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-primary" /> {localStateRequest.address}</p>
               </div>
               <div className="space-y-1 md:col-span-2 pt-2 border-t border-dashed">
                 <p className="text-[10px] font-black uppercase text-slate-400">Descripción del Problema</p>
-                <p className="text-xs text-slate-600 leading-relaxed">{localRequest.description}</p>
+                <p className="text-xs text-slate-600 leading-relaxed">{localStateRequest.description}</p>
               </div>
             </CardContent>
           </Card>
@@ -333,6 +358,34 @@ export default function RequestDetailPage() {
               </div>
             </div>
 
+            {showAddAdvance && (
+              <Card className="border-2 border-dashed border-destructive bg-destructive/5 animate-in slide-in-from-top-2">
+                <CardContent className="pt-6 space-y-4">
+                  <p className="text-[10px] font-black uppercase text-destructive tracking-widest">Registrar Nuevo Adelanto de Efectivo</p>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase">Técnico</Label>
+                      <Select value={newAdvance.technicianId} onValueChange={(v) => setNewAdvance({...newAdvance, technicianId: v})}>
+                        <SelectTrigger className="h-10"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                        <SelectContent>{MOCK_TECHNICIANS.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase">Monto ($)</Label>
+                      <Input type="number" value={newAdvance.amount} onChange={(e) => setNewAdvance({...newAdvance, amount: Number(e.target.value)})} className="font-bold" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase">Concepto</Label>
+                      <Input value={newAdvance.reason} onChange={(e) => setNewAdvance({...newAdvance, reason: e.target.value.toUpperCase()})} placeholder="EJ: ALIMENTACION" />
+                    </div>
+                  </div>
+                  <Button className="w-full bg-destructive hover:bg-destructive/90 font-black h-10" onClick={handleSaveAdvance} disabled={isSaving}>
+                    CONFIRMAR ENTREGA DE ADELANTO
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
             {showAddEntry && canEdit && (
               <Card className="border-2 border-dashed border-primary animate-in slide-in-from-top-4 shadow-xl">
                 <CardHeader className="bg-primary/5">
@@ -347,7 +400,7 @@ export default function RequestDetailPage() {
                         </div>
                         <div>
                           <Label htmlFor="simple-visit" className="text-sm font-black uppercase text-orange-800 block cursor-pointer">Visita Técnica Simple</Label>
-                          <p className="text-[9px] font-bold text-orange-600 uppercase">Valor Base $20.000</p>
+                          <p className="text-[9px] font-bold text-orange-600 uppercase">Valor Base $20.000 (Sin 10%)</p>
                         </div>
                       </div>
                       <Switch 
@@ -390,7 +443,7 @@ export default function RequestDetailPage() {
                       </Select>
                     </div>
                     <div className="space-y-2 md:col-span-2">
-                      <Label className="text-[10px] font-black uppercase text-blue-600">Valor Reportado ($)</Label>
+                      <Label className="text-[10px] font-black uppercase text-blue-600">Valor Bruto a Cobrar ($)</Label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-blue-600">$</span>
                         <Input 
@@ -409,11 +462,11 @@ export default function RequestDetailPage() {
                     </p>
                     <div className="flex items-center space-x-2">
                       <Checkbox id="rotomartillo" checked={newIntervention.usedRotomartillo} onCheckedChange={(v) => setNewIntervention({...newIntervention, usedRotomartillo: !!v})} />
-                      <Label htmlFor="rotomartillo" className="text-xs font-bold uppercase">Rotomartillo</Label>
+                      <Label htmlFor="rotomartillo" className="text-xs font-bold uppercase">Rotomartillo ($80k)</Label>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Checkbox id="geofono" checked={newIntervention.usedGeofono} onCheckedChange={(v) => setNewIntervention({...newIntervention, usedGeofono: !!v})} />
-                      <Label htmlFor="geofono" className="text-xs font-bold uppercase">Geófono</Label>
+                      <Label htmlFor="geofono" className="text-xs font-bold uppercase">Geófono ($120k)</Label>
                     </div>
                   </div>
 
@@ -467,7 +520,7 @@ export default function RequestDetailPage() {
 
             <div className="space-y-4">
               {visibleInterventions.length === 0 && visibleAdvances.length === 0 ? (
-                <div className="py-20 text-center border-2 border-dashed rounded-xl bg-slate-50/50"><p className="text-sm font-bold text-slate-400 italic">No tienes reportes en este expediente</p></div>
+                <div className="py-20 text-center border-2 border-dashed rounded-xl bg-slate-50/50"><p className="text-sm font-bold text-slate-400 italic">No hay reportes ni adelantos en este expediente</p></div>
               ) : (
                 <div className="space-y-4">
                   {visibleAdvances.map(adv => (
@@ -479,7 +532,10 @@ export default function RequestDetailPage() {
                           </div>
                           <div>
                             <p className="text-xs font-black uppercase text-destructive-foreground">Adelanto Recibido</p>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase">{new Date(adv.date).toLocaleString()} • {adv.reason}</p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase">
+                              {new Date(adv.date).toLocaleString()} • {adv.reason}
+                              {!isTech && <span className="ml-2 text-primary">| Técnico: {adv.technicianId}</span>}
+                            </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -518,13 +574,27 @@ export default function RequestDetailPage() {
                               <div className="flex items-center gap-2">
                                 <span className="text-[10px] font-black uppercase text-slate-400">{new Date(item.date).toLocaleString()}</span>
                                 {item.isSimpleVisit && <Badge className="bg-orange-500 text-white font-black uppercase text-[8px]">Visita Técnica</Badge>}
+                                {item.payrollStatus === 'processed' && <Badge className="bg-green-600 text-white font-black uppercase text-[8px]">Pagado al Técnico</Badge>}
                               </div>
-                              <Badge className="w-fit bg-primary/10 text-primary font-black uppercase text-[9px] mt-1">{item.type}</Badge>
+                              <div className="flex items-center gap-2 mt-1">
+                                <Badge className="bg-primary/10 text-primary font-black uppercase text-[9px]">{item.type}</Badge>
+                                {!isTech && <span className="text-[10px] font-bold text-slate-500">Técnico: {item.technicianId}</span>}
+                              </div>
                             </div>
                           </div>
-                          <div className="text-right">
-                             <p className="text-[8px] font-black uppercase text-slate-400">Pago Estimado</p>
-                             <p className="text-lg font-black text-green-600">${techShare.toLocaleString()}</p>
+                          <div className="text-right flex items-center gap-4">
+                             <div>
+                               <p className="text-[8px] font-black uppercase text-slate-400">Pago Técnico Neto</p>
+                               <p className="text-lg font-black text-green-600">${techShare.toLocaleString()}</p>
+                             </div>
+                             {isPrivilegedRole && item.payrollStatus !== 'processed' && !item.isReadyForPayroll && (
+                               <Button size="sm" onClick={() => handleApproveForPayroll(item.id)} className="bg-blue-600 hover:bg-blue-700 text-[9px] font-black uppercase h-8">
+                                 Aprobar Nómina
+                               </Button>
+                             )}
+                             {item.isReadyForPayroll && item.payrollStatus !== 'processed' && (
+                               <Badge variant="outline" className="border-blue-500 text-blue-600 text-[8px] font-black uppercase">Aprobado para Pago</Badge>
+                             )}
                           </div>
                         </CardHeader>
                         <CardContent className="pt-4 space-y-4">
@@ -532,7 +602,7 @@ export default function RequestDetailPage() {
                           
                           {(item.detailedExpenses?.length > 0 || rentals > 0) && (
                             <div className="grid gap-2">
-                              <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Gastos y Herramientas</p>
+                              <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Deducciones de Nómina (Materiales y Equipos)</p>
                               {rentals > 0 && (
                                 <div className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border text-[10px] font-bold">
                                   <span className="uppercase flex items-center gap-2"><Hammer className="h-3 w-3" /> Alquiler de Maquinaria</span>
@@ -542,7 +612,10 @@ export default function RequestDetailPage() {
                               {item.detailedExpenses.map(exp => (
                                 <div key={exp.id} className={cn("flex items-center justify-between p-2 rounded-lg border", exp.isUnused ? 'bg-orange-50/30 border-dashed border-orange-200' : 'bg-white')}>
                                   <div className="flex flex-col">
-                                    <span className="text-[10px] font-black uppercase text-slate-800">{exp.description} {exp.isUnused && <Badge className="h-3 text-[6px] bg-orange-500">EN MI STOCK</Badge>}</span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] font-black uppercase text-slate-800">{exp.description}</span>
+                                      {exp.isUnused && <Badge className="h-3 text-[6px] bg-orange-500">EN STOCK (NO DESCONTADO)</Badge>}
+                                    </div>
                                     <span className="text-[9px] text-muted-foreground">{exp.quantity} {exp.unit} x ${exp.unitValue?.toLocaleString()}</span>
                                   </div>
                                   <span className={cn("text-[10px] font-mono font-black", exp.isUnused ? 'text-slate-400' : 'text-destructive')}>
@@ -563,28 +636,58 @@ export default function RequestDetailPage() {
         </div>
 
         <div className="lg:col-span-4 space-y-6">
-          <Card className="shadow-lg border-t-4 border-t-primary bg-slate-50 sticky top-24">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Mi Estado Financiero</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-4 bg-white rounded-xl border space-y-3 shadow-sm">
-                <div className="flex justify-between text-[10px] font-bold text-destructive uppercase">
-                  <span>Adelantos Recibidos:</span>
-                  <span className="font-mono">-${visibleAdvances.reduce((s, a) => s + (a.amount || 0), 0).toLocaleString()}</span>
+          {/* Dashboard Financiero para el Técnico */}
+          {isTech && (
+            <Card className="shadow-lg border-t-4 border-t-primary bg-slate-50 sticky top-24">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Mi Estado Financiero</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 bg-white rounded-xl border space-y-3 shadow-sm">
+                  <div className="flex justify-between text-[10px] font-bold text-destructive uppercase">
+                    <span>Adelantos Recibidos:</span>
+                    <span className="font-mono">-${visibleAdvances.reduce((s, a) => s + (a.amount || 0), 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-[10px] font-bold text-orange-600 uppercase border-t pt-2">
+                    <span>Mi Stock (Pendiente):</span>
+                    <span className="font-mono">${interventions.flatMap(i => i.detailedExpenses).filter(e => e.isUnused && e.technicianId === profile?.username).reduce((s, e) => s + (e.amount || 0), 0).toLocaleString()}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-[10px] font-bold text-orange-600 uppercase border-t pt-2">
-                  <span>Mi Stock (Pendiente):</span>
-                  <span className="font-mono">${interventions.flatMap(i => i.detailedExpenses).filter(e => e.isUnused && e.technicianId === profile?.username).reduce((s, e) => s + (e.amount || 0), 0).toLocaleString()}</span>
+                
+                <div className="flex items-center gap-2 p-3 bg-blue-50 text-blue-700 rounded-lg text-[9px] font-bold uppercase leading-tight border border-blue-100">
+                  <Info className="h-4 w-4 shrink-0" />
+                  Los valores aquí mostrados son estimaciones de tu pago neto (50%) después de descontar gastos operativos.
                 </div>
-              </div>
-              
-              <div className="flex items-center gap-2 p-3 bg-blue-50 text-blue-700 rounded-lg text-[9px] font-bold uppercase leading-tight border border-blue-100">
-                <Info className="h-4 w-4 shrink-0" />
-                Los valores aquí mostrados son estimaciones de tu pago neto (50%) después de descontar gastos y el fee administrativo.
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Información contable visible para Admin/Contabilidad */}
+          {!isTech && (
+            <Card className="shadow-lg border-t-4 border-t-blue-600 bg-slate-50 sticky top-24">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Resumen de Facturación</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 bg-white rounded-xl border space-y-3 shadow-sm">
+                  <div className="flex justify-between text-[10px] font-bold uppercase">
+                    <span className="text-slate-500">Base a Cobrar (Total Reportado):</span>
+                    <span className="font-mono font-black text-blue-600">${interventions.reduce((s, i) => s + (i.reportedValue || 0), 0).toLocaleString()}</span>
+                  </div>
+                  {localStateRequest.billingStatus === 'validated' && (
+                    <div className="flex justify-between text-[10px] font-black uppercase text-green-600 border-t pt-2">
+                      <span>Valor Aprobado:</span>
+                      <span className="font-mono">${(localStateRequest.approvedAmount || 0).toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="p-3 bg-blue-50 text-blue-700 rounded-lg text-[9px] font-bold uppercase leading-tight border border-blue-100 flex items-center gap-2">
+                  <Calculator className="h-4 w-4 shrink-0" />
+                  La conciliación final y ajustes de valor aprobado se realizan en el módulo contable.
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>
