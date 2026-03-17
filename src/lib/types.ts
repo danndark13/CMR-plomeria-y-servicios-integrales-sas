@@ -37,7 +37,7 @@ export interface Expense {
   unit?: UnitOfMeasure;
   quantity?: number;
   unitValue?: number;
-  isUnused: boolean; // Si es true, queda en inventario y no suma al costo del servicio
+  isUnused: boolean; // Si es true, queda en inventario y no suma al costo del servicio en nómina
 }
 
 export interface Advance {
@@ -46,6 +46,7 @@ export interface Advance {
   reason: string;
   date: string;
   createdByUserId: string;
+  technicianId: string;
   isPaidInPayroll?: boolean;
   payrollId?: string;
 }
@@ -65,7 +66,7 @@ export interface TechnicianIntervention {
   date: string;
   notes: string;
   reportedValue: number; // Valor a cobrar a la aseguradora por esta tarea
-  laborCost: number;     // Mantenemos por compatibilidad, pero la liquidación usará reportedValue
+  laborCost: number;     // Mantenemos por compatibilidad
   usedRotomartillo: boolean; // Alquiler $80.000
   usedGeofono: boolean;      // Alquiler $120.000
   detailedExpenses: Expense[];
@@ -73,7 +74,7 @@ export interface TechnicianIntervention {
   payrollStatus?: 'pending' | 'processed';
   payrollId?: string;
   isReadyForPayroll?: boolean; 
-  isSimpleVisit?: boolean; // Nueva propiedad para identificar visitas de $20.000
+  isSimpleVisit?: boolean; // Identificar visitas de $20.000
 }
 
 export interface AssistanceCompany {
@@ -99,7 +100,7 @@ export interface PayrollRecord {
   totalGross: number;      // Total cobrado a aseguradoras
   feeAmount: number;       // El 10% descontado
   totalRentals: number;    // Rotomartillo + Geofono
-  totalExpenses: number;   // Facturas de materiales
+  totalExpenses: number;   // Facturas de materiales UTILIZADOS
   totalAdvances: number;   // Adelantos
   amountToSplit: number;   // Valor que queda para dividir en 2
   netPaid: number;         // El 50% + ajuste
