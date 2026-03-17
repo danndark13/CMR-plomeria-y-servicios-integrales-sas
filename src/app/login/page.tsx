@@ -10,9 +10,11 @@ import { Button } from "@/components/ui/button"
 import { ShieldCheck, Lock, User, Loader2, Globe, Mail, Smartphone, Download, Share, PlusSquare, HelpCircle, RefreshCw, AlertCircle, Trash2 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { signInAnonymously } from "firebase/auth"
-import { doc, setDoc } from "firebase/firestore"
+import { doc, setDoc, getDocs, query, collection, where, deleteDoc } from "firebase/firestore"
 import { useFirebase } from "@/firebase"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { errorEmitter } from '@/firebase/error-emitter'
+import { FirestorePermissionError } from '@/firebase/errors'
 
 function RYSLogo({ className }: { className?: string }) {
   return (
@@ -116,9 +118,11 @@ export default function LoginPage() {
     }
 
     try {
+      // 1. Sign in
       const userCredential = await signInAnonymously(auth)
       const user = userCredential.user
 
+      // 2. Prepare default data based on ID
       let roleId = "Servicio al Cliente"
       let firstName = "Colaborador"
       let lastName = inputId
@@ -145,27 +149,56 @@ export default function LoginPage() {
         }
       }
 
+      // 3. PERSISTENCE LOGIC: Check if this username already has a profile from a previous session
+      const q = query(collection(firestore, "user_profiles"), where("username", "==", inputId))
+      const querySnapshot = await getDocs(q)
+      
+      let existingData: any = {}
+      if (!querySnapshot.empty) {
+        // We found an existing profile for this ID. We copy it to preserve manual updates.
+        const oldDoc = querySnapshot.docs[0]
+        existingData = oldDoc.data()
+        
+        // If it's a different UID (which happens on every logout/login), delete the old reference
+        if (oldDoc.id !== user.uid) {
+          deleteDoc(doc(firestore, "user_profiles", oldDoc.id)).catch(() => {})
+        }
+      }
+
+      // 4. Create or update profile with the current UID
       const profileRef = doc(firestore, "user_profiles", user.uid)
       const profileData = {
+        ...existingData, // Preserves names, emails, etc. from existing session
         id: user.uid,
         username: inputId,
-        firstName,
-        lastName,
-        email,
-        phoneNumber: "3167533657",
-        roleId,
+        firstName: existingData.firstName || firstName,
+        lastName: existingData.lastName || lastName,
+        email: existingData.email || email,
+        phoneNumber: existingData.phoneNumber || "3167533657",
+        roleId: roleId, // We sync roleId with the login ID used
         isActive: true,
-        cedula
+        cedula: existingData.cedula || cedula,
+        lastLogin: new Date().toISOString()
       }
       
-      await setDoc(profileRef, profileData, { merge: true })
+      setDoc(profileRef, profileData, { merge: true })
+        .then(() => {
+          toast({
+            title: "Bienvenido a RYS SAS",
+            description: `Sesión iniciada como ${profileData.firstName} (${profileData.roleId}).`,
+          })
+          router.push("/")
+        })
+        .catch(async (error) => {
+          const permissionError = new FirestorePermissionError({
+            path: profileRef.path,
+            operation: "write",
+            requestResourceData: profileData,
+          })
+          errorEmitter.emit("permission-error", permissionError)
+          setIsLoading(false)
+        })
 
-      toast({
-        title: "Bienvenido a RYS SAS",
-        description: `Sesión iniciada como ${firstName} (${roleId}).`,
-      })
-      
-      router.push("/")
     } catch (error: any) {
       toast({
         variant: "destructive",

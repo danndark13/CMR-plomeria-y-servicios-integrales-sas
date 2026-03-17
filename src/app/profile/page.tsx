@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -48,11 +49,18 @@ export default function ProfilePage() {
 
     setIsProcessing(true)
     const updateData = {
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-      email: formData.email,
+      firstName: formData.firstName.toUpperCase(),
+      lastName: formData.lastName.toUpperCase(),
+      email: formData.email.toLowerCase(),
       phoneNumber: formData.phoneNumber,
+      updatedAt: new Date().toISOString()
     }
+
+    // Optimistic toast
+    toast({
+      title: "Guardando cambios...",
+      description: "Sincronizando información con el servidor corporativo."
+    })
 
     updateDoc(profileRef, updateData)
       .then(() => {
@@ -83,7 +91,7 @@ export default function ProfilePage() {
            <a href="https://www.rysplomeria.com" target="_blank" rel="noopener noreferrer" className="text-xs font-black text-primary uppercase flex items-center gap-2 hover:underline">
              <Globe className="h-4 w-4" /> Visitar sitio web
            </a>
-           <span className="text-[10px] font-bold text-muted-foreground">gerente@rysplomeria.com</span>
+           <span className="text-[10px] font-bold text-muted-foreground">{profile?.email || '---'}</span>
         </div>
       </div>
 
@@ -128,6 +136,7 @@ export default function ProfilePage() {
                     onChange={(e) => setFormData({...formData, firstName: e.target.value})}
                     required 
                     placeholder="Ej. Daniel"
+                    className="uppercase"
                   />
                 </div>
                 <div className="space-y-2">
@@ -138,6 +147,7 @@ export default function ProfilePage() {
                     onChange={(e) => setFormData({...formData, lastName: e.target.value})}
                     required 
                     placeholder="Ej. Céspedes"
+                    className="uppercase"
                   />
                 </div>
               </div>
