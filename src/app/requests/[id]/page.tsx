@@ -103,7 +103,7 @@ export default function RequestDetailPage() {
     }
   }, [firestoreRequest, id, isRequestLoading])
 
-  const isAdmin = profile?.roleId === 'Administrador'
+  const isAdmin = profile?.roleId === 'Administrador' || profile?.roleId === 'Gerente'
   const isAccounting = profile?.roleId === 'Contabilidad'
   const isCustomerService = profile?.roleId === 'Servicio al Cliente'
   const isTech = profile?.roleId === 'Técnico'
@@ -225,7 +225,9 @@ export default function RequestDetailPage() {
 
   if (isRequestLoading || isProfileLoading) return (
     <div className="p-20 text-center flex flex-col items-center gap-4">
-      <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
+      <div className="h-16 w-16 rounded-2xl bg-white shadow-xl flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary opacity-40" />
+      </div>
       <p className="text-muted-foreground font-bold tracking-tighter uppercase text-xs">Sincronizando expediente...</p>
     </div>
   )
@@ -241,8 +243,6 @@ export default function RequestDetailPage() {
   const interventions = localStateRequest.interventions || []
   const advances = localStateRequest.advances || []
 
-  // TECHNICIAN PRIVACY LOGIC: Filter visible reports
-  // Technicians see ALL reports but with restricted data for others' reports
   const visibleInterventions = interventions; 
 
   const visibleAdvances = isTech
@@ -618,7 +618,6 @@ export default function RequestDetailPage() {
         </div>
 
         <div className="lg:col-span-4 space-y-6">
-          {/* Dashboard Financiero para el Técnico */}
           {isTech && (
             <Card className="shadow-lg border-t-4 border-t-primary bg-slate-50 sticky top-24">
               <CardHeader className="pb-2">
@@ -644,7 +643,6 @@ export default function RequestDetailPage() {
             </Card>
           )}
 
-          {/* Información contable visible para Admin/Contabilidad */}
           {!isTech && (
             <Card className="shadow-lg border-t-4 border-t-blue-600 bg-slate-50 sticky top-24">
               <CardHeader className="pb-2">

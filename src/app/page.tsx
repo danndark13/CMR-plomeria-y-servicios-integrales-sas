@@ -65,7 +65,6 @@ export default function DashboardPage() {
   const { user, isUserLoading } = useUser()
   const db = useFirestore()
 
-  // 1. All hooks must be at the TOP level
   const profileRef = useMemoFirebase(() => {
     if (!user || !db) return null
     return doc(db, 'user_profiles', user.uid)
@@ -95,6 +94,7 @@ export default function DashboardPage() {
   }, [])
 
   const isTech = profile?.roleId === 'Técnico'
+  const isAdmin = profile?.roleId === 'Administrador' || profile?.roleId === 'Gerente'
 
   const allRequests = useMemo(() => {
     const combined = [...(firestoreRequests || [])]
@@ -110,7 +110,6 @@ export default function DashboardPage() {
       }
     }
 
-    // STRICT FILTER FOR TECHNICIANS
     if (isTech && profile) {
       return combined.filter(req => 
         req.interventions?.some(i => i.technicianId === profile.username) ||
@@ -143,7 +142,9 @@ export default function DashboardPage() {
   if (!mounted || isUserLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
+        <div className="h-16 w-16 rounded-2xl bg-white shadow-xl flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary opacity-40" />
+        </div>
         <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Cargando Panel Operativo...</p>
       </div>
     )
@@ -214,9 +215,8 @@ export default function DashboardPage() {
       .map(i => ({ ...i, request: req }))
   ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
-  const canCreate = profile?.roleId === 'Administrador' || profile?.roleId === 'Servicio al Cliente'
+  const canCreate = isAdmin || profile?.roleId === 'Servicio al Cliente'
 
-  // DIFFERENT UI FOR TECHNICIAN
   if (isTech) {
     return (
       <div className="flex flex-col gap-8">
@@ -226,7 +226,6 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid gap-8 lg:grid-cols-12">
-          {/* CALENDAR COLUMN */}
           <Card className="lg:col-span-7 border-accent/20 bg-accent/5 shadow-sm overflow-hidden">
             <CardHeader className="bg-accent/10 border-b">
               <CardTitle className="text-lg flex items-center gap-2 text-accent-foreground font-black uppercase">
@@ -269,7 +268,6 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* LAST 4 SERVICES COLUMN */}
           <Card className="lg:col-span-5 shadow-sm border-l-4 border-l-primary">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg flex items-center gap-2 font-black uppercase">
@@ -304,7 +302,6 @@ export default function DashboardPage() {
     )
   }
 
-  // ADMIN / CS / ACCOUNTING UI (Original)
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

@@ -92,6 +92,7 @@ export default function RequestsPage() {
   const { data: firestoreAccounts } = useCollection(clientAccountsQuery)
 
   const isTech = profile?.roleId === 'Técnico'
+  const isAdmin = profile?.roleId === 'Administrador' || profile?.roleId === 'Gerente'
 
   const allRequests = useMemo(() => {
     const combined = [...(firestoreRequests || [])]
@@ -107,7 +108,6 @@ export default function RequestsPage() {
       }
     }
 
-    // STRICT FILTER FOR TECHNICIANS
     if (isTech && profile) {
       return combined.filter(req => 
         req.interventions?.some(i => i.technicianId === profile.username) ||
@@ -223,12 +223,10 @@ export default function RequestsPage() {
     ].join("\n")
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement("a")
+    const link = document.body.appendChild(document.createElement("a"))
     const url = URL.createObjectURL(blob)
-    link.setAttribute("href", url)
-    link.setAttribute("download", `Bitacora_RYS_${new Date().toISOString().split('T')[0]}.csv`)
-    link.style.visibility = 'hidden'
-    document.body.appendChild(link)
+    link.href = url
+    link.download = `Bitacora_RYS_${new Date().toISOString().split('T')[0]}.csv`
     link.click()
     document.body.removeChild(link)
 
@@ -236,8 +234,8 @@ export default function RequestsPage() {
   }
 
   const role = profile?.roleId
-  const canCreate = role === 'Administrador' || role === 'Servicio al Cliente'
-  const canExport = role === 'Administrador' || role === 'Servicio al Cliente' || role === 'Contabilidad'
+  const canCreate = isAdmin || role === 'Servicio al Cliente'
+  const canExport = isAdmin || role === 'Servicio al Cliente' || role === 'Contabilidad'
   const isLoadingTotal = isUserLoading || isRequestsLoading
 
   return (
@@ -291,7 +289,7 @@ export default function RequestsPage() {
             <TableBody>
               {isLoadingTotal ? (
                 <TableRow>
-                  <TableCell colSpan={isTech ? 4 : 4} className="h-40 text-center">
+                  <TableCell colSpan={4} className="h-40 text-center">
                     <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary/20" />
                     <p className="mt-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest">Sincronizando bitácora...</p>
                   </TableCell>

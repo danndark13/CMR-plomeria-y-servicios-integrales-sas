@@ -23,11 +23,12 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return hasRole('Administrador');
+      let profile = getProfile();
+      return isSignedIn() && profile != null && profile.isActive == true && (profile.roleId == 'Administrador' || profile.roleId == 'Gerente');
     }
 
     function isAccounting() {
-      return hasRole('Contabilidad');
+      return hasRole('Contabilidad') || isAdmin();
     }
 
     function isOwner(userId) {
@@ -59,16 +60,9 @@ service cloud.firestore {
     }
 
     match /service_requests/{serviceRequestId} {
-      // Permite lectura a cualquier colaborador con perfil activo.
-      // La restricción de campos sensibles (cobros) se maneja en la UI para el rol Técnico.
       allow get, list: if isSignedIn() && getProfile() != null && getProfile().isActive == true;
-      
-      // Solo Admin y Servicio al Cliente pueden aperturar expedientes.
       allow create: if isSignedIn() && (isAdmin() || hasRole('Servicio al Cliente'));
-      
-      // Permite actualización a colaboradores activos para registrar reportes y avances.
       allow update: if isSignedIn() && getProfile() != null && getProfile().isActive == true;
-      
       allow delete: if isAdmin();
     }
 
@@ -84,7 +78,6 @@ service cloud.firestore {
     }
 
     match /payroll_history/{payrollId} {
-      // Permitir leer a Admin, Contabilidad o al propio Técnico dueño del registro
       allow get, list: if isSignedIn() && (
         isAdmin() || 
         isAccounting() || 

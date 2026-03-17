@@ -53,7 +53,6 @@ export default function LoginPage() {
     setIsIos(isIosDevice)
 
     const handler = (e: any) => {
-      console.log('RYS PWA: Evento de instalación capturado');
       e.preventDefault()
       setDeferredPrompt(e)
     }
@@ -126,7 +125,7 @@ export default function LoginPage() {
       let cedula = "1110564748"
 
       if (isGerente) {
-        roleId = "Administrador"
+        roleId = "Gerente"
         firstName = "YULIETH VANESA"
         lastName = "RAMIREZ"
         email = "gerente@rysplomeria.com"

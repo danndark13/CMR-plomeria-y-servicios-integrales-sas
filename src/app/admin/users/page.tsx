@@ -33,22 +33,18 @@ export default function AdminUsersPage() {
 
   const { data: users, isLoading } = useCollection(usersQuery)
 
-  // CONSOLIDATION LOGIC: Filter duplicates by username
   const filteredUsers = useMemo(() => {
     if (!users) return []
     
-    // Group by username to avoid duplicates in display caused by multiple sessions
     const uniqueMap = new Map()
     users.forEach(u => {
       const uname = (u.username || "").toUpperCase().trim()
       if (!uname) return;
       
-      // If we already have this username, we keep the one that is active or the most "complete"
       if (!uniqueMap.has(uname)) {
         uniqueMap.set(uname, u)
       } else {
         const existing = uniqueMap.get(uname)
-        // Keep the active one or the one with a real firstName
         if (u.isActive && !existing.isActive) {
           uniqueMap.set(uname, u)
         }
@@ -76,7 +72,6 @@ export default function AdminUsersPage() {
     const formData = new FormData(e.currentTarget)
     const username = (formData.get("username") as string || "").toUpperCase().trim()
     
-    // Check for duplicates if creating new
     if (!editingUser && filteredUsers.some(u => u.username === username)) {
       toast({
         variant: "destructive",
@@ -252,6 +247,7 @@ export default function AdminUsersPage() {
                       <SelectValue placeholder="Seleccionar rol" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="Gerente">Gerente</SelectItem>
                       <SelectItem value="Administrador">Administrador</SelectItem>
                       <SelectItem value="Contabilidad">Contabilidad</SelectItem>
                       <SelectItem value="Servicio al Cliente">Servicio al Cliente</SelectItem>
@@ -369,27 +365,29 @@ export default function AdminUsersPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity"><MoreVertical className="h-4 w-4" /></Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-56">
-                          <DropdownMenuItem onClick={() => { setEditingUser(u); setIsCreating(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
-                            <UserCog className="h-4 w-4 mr-2" /> Editar Perfil
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleResetPassword(u.username)}>
-                            <Key className="h-4 w-4 mr-2" /> Reset Clave (RYS2025)
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem 
-                            className={u.isActive ? "text-destructive font-bold" : "text-green-600 font-bold"} 
-                            onClick={() => toggleUserStatus(u)}
-                            disabled={isProcessing || u.username === 'GERENTE'}
-                          >
-                            <Power className="h-4 w-4 mr-2" /> {u.isActive ? "Suspender Acceso" : "Reactivar"}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div className="flex items-center justify-end gap-2">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity"><MoreVertical className="h-4 w-4" /></Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-56">
+                            <DropdownMenuItem onClick={() => { setEditingUser(u); setIsCreating(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
+                              <UserCog className="h-4 w-4 mr-2" /> Editar Perfil
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleResetPassword(u.username)}>
+                              <Key className="h-4 w-4 mr-2" /> Reset Clave (RYS2025)
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              className={u.isActive ? "text-destructive font-bold" : "text-green-600 font-bold"} 
+                              onClick={() => toggleUserStatus(u)}
+                              disabled={isProcessing || u.username === 'GERENTE'}
+                            >
+                              <Power className="h-4 w-4 mr-2" /> {u.isActive ? "Suspender Acceso" : "Reactivar"}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

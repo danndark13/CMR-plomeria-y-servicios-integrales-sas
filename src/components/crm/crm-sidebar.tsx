@@ -72,15 +72,14 @@ export function CRMSidebar() {
     setOpenMobile(false)
   }
 
-  // Define navigation based on role
   const role = profile?.roleId || (isLoading ? 'Cargando...' : 'Sin Rol')
-  const isAdmin = role === 'Administrador'
+  const isAdmin = role === 'Administrador' || role === 'Gerente'
   const isTech = role === 'Técnico'
-  const isAccounting = role === 'Contabilidad'
+  const isAccounting = role === 'Contabilidad' || isAdmin
 
   const navigationItems = [
     { title: "Panel Principal", icon: LayoutDashboard, href: "/", show: true },
-    { title: "Contabilidad", icon: Calculator, href: "/accounting", show: isAdmin || isAccounting },
+    { title: "Contabilidad", icon: Calculator, href: "/accounting", show: isAccounting },
     { title: "Mis Liquidaciones", icon: Wallet, href: "/technician/settlements", show: isTech },
     { title: "Bitácora", icon: ClipboardList, href: "/requests", show: true },
     { title: "Calendario", icon: CalendarDays, href: "/calendar", show: true },

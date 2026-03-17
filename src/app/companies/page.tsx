@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo } from "react"
@@ -64,7 +65,9 @@ export default function CompaniesPage() {
     return doc(db, "user_profiles", user.uid)
   }, [user, db])
   const { data: profile } = useDoc(profileRef)
-  const isAdmin = profile?.roleId === "Administrador"
+  
+  // BOTH Administrador and Gerente are admins
+  const isAdmin = profile?.roleId === "Administrador" || profile?.roleId === "Gerente"
 
   // Fetch companies and accounts from Firestore
   const companiesQuery = useMemoFirebase(() => {
@@ -203,7 +206,9 @@ export default function CompaniesPage() {
   if (loadingCompanies || loadingAccounts) {
     return (
       <div className="flex flex-col items-center justify-center p-20 gap-4">
-        <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
+        <div className="h-16 w-16 rounded-2xl bg-white shadow-xl flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary opacity-40" />
+        </div>
         <p className="text-xs font-black uppercase text-muted-foreground tracking-tighter">Sincronizando entidades...</p>
       </div>
     )
@@ -317,7 +322,6 @@ export default function CompaniesPage() {
         )}
       </div>
 
-      {/* Dialog for Creating/Editing Company */}
       <Dialog open={isCompanyDialogOpen} onOpenChange={setIsCompanyDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
@@ -369,7 +373,6 @@ export default function CompaniesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog for Creating Account */}
       <Dialog open={isAddingAccount} onOpenChange={(v) => { if(!v) setSelectedCompanyId(null); setIsAddingAccount(v); }}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
@@ -410,7 +413,6 @@ export default function CompaniesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Alert */}
       <AlertDialog open={!!companyToDelete} onOpenChange={(v) => !v && setCompanyToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
