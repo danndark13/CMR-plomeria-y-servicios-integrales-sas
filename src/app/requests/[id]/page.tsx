@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
   ArrowLeft, 
@@ -24,12 +25,13 @@ import {
   ClipboardList,
   X,
   Calculator,
-  FileText,
   CalendarDays,
   Clock,
   CheckCircle2,
   PackageCheck,
-  PackageX
+  PackageX,
+  Hammer,
+  Search
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -62,9 +64,12 @@ export default function RequestDetailPage() {
   const [newIntervention, setNewIntervention] = useState<Partial<TechnicianIntervention>>({
     type: 'Diagnóstico',
     notes: '',
-    laborCost: 0,
+    reportedValue: 0,
+    usedRotomartillo: false,
+    usedGeofono: false,
     detailedExpenses: []
   })
+  
   const [tempExpense, setTempExpense] = useState<Partial<Expense>>({
     description: '',
     unit: 'UND',
@@ -88,33 +93,6 @@ export default function RequestDetailPage() {
   
   const profileRef = useMemoFirebase(() => (user && db ? doc(db, 'user_profiles', user.uid) : null), [user, db])
   const { data: profile, isLoading: isProfileLoading } = useDoc(profileRef)
-
-  useEffect(() => {
-    if (!localRequest || !db || !requestRef) return;
-    
-    const checkStatusUpdate = () => {
-      if (localRequest.status === 'assigned' && localRequest.scheduledVisit) {
-        const visitTime = new Date(localRequest.scheduledVisit.date).getTime();
-        const currentTime = new Date().getTime();
-        const fiveMinutes = 5 * 60 * 1000;
-
-        if (currentTime > (visitTime + fiveMinutes)) {
-          updateDoc(requestRef, {
-            status: 'in_progress',
-            updatedAt: new Date().toISOString()
-          }).then(() => {
-            setLocalRequest(prev => prev ? { ...prev, status: 'in_progress' } : null);
-            toast({ title: "Estado Actualizado", description: "El servicio ha pasado a 'En Proceso' automáticamente." });
-          });
-        }
-      }
-    };
-
-    const interval = setInterval(checkStatusUpdate, 60000);
-    checkStatusUpdate();
-
-    return () => clearInterval(interval);
-  }, [localRequest, db, requestRef]);
 
   useEffect(() => {
     if (firestoreRequest) {
@@ -173,68 +151,12 @@ export default function RequestDetailPage() {
       updatedAt: new Date().toISOString()
     }
 
-    updateDoc(requestRef, updatedData)
-      .then(() => {
-        setLocalRequest(prev => prev ? { ...prev, ...updatedData } : null)
-        toast({ 
-          title: !currentUnused ? "Material en Stock" : "Material Consumido", 
-          description: !currentUnused ? "El insumo se ha devuelto al inventario." : "El insumo se ha marcado como usado en el servicio."
-        })
-      })
-      .catch(async (error) => {
-        const permissionError = new FirestorePermissionError({
-          path: requestRef.path,
-          operation: "update",
-          requestResourceData: updatedData,
-        })
-        errorEmitter.emit("permission-error", permissionError)
-      })
-  }
-
-  const handleScheduleVisit = () => {
-    if (!db || !requestRef || !scheduleData.date || !scheduleData.time || !scheduleData.technicianId) {
-      toast({ variant: "destructive", title: "Datos incompletos", description: "Por favor complete todos los campos de la cita." })
-      return
-    }
-
-    setIsSaving(true)
-    const scheduledDateTime = new Date(`${scheduleData.date}T${scheduleData.time}`).toISOString()
-    
-    const visit: ScheduledVisit = {
-      id: Math.random().toString(36).substring(7),
-      technicianId: scheduleData.technicianId,
-      date: scheduledDateTime,
-      createdAt: new Date().toISOString()
-    }
-
-    const updatedData = {
-      scheduledVisit: visit,
-      status: 'assigned' as ServiceStatus,
-      updatedAt: new Date().toISOString()
-    }
-
-    updateDoc(requestRef, updatedData)
-      .then(() => {
-        toast({ title: "Visita Programada", description: `Cita agendada para el ${new Date(scheduledDateTime).toLocaleString()}` })
-        setShowScheduleVisit(false)
-        setLocalRequest(prev => prev ? { ...prev, ...updatedData } : null)
-      })
-      .catch(async (error) => {
-        const permissionError = new FirestorePermissionError({
-          path: requestRef.path,
-          operation: "update",
-          requestResourceData: updatedData,
-        })
-        errorEmitter.emit("permission-error", permissionError)
-      })
-      .finally(() => setIsSaving(false))
+    updateDoc(requestRef, updatedData).catch(err => console.error(err))
+    setLocalRequest(prev => prev ? { ...prev, ...updatedData } : null)
   }
 
   const handleAddExpense = () => {
-    if (!tempExpense.description || !tempExpense.quantity || !tempExpense.unitValue) {
-      toast({ variant: "destructive", title: "Faltan datos", description: "Descripción, cantidad y valor unitario son obligatorios." })
-      return
-    }
+    if (!tempExpense.description || !tempExpense.quantity || !tempExpense.unitValue) return
     const totalAmount = (tempExpense.quantity || 0) * (tempExpense.unitValue || 0)
     const expense: Expense = {
       id: Math.random().toString(36).substring(7),
@@ -253,52 +175,40 @@ export default function RequestDetailPage() {
     setTempExpense({ description: '', unit: 'UND', quantity: 1, unitValue: 0, category: 'material' })
   }
 
-  const handleRemoveExpense = (expenseId: string) => {
-    setNewIntervention(prev => ({
-      ...prev,
-      detailedExpenses: (prev.detailedExpenses || []).filter(e => e.id !== expenseId)
-    }))
-  }
-
   const handleSaveIntervention = () => {
     if (!db || !requestRef || !profile || !canEdit) return
     if (!newIntervention.technicianId || !newIntervention.notes) {
-      toast({ variant: "destructive", title: "Campos incompletos", description: "Debe asignar un técnico y redactar notas." })
+      toast({ variant: "destructive", title: "Campos incompletos", description: "Debe asignar un técnico y notas." })
       return
     }
 
     setIsSaving(true)
     const intervention: TechnicianIntervention = {
       id: Math.random().toString(36).substring(7),
-      technicianId: newIntervention.technicianId,
+      technicianId: newIntervention.technicianId!,
       type: (newIntervention.type as InterventionType) || 'Diagnóstico',
       date: new Date().toISOString(),
-      notes: newIntervention.notes,
-      laborCost: Number(newIntervention.laborCost) || 0,
+      notes: newIntervention.notes!,
+      reportedValue: Number(newIntervention.reportedValue) || 0,
+      laborCost: 0,
+      usedRotomartillo: !!newIntervention.usedRotomartillo,
+      usedGeofono: !!newIntervention.usedGeofono,
       detailedExpenses: newIntervention.detailedExpenses || [],
       authorName: `${profile.firstName} ${profile.lastName}`
     }
 
     const updatedInterventions = [...(localRequest.interventions || []), intervention]
     const updatedData = { 
-      ...localRequest, 
       interventions: updatedInterventions,
       updatedAt: new Date().toISOString()
     }
 
-    setDoc(requestRef, updatedData, { merge: true })
+    updateDoc(requestRef, updatedData)
       .then(() => {
-        toast({ title: "Reporte Añadido", description: "La intervención ha sido registrada exitosamente." })
+        toast({ title: "Reporte Añadido" })
         setShowAddEntry(false)
-        setNewIntervention({ type: 'Diagnóstico', notes: '', laborCost: 0, detailedExpenses: [] })
-      })
-      .catch(async (error) => {
-        const permissionError = new FirestorePermissionError({
-          path: requestRef.path,
-          operation: "update",
-          requestResourceData: updatedData,
-        })
-        errorEmitter.emit("permission-error", permissionError)
+        setLocalRequest(prev => prev ? { ...prev, ...updatedData } : null)
+        setNewIntervention({ type: 'Diagnóstico', notes: '', reportedValue: 0, usedRotomartillo: false, usedGeofono: false, detailedExpenses: [] })
       })
       .finally(() => setIsSaving(false))
   }
@@ -317,30 +227,13 @@ export default function RequestDetailPage() {
 
     updateDoc(requestRef, dataToSave)
       .then(() => toast({ title: "Información Actualizada" }))
-      .catch(async (error) => {
-        const permissionError = new FirestorePermissionError({
-          path: requestRef.path,
-          operation: "update",
-          requestResourceData: dataToSave,
-        })
-        errorEmitter.emit("permission-error", permissionError)
-      })
       .finally(() => setIsSaving(false))
-  }
-
-  const checkWarehouseStock = (desc: string) => {
-    if (!inventoryItems || !desc) return null
-    const search = desc.toUpperCase()
-    return inventoryItems.find(i => 
-      (i.description && search.includes(i.description.toUpperCase())) || 
-      (i.description && i.description.toUpperCase().includes(search))
-    )
   }
 
   const interventions = localRequest.interventions || []
 
   return (
-    <div className="flex flex-col gap-6 max-w-7xl mx-auto">
+    <div className="flex flex-col gap-6 max-w-7xl mx-auto pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
@@ -348,16 +241,7 @@ export default function RequestDetailPage() {
           </Button>
           <div className="space-y-1">
             <div className="flex items-center gap-3">
-              {canEdit ? (
-                <Input 
-                  value={localRequest.claimNumber || ""} 
-                  onChange={(e) => handleUpdateField('claimNumber', e.target.value.toUpperCase())}
-                  className="w-40 font-black h-8 text-primary uppercase"
-                />
-              ) : (
-                <h1 className="text-2xl font-black text-primary uppercase">{localRequest.claimNumber}</h1>
-              )}
-              
+              <h1 className="text-2xl font-black text-primary uppercase">{localRequest.claimNumber}</h1>
               {canEdit ? (
                 <Select value={localRequest.status} onValueChange={(v) => handleUpdateField('status', v as ServiceStatus)}>
                   <SelectTrigger className="w-[140px] h-8 font-black uppercase text-[10px]">
@@ -381,103 +265,15 @@ export default function RequestDetailPage() {
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
-          {canEdit && (
-            <Button className="gap-2 font-black shadow-lg" onClick={handleSaveMainInfo} disabled={isSaving}>
-              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} GUARDAR CAMBIOS
-            </Button>
-          )}
-        </div>
+        {canEdit && (
+          <Button className="gap-2 font-black shadow-lg" onClick={handleSaveMainInfo} disabled={isSaving}>
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} GUARDAR CAMBIOS
+          </Button>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-12">
         <div className="lg:col-span-8 space-y-6">
-          <Card className="border-l-4 border-l-accent shadow-lg bg-accent/5">
-            <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-sm font-black uppercase flex items-center gap-2 tracking-widest text-accent-foreground">
-                  <CalendarDays className="h-5 w-5 text-accent" /> Programación de Visita
-                </CardTitle>
-                <CardDescription className="text-[10px] font-bold">Agenda la próxima intervención técnica.</CardDescription>
-              </div>
-              {canEdit && (
-                <Button 
-                  variant={showScheduleVisit ? "ghost" : "default"} 
-                  size="sm" 
-                  className={showScheduleVisit ? "text-slate-500" : "bg-accent hover:bg-accent/90 text-white font-black"}
-                  onClick={() => setShowScheduleVisit(!showScheduleVisit)}
-                >
-                  {showScheduleVisit ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4 mr-2" />} 
-                  {showScheduleVisit ? "Cancelar" : "Programar Cita"}
-                </Button>
-              )}
-            </CardHeader>
-            <CardContent>
-              {showScheduleVisit ? (
-                <div className="grid gap-4 md:grid-cols-3 p-4 bg-white rounded-xl border-2 border-dashed border-accent/20 animate-in slide-in-from-top-2">
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase tracking-widest">Fecha de Cita</Label>
-                    <Input 
-                      type="date" 
-                      value={scheduleData.date} 
-                      onChange={(e) => setScheduleData({...scheduleData, date: e.target.value})}
-                      className="h-10 font-bold"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase tracking-widest">Hora</Label>
-                    <Input 
-                      type="time" 
-                      value={scheduleData.time} 
-                      onChange={(e) => setScheduleData({...scheduleData, time: e.target.value})}
-                      className="h-10 font-bold"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase tracking-widest">Técnico que Asiste</Label>
-                    <Select value={scheduleData.technicianId} onValueChange={(v) => setScheduleData({...scheduleData, technicianId: v})}>
-                      <SelectTrigger className="h-10 font-bold"><SelectValue placeholder="Seleccionar técnico" /></SelectTrigger>
-                      <SelectContent>
-                        {MOCK_TECHNICIANS.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="md:col-span-3 pt-2">
-                    <Button className="w-full bg-accent hover:bg-accent/90 font-black h-12 shadow-lg" onClick={handleScheduleVisit} disabled={isSaving}>
-                      {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />} AGENDAR Y MARCAR COMO PROGRAMADO
-                    </Button>
-                  </div>
-                </div>
-              ) : localRequest.scheduledVisit ? (
-                <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-accent/20 shadow-sm">
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-xl bg-accent/10 flex items-center justify-center text-accent">
-                      <Clock className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase text-accent tracking-widest">Visita Confirmada</p>
-                      <p className="text-lg font-black text-slate-800">
-                        {new Date(localRequest.scheduledVisit.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
-                      </p>
-                      <p className="text-xs font-bold text-muted-foreground uppercase">
-                        Hora: {new Date(localRequest.scheduledVisit.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • 
-                        Técnico: {MOCK_TECHNICIANS.find(t => t.id === localRequest.scheduledVisit?.technicianId)?.name}
-                      </p>
-                    </div>
-                  </div>
-                  <Badge className="bg-green-600 text-white font-black h-8 px-4 uppercase text-[10px] tracking-widest gap-2">
-                    <CheckCircle2 className="h-4 w-4" /> ACTIVA
-                  </Badge>
-                </div>
-              ) : (
-                <div className="py-6 text-center border-2 border-dashed rounded-xl bg-slate-50/50">
-                  <CalendarDays className="h-10 w-10 text-slate-200 mx-auto mb-2" />
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-tighter italic">Sin visitas programadas actualmente</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
           <Card className="border-l-4 border-l-primary shadow-sm">
             <CardHeader className="pb-3 border-b bg-slate-50/50">
               <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Información del Cliente</CardTitle>
@@ -487,7 +283,7 @@ export default function RequestDetailPage() {
                 <Label className="text-[10px] font-black uppercase">Nombre Asegurado</Label>
                 <Input 
                   value={localRequest.insuredName || ""} 
-                  onChange={(e) => handleUpdateField('insuredName', e.target.value)}
+                  onChange={(e) => handleUpdateField('insuredName', e.target.value.toUpperCase())}
                   disabled={!canEdit}
                   className="font-bold"
                 />
@@ -504,7 +300,7 @@ export default function RequestDetailPage() {
                 <Label className="text-[10px] font-black uppercase">Dirección de Visita</Label>
                 <Input 
                   value={localRequest.address || ""} 
-                  onChange={(e) => handleUpdateField('address', e.target.value)}
+                  onChange={(e) => handleUpdateField('address', e.target.value.toUpperCase())}
                   disabled={!canEdit}
                 />
               </div>
@@ -514,27 +310,27 @@ export default function RequestDetailPage() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-black uppercase tracking-tighter flex items-center gap-2">
-                <ClipboardList className="h-5 w-5 text-primary" /> Historial de Reportes
+                <ClipboardList className="h-5 w-5 text-primary" /> Bitácora de Reportes
               </h2>
               {canEdit && (
                 <Button variant="outline" size="sm" className="gap-2 font-bold" onClick={() => setShowAddEntry(!showAddEntry)}>
                   {showAddEntry ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />} 
-                  {showAddEntry ? "Cancelar" : "Añadir Reporte"}
+                  {showAddEntry ? "Cancelar" : "Añadir Reporte Técnico"}
                 </Button>
               )}
             </div>
 
             {showAddEntry && canEdit && (
-              <Card className="border-2 border-dashed border-primary animate-in slide-in-from-top-4">
+              <Card className="border-2 border-dashed border-primary animate-in slide-in-from-top-4 shadow-xl">
                 <CardHeader className="bg-primary/5">
                   <CardTitle className="text-sm font-black uppercase">Nuevo Registro de Intervención</CardTitle>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-6">
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-4 md:grid-cols-3">
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase">Técnico Asignado</Label>
                       <Select value={newIntervention.technicianId} onValueChange={(v) => setNewIntervention({...newIntervention, technicianId: v})}>
-                        <SelectTrigger><SelectValue placeholder="Seleccionar técnico" /></SelectTrigger>
+                        <SelectTrigger className="h-10"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                         <SelectContent>
                           {MOCK_TECHNICIANS.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
                         </SelectContent>
@@ -543,7 +339,7 @@ export default function RequestDetailPage() {
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase">Tipo de Intervención</Label>
                       <Select value={newIntervention.type} onValueChange={(v) => setNewIntervention({...newIntervention, type: v as InterventionType})}>
-                        <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
+                        <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="Diagnóstico">Diagnóstico</SelectItem>
                           <SelectItem value="Reparación">Reparación</SelectItem>
@@ -552,211 +348,159 @@ export default function RequestDetailPage() {
                         </SelectContent>
                       </Select>
                     </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase text-blue-600">Valor a Cobrar ($)</Label>
+                      <Input 
+                        type="number" 
+                        placeholder="Ej. 150000" 
+                        className="h-10 font-black border-blue-200"
+                        value={newIntervention.reportedValue}
+                        onChange={(e) => setNewIntervention({...newIntervention, reportedValue: Number(e.target.value)})}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2 p-4 bg-slate-50 rounded-xl border border-dashed">
+                    <p className="text-[10px] font-black uppercase text-slate-500 col-span-2 tracking-widest">Alquiler de Herramientas Especiales</p>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="rotomartillo" 
+                        checked={newIntervention.usedRotomartillo} 
+                        onCheckedChange={(v) => setNewIntervention({...newIntervention, usedRotomartillo: !!v})}
+                      />
+                      <Label htmlFor="rotomartillo" className="text-xs font-bold uppercase flex items-center gap-2">
+                        Rotomartillo <span className="text-primary font-black">($80.000)</span>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="geofono" 
+                        checked={newIntervention.usedGeofono} 
+                        onCheckedChange={(v) => setNewIntervention({...newIntervention, usedGeofono: !!v})}
+                      />
+                      <Label htmlFor="geofono" className="text-xs font-bold uppercase flex items-center gap-2">
+                        Geófono <span className="text-primary font-black">($120.000)</span>
+                      </Label>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase">Notas Técnicas / Hallazgos</Label>
                     <Textarea 
                       placeholder="Describa el trabajo realizado..." 
+                      className="min-h-[100px]"
                       value={newIntervention.notes}
                       onChange={(e) => setNewIntervention({...newIntervention, notes: e.target.value})}
                     />
                   </div>
 
-                  <div className="space-y-4 p-4 bg-slate-50 rounded-lg border">
-                    <div className="flex items-center justify-between border-b pb-2">
-                      <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Gastos e Insumos</Label>
-                      <div className="flex items-center gap-2">
-                        <Calculator className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-[10px] font-mono font-bold text-slate-500">Cálculo Automático</span>
-                      </div>
+                  <div className="space-y-4 p-4 bg-white rounded-xl border border-slate-200 shadow-inner">
+                    <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Facturas de Materiales / Gastos</Label>
+                    <div className="grid gap-2 md:grid-cols-12">
+                      <Input placeholder="Descripción" className="md:col-span-5 h-8 text-xs" value={tempExpense.description} onChange={(e) => setTempExpense({...tempExpense, description: e.target.value.toUpperCase()})} />
+                      <Select value={tempExpense.unit} onValueChange={(v) => setTempExpense({...tempExpense, unit: v as UnitOfMeasure})}>
+                        <SelectTrigger className="md:col-span-2 h-8 text-[10px] font-bold"><SelectValue /></SelectTrigger>
+                        <SelectContent>{UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <Input type="number" placeholder="Cant" className="md:col-span-1 h-8 text-xs" value={tempExpense.quantity} onChange={(e) => setTempExpense({...tempExpense, quantity: Number(e.target.value)})} />
+                      <Input type="number" placeholder="V. Unit" className="md:col-span-2 h-8 text-xs" value={tempExpense.unitValue} onChange={(e) => setTempExpense({...tempExpense, unitValue: Number(e.target.value)})} />
+                      <Button size="sm" className="md:col-span-2 h-8 font-black text-[10px]" onClick={handleAddExpense}><Plus className="h-3 w-3 mr-1" /> AÑADIR</Button>
                     </div>
-                    
-                    <div className="grid gap-4 md:grid-cols-12">
-                      <div className="md:col-span-12 space-y-2">
-                        <Label className="text-[10px] font-black">Mano de Obra ($)</Label>
-                        <Input type="number" value={newIntervention.laborCost} onChange={(e) => setNewIntervention({...newIntervention, laborCost: Number(e.target.value)})} className="h-8 font-mono font-bold" />
-                      </div>
-
-                      <div className="md:col-span-12 pt-2 border-t mt-2">
-                        <p className="text-[9px] font-black uppercase text-slate-400 mb-2">Agregar nuevo insumo</p>
-                      </div>
-
-                      <div className="md:col-span-5 space-y-2">
-                        <Label className="text-[9px] font-black">Descripción</Label>
-                        <Input placeholder="EJ: TUBO PVC 1/2" value={tempExpense.description} onChange={(e) => setTempExpense({...tempExpense, description: e.target.value.toUpperCase()})} className="h-8 text-xs font-bold" />
-                      </div>
-                      
-                      <div className="md:col-span-2 space-y-2">
-                        <Label className="text-[9px] font-black">Unidad</Label>
-                        <Select value={tempExpense.unit} onValueChange={(v) => setTempExpense({...tempExpense, unit: v as UnitOfMeasure})}>
-                          <SelectTrigger className="h-8 text-[10px] font-black"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {UNITS.map(u => <SelectItem key={u} value={u} className="text-[10px] font-bold">{u}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="md:col-span-1 space-y-2">
-                        <Label className="text-[9px] font-black">Cant.</Label>
-                        <Input type="number" value={tempExpense.quantity} onChange={(e) => setTempExpense({...tempExpense, quantity: Number(e.target.value)})} className="h-8 text-xs font-mono" />
-                      </div>
-
-                      <div className="md:col-span-2 space-y-2">
-                        <Label className="text-[9px] font-black">V. Unit ($)</Label>
-                        <Input type="number" value={tempExpense.unitValue} onChange={(e) => setTempExpense({...tempExpense, unitValue: Number(e.target.value)})} className="h-8 text-xs font-mono" />
-                      </div>
-
-                      <div className="md:col-span-2 flex items-end">
-                        <Button size="sm" className="w-full h-8 gap-1 font-black text-[10px]" onClick={handleAddExpense}>
-                          <Plus className="h-3 w-3" /> AÑADIR
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2 mt-4">
+                    <div className="space-y-2 mt-2">
                       {newIntervention.detailedExpenses?.map(exp => (
-                        <div key={exp.id} className="flex items-center justify-between p-3 bg-white rounded-lg border shadow-sm group">
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black uppercase text-primary leading-tight">{exp.description}</span>
-                            <span className="text-[9px] font-bold text-muted-foreground">
-                              {exp.quantity} {exp.unit} x ${exp.unitValue?.toLocaleString()}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <span className="text-xs font-mono font-black text-slate-800">${(exp.amount || 0).toLocaleString()}</span>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleRemoveExpense(exp.id)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                        <div key={exp.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border text-[10px] font-bold">
+                          <span className="uppercase">{exp.description} ({exp.quantity} {exp.unit})</span>
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono text-primary">${exp.amount.toLocaleString()}</span>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => setNewIntervention(p => ({...p, detailedExpenses: p.detailedExpenses?.filter(e => e.id !== exp.id)}))}><Trash2 className="h-3 w-3" /></Button>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  <Button className="w-full font-black shadow-lg h-12 text-sm uppercase tracking-widest" onClick={handleSaveIntervention} disabled={isSaving}>
-                    REGISTRAR REPORTE EN BITÁCORA
+                  <Button className="w-full font-black shadow-lg h-12 text-sm uppercase tracking-widest bg-primary hover:bg-primary/90" onClick={handleSaveIntervention} disabled={isSaving}>
+                    REGISTRAR REPORTE PARA LIQUIDACIÓN
                   </Button>
                 </CardContent>
               </Card>
             )}
 
             <div className="space-y-4">
-              {interventions.length > 0 ? [...interventions].map((item, index) => {
-                const reportTitle = index === 0 ? "Reporte inicial" : `Reporte #${index + 1}`
-                return (
-                  <Card key={item.id} className="overflow-hidden border-none shadow-md group">
-                    <CardHeader className="bg-slate-50 py-3 flex flex-row items-center justify-between border-b">
-                      <div className="flex items-center gap-3">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-black uppercase text-primary tracking-tight">{reportTitle}</span>
-                          <span className="text-[10px] font-black uppercase text-slate-400">
-                            {new Date(item.date).toLocaleDateString()} {new Date(item.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                        <Badge className="bg-primary/10 text-primary font-black uppercase text-[9px] h-fit">{item.type}</Badge>
+              {interventions.length > 0 ? [...interventions].reverse().map((item, idx) => (
+                <Card key={item.id} className="overflow-hidden border-none shadow-md">
+                  <CardHeader className="bg-slate-50 py-3 flex flex-row items-center justify-between border-b">
+                    <div className="flex items-center gap-3">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-black uppercase text-primary">Intervención Técnico: {MOCK_TECHNICIANS.find(t => t.id === item.technicianId)?.name}</span>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">{new Date(item.date).toLocaleString()}</span>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[9px] font-black text-slate-400 uppercase italic">Autor: {item.authorName || "Sistema"}</span>
-                        <div className="text-[9px] font-bold text-slate-600 uppercase">
-                          Técnico: {MOCK_TECHNICIANS.find(t => t.id === item.technicianId)?.name || 'N/A'}
-                        </div>
+                      <Badge className="bg-primary/10 text-primary font-black uppercase text-[9px]">{item.type}</Badge>
+                    </div>
+                    <div className="text-right flex flex-col items-end gap-1">
+                       <span className="text-[10px] font-black text-blue-600 uppercase">A Cobrar: ${item.reportedValue?.toLocaleString()}</span>
+                       {(item.usedRotomartillo || item.usedGeofono) && (
+                         <div className="flex gap-1">
+                           {item.usedRotomartillo && <Badge variant="secondary" className="text-[8px] bg-orange-100 text-orange-700">ROTOMARTILLO</Badge>}
+                           {item.usedGeofono && <Badge variant="secondary" className="text-[8px] bg-orange-100 text-orange-700">GEÓFONO</Badge>}
+                         </div>
+                       )}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-4 space-y-4">
+                    <p className="text-sm text-slate-700 leading-relaxed italic border-l-4 border-slate-200 pl-4">"{item.notes}"</p>
+                    {item.detailedExpenses && item.detailedExpenses.length > 0 && (
+                      <div className="grid gap-2">
+                        <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Insumos y Gastos</p>
+                        {item.detailedExpenses.map(exp => (
+                          <div key={exp.id} className={`flex items-center justify-between p-3 rounded-lg border ${exp.isUnused ? 'bg-slate-50 border-dashed opacity-50' : 'bg-white shadow-sm'}`}>
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-black uppercase text-slate-800">{exp.description}</span>
+                              <span className="text-[9px] text-muted-foreground">{exp.quantity} {exp.unit} x ${exp.unitValue?.toLocaleString()}</span>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <span className="text-xs font-mono font-black">${exp.amount.toLocaleString()}</span>
+                              {canEdit && (
+                                <Switch checked={!exp.isUnused} onCheckedChange={() => handleToggleExpenseUsage(item.id, exp.id, exp.isUnused)} className="data-[state=checked]:bg-green-600" />
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    </CardHeader>
-                    <CardContent className="pt-4 space-y-4">
-                      <p className="text-sm text-slate-700 leading-relaxed italic border-l-4 border-slate-200 pl-4">
-                        "{item.notes}"
-                      </p>
-                      
-                      {item.detailedExpenses && item.detailedExpenses.length > 0 && (
-                        <div className="grid gap-3">
-                          <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Control de Insumos y Gastos</p>
-                          {item.detailedExpenses.map(exp => {
-                            const stock = checkWarehouseStock(exp.description)
-                            return (
-                              <div key={exp.id} className={`flex flex-col gap-3 p-4 rounded-xl border-2 transition-all ${exp.isUnused ? 'bg-slate-50 border-dashed border-slate-200 grayscale' : 'bg-white border-primary/10 shadow-sm'}`}>
-                                <div className="flex justify-between items-start">
-                                  <div className="flex items-center gap-3">
-                                    <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${exp.isUnused ? 'bg-slate-200 text-slate-500' : 'bg-green-100 text-green-600'}`}>
-                                      {exp.isUnused ? <PackageX className="h-5 w-5" /> : <PackageCheck className="h-5 w-5" />}
-                                    </div>
-                                    <div className="flex flex-col">
-                                      <span className="text-sm font-black uppercase text-slate-800">{exp.description}</span>
-                                      <span className="text-[10px] font-bold text-muted-foreground uppercase">
-                                        {exp.quantity} {exp.unit} x ${exp.unitValue?.toLocaleString() || ((exp.amount || 0) / (exp.quantity || 1)).toLocaleString()}
-                                      </span>
-                                    </div>
-                                  </div>
-                                  <div className="text-right">
-                                    <span className={`text-sm font-mono font-black ${exp.isUnused ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
-                                      ${(exp.amount || 0).toLocaleString()}
-                                    </span>
-                                    <div className="mt-1">
-                                      <Badge variant={exp.isUnused ? "outline" : "default"} className={`text-[9px] font-black uppercase ${exp.isUnused ? 'text-slate-400' : 'bg-green-600 text-white'}`}>
-                                        {exp.isUnused ? 'En Stock / Sobrante' : 'Usado en Servicio'}
-                                      </Badge>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {canEdit && (
-                                  <div className="flex items-center justify-between pt-3 border-t border-dashed">
-                                    <div className="flex items-center gap-2">
-                                      <Switch 
-                                        checked={!exp.isUnused} 
-                                        onCheckedChange={() => handleToggleExpenseUsage(item.id, exp.id, exp.isUnused || false)}
-                                        className="data-[state=checked]:bg-green-600"
-                                      />
-                                      <Label className="text-[10px] font-black uppercase text-slate-500">¿Material Consumido?</Label>
-                                    </div>
-                                    {stock && (
-                                      <div className="flex items-center gap-2 text-[9px] font-black uppercase text-blue-600 bg-blue-50 px-2 py-1 rounded">
-                                        <Warehouse className="h-3 w-3" /> Bodega: {stock.quantity} und
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                )
-              }).reverse() : (
-                <div className="py-20 text-center border-2 border-dashed rounded-xl">
-                  <ClipboardList className="h-12 w-12 text-slate-200 mx-auto mb-4" />
-                  <p className="text-sm font-bold text-slate-400">No hay reportes registrados</p>
-                </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )) : (
+                <div className="py-20 text-center border-2 border-dashed rounded-xl"><p className="text-sm font-bold text-slate-400">Sin reportes registrados</p></div>
               )}
             </div>
           </div>
         </div>
 
         <div className="lg:col-span-4 space-y-6">
-          <Card className="shadow-lg border-t-4 border-t-primary bg-slate-50">
+          <Card className="shadow-lg border-t-4 border-t-primary bg-slate-50 sticky top-24">
             <CardHeader className="pb-2">
-              <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado de Conciliación</CardTitle>
+              <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Resumen de Cuenta</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-[10px] font-bold uppercase text-slate-500">Valores Finales:</span>
-                  <Badge variant="outline" className="text-[10px] uppercase font-black border-primary/20 text-primary">
-                    {localRequest.billingStatus === 'validated' ? 'CONCILIADO' : 'PENDIENTE CONCILIACIÓN'}
-                  </Badge>
+            <CardContent className="space-y-4">
+              <div className="p-4 bg-white rounded-xl border space-y-3">
+                <div className="flex justify-between text-xs font-bold text-slate-500 uppercase">
+                  <span>Bruto Reportado:</span>
+                  <span className="font-mono text-slate-800">${interventions.reduce((s, i) => s + (i.reportedValue || 0), 0).toLocaleString()}</span>
                 </div>
-                {localRequest.approvedAmount ? (
-                  <div className="p-4 bg-white rounded-lg border shadow-inner">
-                    <p className="text-[9px] font-black uppercase text-slate-400">Valor Aprobado</p>
-                    <p className="text-xl font-black text-slate-800">${localRequest.approvedAmount.toLocaleString()}</p>
-                  </div>
-                ) : (
-                  <div className="p-4 bg-slate-100 rounded-lg border border-dashed text-center">
-                    <p className="text-[10px] font-bold text-slate-400 italic">Cifras exclusivas del módulo contable</p>
-                  </div>
-                )}
+                <div className="flex justify-between text-xs font-bold text-slate-500 uppercase">
+                  <span>Fee RYS (10%):</span>
+                  <span className="font-mono text-destructive">-${(interventions.reduce((s, i) => s + (i.reportedValue || 0), 0) * 0.1).toLocaleString()}</span>
+                </div>
+                <div className="border-t pt-2 flex justify-between text-sm font-black text-primary uppercase">
+                  <span>Liquidación Base:</span>
+                  <span className="font-mono">${(interventions.reduce((s, i) => s + (i.reportedValue || 0), 0) * 0.9).toLocaleString()}</span>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2 p-3 bg-blue-50 text-blue-700 rounded-lg text-[9px] font-bold uppercase leading-tight border border-blue-100">
+                <Calculator className="h-4 w-4 shrink-0" />
+                Esta cifra es informativa. La liquidación final 50/50 se realiza en el módulo de nómina.
               </div>
             </CardContent>
           </Card>

@@ -38,16 +38,6 @@ export interface Expense {
   quantity?: number;
   unitValue?: number;
   isUnused: boolean; // Si es true, queda en inventario y no suma al costo del servicio
-  isApprovedExtra?: boolean; // Si es true, permite duplicar material que ya está en inventario
-  approvedByUserId?: string; // ID del usuario que aprobó el gasto extra
-  approvedAt?: string;      // Fecha de la aprobación
-}
-
-export interface InventoryItem {
-  id: string;
-  description: string;
-  quantity: string;
-  addedAt: string;
 }
 
 export interface Advance {
@@ -56,14 +46,14 @@ export interface Advance {
   reason: string;
   date: string;
   createdByUserId: string;
-  isPaidInPayroll?: boolean; // Nuevo: indica si ya se descontó en una nómina
-  payrollId?: string;        // ID de la nómina donde se descontó
+  isPaidInPayroll?: boolean;
+  payrollId?: string;
 }
 
 export interface ScheduledVisit {
   id: string;
   technicianId: string;
-  date: string; // ISO String
+  date: string;
   notes?: string;
   createdAt: string;
 }
@@ -74,11 +64,14 @@ export interface TechnicianIntervention {
   type: InterventionType;
   date: string;
   notes: string;
-  laborCost: number;     // Costo de mano de obra para este técnico
-  detailedExpenses: Expense[]; // Lista de gastos detallados
-  authorName?: string;   // Nombre de quien hizo el reporte
-  payrollStatus?: 'pending' | 'processed'; // Nuevo: estado de pago en nómina
-  payrollId?: string;                      // ID de la nómina vinculada
+  reportedValue: number; // Valor a cobrar a la aseguradora por esta tarea
+  laborCost: number;     // Mantenemos por compatibilidad, pero la liquidación usará reportedValue
+  usedRotomartillo: boolean; // Alquiler $80.000
+  usedGeofono: boolean;      // Alquiler $120.000
+  detailedExpenses: Expense[];
+  authorName?: string;
+  payrollStatus?: 'pending' | 'processed';
+  payrollId?: string;
 }
 
 export interface AssistanceCompany {
@@ -92,27 +85,21 @@ export interface Technician {
   name: string;
   specialties: ServiceCategory[];
   activeTasks: number;
-  inventory?: InventoryItem[]; // Inventario activo del técnico
-}
-
-export interface Reminder {
-  id: string;
-  type: 'warning' | 'info' | 'critical';
-  title: string;
-  description: string;
-  technicianId?: string;
-  requestId?: string;
-  createdAt: string;
 }
 
 export interface PayrollRecord {
   id: string;
   technicianId: string;
   date: string;
-  totalLabor: number;
-  totalExpenses: number;
-  totalAdvances: number;
-  netPaid: number;
+  totalGross: number;      // Total cobrado a aseguradoras
+  feeAmount: number;       // El 10% descontado
+  totalRentals: number;    // Rotomartillo + Geofono
+  totalExpenses: number;   // Facturas de materiales
+  totalAdvances: number;   // Adelantos
+  amountToSplit: number;   // Valor que queda para dividir en 2
+  netPaid: number;         // El 50% + ajuste
+  adjustmentAmount: number;
+  adjustmentReason?: string;
   itemsCount: number;
   processedInterventionIds: string[];
   processedAdvanceIds: string[];
@@ -124,38 +111,22 @@ export interface ServiceRequest {
   companyId: string;
   accountName: string;
   status: ServiceStatus;
-  
-  // Información del Cliente
   insuredName: string;
   claimNumber: string;
   address: string;
   phoneNumber: string;
-  
-  description: string;    // Descripción inicial del problema
-  
-  // Historial de intervenciones (soporta múltiples técnicos)
+  description: string;
   interventions: TechnicianIntervention[];
-  
-  // Visita programada actual (opcional)
   scheduledVisit?: ScheduledVisit;
-  
-  // Anticipos entregados al técnico
   advances?: Advance[];
-  
-  summary?: string;       // Resumen consolidado IA
-  report?: string;        // Reporte final formal
-  accountingNotes?: string; // Notas de contabilidad para liquidación
-  
-  // Facturación
-  requestedAmount?: number; // Lo que pretendemos cobrar
-  approvedAmount?: number;  // Lo que la asistencia aprueba pagar
+  summary?: string;
+  report?: string;
+  accountingNotes?: string;
+  requestedAmount?: number;
+  approvedAmount?: number;
   billingStatus: BillingStatus;
   invoiceNumber?: string;
-  billingConsecutive?: string; // Consecutivo interno contable
-  
-  // Auditoría
-  auditLogs?: AuditEntry[];
-  
+  billingConsecutive?: string;
   createdAt: string;
   updatedAt: string;
 }
