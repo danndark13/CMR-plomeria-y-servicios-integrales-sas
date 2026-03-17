@@ -40,6 +40,7 @@ export interface Expense {
   unitValue?: number;
   isUnused: boolean; // Si es true, queda en inventario y no suma al costo del servicio en nómina
   isReturned?: boolean; // Si es true, el material fue devuelto a la bodega central
+  technicianId?: string;
 }
 
 export interface Advance {
@@ -77,6 +78,7 @@ export interface TechnicianIntervention {
   payrollId?: string;
   isReadyForPayroll?: boolean; 
   isSimpleVisit?: boolean; // Identificar visitas de $20.000
+  authorizedByAdvisor?: string; // Nombre del asesor de cabina que autorizó
 }
 
 export interface AssistanceCompany {

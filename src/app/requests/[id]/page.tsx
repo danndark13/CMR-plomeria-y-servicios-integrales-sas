@@ -37,7 +37,8 @@ import {
   Car,
   DollarSign,
   Info,
-  Building2
+  Building2,
+  UserCheck
 } from "lucide-react"
 import { 
   AlertDialog, 
@@ -54,7 +55,7 @@ import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
 import { toast } from "@/hooks/use-toast"
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase'
-import { doc, updateDoc, collection, deleteDoc } from 'firebase/firestore'
+import { doc, updateDoc, collection, deleteDoc, setDoc } from 'firebase/firestore'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { cn } from "@/lib/utils"
@@ -71,6 +72,10 @@ export default function RequestDetailPage() {
   const [showAddEntry, setShowAddEntry] = useState(false)
   const [showAddAdvance, setShowAddAdvance] = useState(false)
   
+  // States for new technician
+  const [isAddingNewTech, setIsAddingNewTech] = useState(false)
+  const [newTechFullName, setNewTechFullName] = useState("")
+
   const [newIntervention, setNewIntervention] = useState<Partial<TechnicianIntervention>>({
     type: 'Diagnóstico',
     notes: '',
@@ -78,7 +83,8 @@ export default function RequestDetailPage() {
     usedRotomartillo: false,
     usedGeofono: false,
     isSimpleVisit: false,
-    detailedExpenses: []
+    detailedExpenses: [],
+    authorizedByAdvisor: ''
   })
   
   const [tempExpense, setTempExpense] = useState<Partial<Expense>>({
@@ -114,14 +120,27 @@ export default function RequestDetailPage() {
   const { data: allUsers } = useCollection(usersQuery)
 
   const techList = useMemo(() => {
-    const realTechs = (allUsers || []).filter(u => u.roleId === 'Técnico')
-    const combined = [...realTechs]
-    MOCK_TECHNICIANS.forEach(mt => {
-      if (!combined.find(rt => rt.username === mt.id)) {
-        combined.push({ id: mt.id, username: mt.id, firstName: mt.name, lastName: '', roleId: 'Técnico' } as any)
+    if (!allUsers) return MOCK_TECHNICIANS.map(t => ({ id: t.id, username: t.id, firstName: t.name, lastName: '', roleId: 'Técnico' }))
+    
+    const uniqueMap = new Map()
+    
+    // Add real users first (they take priority)
+    allUsers.filter(u => u.roleId === 'Técnico').forEach(u => {
+      const uname = (u.username || u.id).toUpperCase().trim()
+      if (!uniqueMap.has(uname)) {
+        uniqueMap.set(uname, u)
       }
     })
-    return combined
+
+    // Add mock technicians if not already present
+    MOCK_TECHNICIANS.forEach(mt => {
+      const uname = mt.id.toUpperCase().trim()
+      if (!uniqueMap.has(uname)) {
+        uniqueMap.set(uname, { id: mt.id, username: mt.id, firstName: mt.name, lastName: '', roleId: 'Técnico' })
+      }
+    })
+
+    return Array.from(uniqueMap.values()).sort((a, b) => a.firstName.localeCompare(b.firstName))
   }, [allUsers])
 
   const [localStateRequest, setLocalStateRequest] = useState<ServiceRequest | null>(null)
@@ -220,10 +239,40 @@ export default function RequestDetailPage() {
     setTempExpense({ description: '', unit: 'UND', quantity: 1, unitValue: 0, category: 'material', isUnused: false })
   }
 
-  const handleSaveIntervention = () => {
+  const handleSaveIntervention = async () => {
     if (!db || !requestRef || !profile || !canEdit || !localStateRequest) return
     
-    const targetTechId = isTech ? profile.username : newIntervention.technicianId
+    let targetTechId = isTech ? profile.username : newIntervention.technicianId
+    
+    // Logic for new technician creation
+    if (isAddingNewTech) {
+      if (!newTechFullName.trim()) {
+        toast({ variant: "destructive", title: "Nombre faltante", description: "Ingrese el nombre del nuevo técnico." })
+        return
+      }
+      const newId = Math.random().toString(36).substring(7).toUpperCase()
+      const newUname = `TEC-${newTechFullName.split(' ')[0].toUpperCase()}-${Math.floor(Math.random() * 100)}`
+      
+      const newTechProfile = {
+        id: newId,
+        username: newUname,
+        firstName: newTechFullName.toUpperCase(),
+        lastName: '',
+        roleId: 'Técnico',
+        isActive: true,
+        email: `${newUname.toLowerCase()}@rysplomeria.com`,
+        createdAt: new Date().toISOString()
+      }
+      
+      try {
+        await setDoc(doc(db, "user_profiles", newId), newTechProfile)
+        targetTechId = newUname
+      } catch (e) {
+        toast({ variant: "destructive", title: "Error al crear técnico" })
+        return
+      }
+    }
+
     if (!targetTechId || !newIntervention.notes) {
       toast({ variant: "destructive", title: "Campos incompletos", description: "Debe asignar un técnico y notas." })
       return
@@ -243,7 +292,8 @@ export default function RequestDetailPage() {
       isSimpleVisit: !!newIntervention.isSimpleVisit,
       detailedExpenses: newIntervention.detailedExpenses || [],
       authorName: `${profile.firstName} ${profile.lastName}`,
-      payrollStatus: 'pending'
+      payrollStatus: 'pending',
+      authorizedByAdvisor: newIntervention.authorizedByAdvisor?.toUpperCase() || ''
     }
 
     const updatedInterventions = [...(localStateRequest.interventions || []), intervention]
@@ -256,7 +306,9 @@ export default function RequestDetailPage() {
       .then(() => {
         toast({ title: "Reporte Añadido" })
         setShowAddEntry(false)
-        setNewIntervention({ type: 'Diagnóstico', notes: '', reportedValue: 0, usedRotomartillo: false, usedGeofono: false, isSimpleVisit: false, detailedExpenses: [] })
+        setIsAddingNewTech(false)
+        setNewTechFullName("")
+        setNewIntervention({ type: 'Diagnóstico', notes: '', reportedValue: 0, usedRotomartillo: false, usedGeofono: false, isSimpleVisit: false, detailedExpenses: [], authorizedByAdvisor: '' })
       })
       .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
@@ -526,17 +578,41 @@ export default function RequestDetailPage() {
                     {!isTech && (
                       <div className="space-y-2">
                         <Label className="text-[10px] font-black uppercase">Técnico Asignado</Label>
-                        <Select value={newIntervention.technicianId} onValueChange={(v) => setNewIntervention({...newIntervention, technicianId: v})}>
+                        <Select 
+                          value={isAddingNewTech ? "NEW" : newIntervention.technicianId} 
+                          onValueChange={(v) => {
+                            if (v === "NEW") {
+                              setIsAddingNewTech(true)
+                              setNewIntervention({...newIntervention, technicianId: ''})
+                            } else {
+                              setIsAddingNewTech(false)
+                              setNewIntervention({...newIntervention, technicianId: v})
+                            }
+                          }}
+                        >
                           <SelectTrigger className="h-12"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                           <SelectContent>
                             {techList.map(t => <SelectItem key={t.id} value={t.username || t.id}>{t.firstName} {t.lastName}</SelectItem>)}
+                            <SelectItem value="NEW" className="font-bold text-primary italic">+ OTRO (Nuevo técnico...)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                     )}
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-3">
+                  {isAddingNewTech && (
+                    <div className="space-y-2 p-4 bg-primary/5 rounded-xl border border-primary/20 animate-in slide-in-from-top-2">
+                      <Label className="text-[10px] font-black uppercase text-primary">Nombre del Nuevo Técnico</Label>
+                      <Input 
+                        placeholder="Ej. ANDRES FELIPE RIVERA" 
+                        value={newTechFullName} 
+                        onChange={(e) => setNewTechFullName(e.target.value.toUpperCase())}
+                        className="font-black h-10 border-primary/30"
+                      />
+                    </div>
+                  )}
+
+                  <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase">Tipo de Trabajo</Label>
                       <Select value={newIntervention.type} onValueChange={(v) => setNewIntervention({...newIntervention, type: v as InterventionType})}>
@@ -549,7 +625,22 @@ export default function RequestDetailPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-2 md:col-span-2">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase text-slate-500">Asesor de Cabina (Opcional)</Label>
+                      <div className="relative">
+                        <UserCheck className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                        <Input 
+                          placeholder="NOMBRE DEL ASESOR" 
+                          className="h-10 pl-8 font-bold uppercase text-xs"
+                          value={newIntervention.authorizedByAdvisor}
+                          onChange={(e) => setNewIntervention({...newIntervention, authorizedByAdvisor: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-1">
+                    <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase text-blue-600">Valor Bruto a Cobrar ($)</Label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-blue-600">$</span>
@@ -692,6 +783,9 @@ export default function RequestDetailPage() {
                                   <span className="text-[10px] font-bold text-slate-500">Técnico: {item.technicianId}</span>
                                 ) : (
                                   <span className="text-[10px] font-bold text-slate-500">{techDisplayName}</span>
+                                )}
+                                {item.authorizedByAdvisor && (
+                                  <Badge variant="outline" className="text-[8px] font-bold border-slate-300 text-slate-600 uppercase">CABINA: {item.authorizedByAdvisor}</Badge>
                                 )}
                               </div>
                             </div>
