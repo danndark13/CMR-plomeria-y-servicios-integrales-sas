@@ -41,8 +41,10 @@ import {
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
 import { toast } from "@/hooks/use-toast"
-import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
-import { doc, updateDoc } from 'firebase/firestore'
+import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase'
+import { doc, updateDoc, collection } from 'firebase/firestore'
+import { errorEmitter } from '@/firebase/error-emitter'
+import { FirestorePermissionError } from '@/firebase/errors'
 import { cn } from "@/lib/utils"
 
 const UNITS: UnitOfMeasure[] = ['UND', 'KG', 'MTS', 'GL', 'PAR', 'LB', 'PQ', 'VIAJE']
@@ -92,6 +94,24 @@ export default function RequestDetailPage() {
   const profileRef = useMemoFirebase(() => (user && db ? doc(db, 'user_profiles', user.uid) : null), [user, db])
   const { data: profile, isLoading: isProfileLoading } = useDoc(profileRef)
 
+  // Fetch all technicians for selection
+  const usersQuery = useMemoFirebase(() => {
+    if (!db || !user) return null
+    return collection(db, "user_profiles")
+  }, [db, user])
+  const { data: allUsers } = useCollection(usersQuery)
+
+  const techList = useMemo(() => {
+    const realTechs = (allUsers || []).filter(u => u.roleId === 'Técnico')
+    const combined = [...realTechs]
+    MOCK_TECHNICIANS.forEach(mt => {
+      if (!combined.find(rt => rt.username === mt.id)) {
+        combined.push({ id: mt.id, username: mt.id, firstName: mt.name, lastName: '', roleId: 'Técnico' } as any)
+      }
+    })
+    return combined
+  }, [allUsers])
+
   const [localStateRequest, setLocalStateRequest] = useState<ServiceRequest | null>(null)
 
   useEffect(() => {
@@ -118,6 +138,14 @@ export default function RequestDetailPage() {
       .then(() => {
         toast({ title: "Estado Actualizado" })
       })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: requestRef.path,
+          operation: "update",
+          requestResourceData: { status: newStatus },
+        })
+        errorEmitter.emit("permission-error", permissionError)
+      })
       .finally(() => setIsSaving(false))
   }
 
@@ -131,6 +159,14 @@ export default function RequestDetailPage() {
 
     updateDoc(requestRef, { interventions: updatedInterventions, updatedAt: new Date().toISOString() })
       .then(() => toast({ title: "Reporte Aprobado", description: "Este reporte ya aparecerá en la nómina del técnico." }))
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: requestRef.path,
+          operation: "update",
+          requestResourceData: { interventions: updatedInterventions },
+        })
+        errorEmitter.emit("permission-error", permissionError)
+      })
   }
 
   const handleAddExpense = () => {
@@ -191,6 +227,14 @@ export default function RequestDetailPage() {
         setShowAddEntry(false)
         setNewIntervention({ type: 'Diagnóstico', notes: '', reportedValue: 0, usedRotomartillo: false, usedGeofono: false, isSimpleVisit: false, detailedExpenses: [] })
       })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: requestRef.path,
+          operation: "update",
+          requestResourceData: updatedData,
+        })
+        errorEmitter.emit("permission-error", permissionError)
+      })
       .finally(() => setIsSaving(false))
   }
 
@@ -220,6 +264,14 @@ export default function RequestDetailPage() {
         setShowAddAdvance(false)
         setNewAdvance({ amount: 0, reason: '', technicianId: '' })
       })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: requestRef.path,
+          operation: "update",
+          requestResourceData: updatedData,
+        })
+        errorEmitter.emit("permission-error", permissionError)
+      })
       .finally(() => setIsSaving(false))
   }
 
@@ -242,6 +294,21 @@ export default function RequestDetailPage() {
 
   const interventions = localStateRequest.interventions || []
   const advances = localStateRequest.advances || []
+
+  // FILTRO TÉCNICO: Solo ver expedientes donde él participó
+  const isParticipant = interventions.some(i => i.technicianId === profile?.username) || 
+                        localStateRequest.scheduledVisit?.technicianId === profile?.username;
+
+  if (isTech && !isParticipant) {
+    return (
+      <div className="p-20 text-center flex flex-col items-center gap-4">
+        <AlertCircle className="h-12 w-12 text-destructive opacity-40" />
+        <h2 className="text-xl font-black uppercase text-slate-800">Acceso Restringido</h2>
+        <p className="text-muted-foreground">Solo puedes ver expedientes donde tengas reportes asignados.</p>
+        <Button onClick={() => router.push('/requests')} variant="outline" className="mt-4">Regresar</Button>
+      </div>
+    )
+  }
 
   const visibleInterventions = interventions; 
 
@@ -344,7 +411,9 @@ export default function RequestDetailPage() {
                       <Label className="text-[10px] font-bold uppercase">Técnico</Label>
                       <Select value={newAdvance.technicianId} onValueChange={(v) => setNewAdvance({...newAdvance, technicianId: v})}>
                         <SelectTrigger className="h-10"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                        <SelectContent>{MOCK_TECHNICIANS.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                        <SelectContent>
+                          {techList.map(t => <SelectItem key={t.id} value={t.username || t.id}>{t.firstName} {t.lastName}</SelectItem>)}
+                        </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
@@ -399,7 +468,7 @@ export default function RequestDetailPage() {
                         <Select value={newIntervention.technicianId} onValueChange={(v) => setNewIntervention({...newIntervention, technicianId: v})}>
                           <SelectTrigger className="h-12"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                           <SelectContent>
-                            {MOCK_TECHNICIANS.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                            {techList.map(t => <SelectItem key={t.id} value={t.username || t.id}>{t.firstName} {t.lastName}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>
@@ -525,6 +594,7 @@ export default function RequestDetailPage() {
 
                   {[...visibleInterventions].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((item) => {
                     const isMyReport = isTech ? item.technicianId === profile?.username : true;
+                    const techDisplayName = item.technicianId === profile?.username ? item.technicianId : "Técnico RYS";
                     
                     const materialExpenses = (item.detailedExpenses || []).filter(e => !e.isUnused && !e.isReturned).reduce((s, e) => s + (e.amount || 0), 0)
                     let rentals = 0
@@ -557,8 +627,11 @@ export default function RequestDetailPage() {
                               </div>
                               <div className="flex items-center gap-2 mt-1">
                                 <Badge className="bg-primary/10 text-primary font-black uppercase text-[9px]">{item.type}</Badge>
-                                {!isTech && <span className="text-[10px] font-bold text-slate-500">Técnico: {item.technicianId}</span>}
-                                {isTech && !isMyReport && <span className="text-[10px] font-bold text-slate-400 italic">Reportado por Colaborador</span>}
+                                {!isTech ? (
+                                  <span className="text-[10px] font-bold text-slate-500">Técnico: {item.technicianId}</span>
+                                ) : (
+                                  <span className="text-[10px] font-bold text-slate-500">{techDisplayName}</span>
+                                )}
                               </div>
                             </div>
                           </div>
