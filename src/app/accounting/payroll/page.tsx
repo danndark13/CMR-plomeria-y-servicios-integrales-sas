@@ -25,7 +25,8 @@ import {
   FileText,
   Hammer,
   ArrowRight,
-  Info
+  Info,
+  Car
 } from "lucide-react"
 import { MOCK_TECHNICIANS } from "@/lib/mock-data"
 import { toast } from "@/hooks/use-toast"
@@ -57,18 +58,14 @@ export default function PayrollHubPage() {
 
   const selectedTech = MOCK_TECHNICIANS.find(t => t.id === selectedTechId)
 
-  // ACTUALIZACIÓN LÓGICA: Intervenciones pendientes son aquellas marcadas para nómina O de expedientes validados
   const pendingInterventions = useMemo(() => {
     return (allRequests || []).flatMap(req => 
       (req.interventions || [])
         .filter(i => {
           const isCorrectTech = i.technicianId === selectedTechId
           const notProcessed = i.payrollStatus !== 'processed'
-          // Caso 1: Expediente ya validado en facturación
           const caseValidated = req.billingStatus === 'validated'
-          // Caso 2: Aprobación anticipada desde la bitácora
           const earlyApproved = i.isReadyForPayroll === true
-          
           return isCorrectTech && notProcessed && (caseValidated || earlyApproved)
         })
         .map(i => ({ ...i, request: req }))
@@ -89,6 +86,7 @@ export default function PayrollHubPage() {
     let totalRentals = 0
     let totalFee = 0
     let accumulatedToSplit = 0
+    let totalSimpleVisitBonus = 0 // Parte del técnico por visitas de $20k
 
     pendingInterventions.forEach(i => {
       const gross = i.reportedValue || 0
@@ -96,20 +94,40 @@ export default function PayrollHubPage() {
       let rentals = 0
       if (i.usedRotomartillo) rentals += 80000
       if (i.usedGeofono) rentals += 120000
-
-      const subtotalCosts = gross - materialExpenses - rentals
-      const fee = subtotalCosts > 0 ? subtotalCosts * 0.10 : 0
-      const toSplit = subtotalCosts - fee
+      const totalDirectCosts = materialExpenses + rentals
 
       totalGross += gross
       totalExpenses += materialExpenses
       totalRentals += rentals
-      totalFee += fee
-      accumulatedToSplit += toSplit
+
+      // LÓGICA ESPECIAL: Visita Técnica Simple
+      if (i.isSimpleVisit) {
+        const visitBase = 20000
+        const extraGross = Math.max(0, gross - visitBase)
+        
+        // 1. Visita: $10k para técnico, $10k para empresa (No Fee)
+        totalSimpleVisitBonus += (visitBase / 2)
+        
+        // 2. Extra (escaleras, etc.): Lleva descuento del 10%
+        const subtotalExtra = extraGross - totalDirectCosts
+        const fee = subtotalExtra > 0 ? subtotalExtra * 0.10 : 0
+        const toSplit = subtotalExtra - fee
+        
+        totalFee += fee
+        accumulatedToSplit += toSplit
+      } else {
+        // LÓGICA ESTÁNDAR
+        const subtotalCosts = gross - totalDirectCosts
+        const fee = subtotalCosts > 0 ? subtotalCosts * 0.10 : 0
+        const toSplit = subtotalCosts - fee
+
+        totalFee += fee
+        accumulatedToSplit += toSplit
+      }
     })
 
     const totalAdvances = pendingAdvances.reduce((s, a) => s + (a.amount || 0), 0)
-    const technicianBase = accumulatedToSplit / 2
+    const technicianBase = (accumulatedToSplit / 2) + totalSimpleVisitBonus
     const netPaid = technicianBase - totalAdvances + adjustmentAmount
 
     return { 
@@ -120,7 +138,8 @@ export default function PayrollHubPage() {
       accumulatedToSplit, 
       totalAdvances,
       technicianBase,
-      netPaid 
+      netPaid,
+      totalSimpleVisitBonus
     }
   }, [pendingInterventions, pendingAdvances, adjustmentAmount])
 
@@ -151,7 +170,6 @@ export default function PayrollHubPage() {
     
     batch.set(doc(db, "payroll_history", payrollId), payrollRecord)
 
-    // Actualizar estados de intervenciones y anticipos
     const requestIds = new Set([...pendingInterventions.map(i => i.request.id), ...pendingAdvances.map(a => a.request.id)])
     requestIds.forEach(reqId => {
       const req = (allRequests || []).find(r => r.id === reqId)
@@ -194,7 +212,7 @@ export default function PayrollHubPage() {
       <div className="flex flex-col gap-8">
         <div>
           <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">Nómina y Liquidación</h1>
-          <p className="text-muted-foreground font-medium">Gestión de pagos técnicos (50/50 RYS). Incluye reportes anticipados y cierres validados.</p>
+          <p className="text-muted-foreground font-medium">Gestión de pagos técnicos (50/50 RYS). Descuento del 10% aplicado sobre excedentes.</p>
         </div>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {MOCK_TECHNICIANS.map((tech) => {
@@ -230,7 +248,7 @@ export default function PayrollHubPage() {
           <Avatar className="h-14 w-14 border-4 border-white shadow-lg"><AvatarImage src={`https://picsum.photos/seed/${selectedTechId}/100/100`} /></Avatar>
           <div>
             <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">{selectedTech?.name}</h1>
-            <p className="text-muted-foreground font-bold text-xs uppercase tracking-widest">Liquidación Pendiente (Fórmula: (Bruto - Gastos) * 0.9 / 2)</p>
+            <p className="text-muted-foreground font-bold text-xs uppercase tracking-widest">Liquidación de Servicios (Visitas Simples + % Variable)</p>
           </div>
         </div>
       </div>
@@ -251,8 +269,8 @@ export default function PayrollHubPage() {
               <CardContent><div className="text-xl font-black text-orange-600">-${totals.totalFee.toLocaleString()}</div></CardContent>
             </Card>
             <Card className="bg-primary/5 border-none shadow-sm">
-              <CardHeader className="pb-2"><CardTitle className="text-[9px] font-black uppercase text-primary/60">Base Partición</CardTitle></CardHeader>
-              <CardContent><div className="text-xl font-black text-primary">${totals.accumulatedToSplit.toLocaleString()}</div></CardContent>
+              <CardHeader className="pb-2"><CardTitle className="text-[9px] font-black uppercase text-primary/60">Bonos Visita Simple</CardTitle></CardHeader>
+              <CardContent><div className="text-xl font-black text-primary">${totals.totalSimpleVisitBonus.toLocaleString()}</div></CardContent>
             </Card>
           </div>
 
@@ -260,7 +278,7 @@ export default function PayrollHubPage() {
             <CardHeader className="bg-slate-900 text-white flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-sm font-black uppercase tracking-widest">Servicios Listos para Pago</CardTitle>
-                <CardDescription className="text-white/40 text-[10px] uppercase font-bold">Incluye aprobaciones anticipadas y cierres validados</CardDescription>
+                <CardDescription className="text-white/40 text-[10px] uppercase font-bold">Desglose de intervenciones individuales</CardDescription>
               </div>
               <Badge className="bg-green-500 text-[10px] font-black">{pendingInterventions.length} REPORTES</Badge>
             </CardHeader>
@@ -269,9 +287,9 @@ export default function PayrollHubPage() {
                 <TableHeader><TableRow className="bg-muted/30">
                   <TableHead className="font-black uppercase text-[10px]">Expediente / Tipo</TableHead>
                   <TableHead className="text-right font-black uppercase text-[10px]">V. Cobro</TableHead>
-                  <TableHead className="text-right font-black uppercase text-[10px]">Materiales/Equipos</TableHead>
+                  <TableHead className="text-right font-black uppercase text-[10px]">Gastos/Equipos</TableHead>
                   <TableHead className="text-right font-black uppercase text-[10px]">Fee (10%)</TableHead>
-                  <TableHead className="text-right font-black uppercase text-[10px]">Base Reparto</TableHead>
+                  <TableHead className="text-right font-black uppercase text-[10px]">Neto Técnico</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
                   {pendingInterventions.length === 0 ? (
@@ -281,25 +299,38 @@ export default function PayrollHubPage() {
                     let rentals = 0
                     if (item.usedRotomartillo) rentals += 80000
                     if (item.usedGeofono) rentals += 120000
-                    const subtotalCosts = (item.reportedValue || 0) - materialExpenses - rentals
-                    const fee = subtotalCosts > 0 ? subtotalCosts * 0.10 : 0
-                    const splitBase = subtotalCosts - fee
+                    const totalCosts = materialExpenses + rentals
+                    
+                    let techNet = 0
+                    let fee = 0
+                    
+                    if (item.isSimpleVisit) {
+                      const visitBase = 20000
+                      const extra = Math.max(0, item.reportedValue - visitBase)
+                      const subtotalExtra = extra - totalCosts
+                      fee = subtotalExtra > 0 ? subtotalExtra * 0.10 : 0
+                      techNet = (visitBase / 2) + ((subtotalExtra - fee) / 2)
+                    } else {
+                      const subtotal = item.reportedValue - totalCosts
+                      fee = subtotal > 0 ? subtotal * 0.10 : 0
+                      techNet = (subtotal - fee) / 2
+                    }
 
                     return (
-                      <TableRow key={item.id}>
+                      <TableRow key={item.id} className={cn(item.isSimpleVisit && "bg-orange-50/30")}>
                         <TableCell>
                           <div className="flex flex-col">
                             <span className="font-mono font-black text-primary text-xs">{item.request.claimNumber}</span>
                             <div className="flex gap-1 items-center">
                               <span className="text-[8px] font-bold text-slate-400 uppercase">{item.type}</span>
-                              {item.isReadyForPayroll && <Badge className="h-3 text-[7px] bg-orange-100 text-orange-700">ANTICIPADO</Badge>}
+                              {item.isSimpleVisit && <Badge className="h-3 text-[7px] bg-orange-100 text-orange-700 gap-1"><Car className="h-2 w-2" /> SIMPLE</Badge>}
                             </div>
                           </div>
                         </TableCell>
                         <TableCell className="text-right font-mono font-bold text-slate-700">${(item.reportedValue || 0).toLocaleString()}</TableCell>
-                        <TableCell className="text-right font-mono text-xs text-destructive">-${(materialExpenses + rentals).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono text-xs text-destructive">-${totalCosts.toLocaleString()}</TableCell>
                         <TableCell className="text-right font-mono text-xs text-orange-600">-${fee.toLocaleString()}</TableCell>
-                        <TableCell className="text-right font-mono font-black text-primary">${splitBase.toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono font-black text-primary">${techNet.toLocaleString()}</TableCell>
                       </TableRow>
                     )
                   })}
@@ -317,8 +348,9 @@ export default function PayrollHubPage() {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-3">
-              <div className="flex justify-between text-xs font-bold uppercase text-slate-500"><span>Base Total (100%):</span><span className="font-mono">${totals.accumulatedToSplit.toLocaleString()}</span></div>
-              <div className="flex justify-between text-xs font-black uppercase text-primary"><span>Reparto Técnico (50%):</span><span className="font-mono">${totals.technicianBase.toLocaleString()}</span></div>
+              <div className="flex justify-between text-xs font-bold uppercase text-slate-500"><span>Base Partición:</span><span className="font-mono">${totals.accumulatedToSplit.toLocaleString()}</span></div>
+              <div className="flex justify-between text-xs font-bold uppercase text-slate-500"><span>Bonos Visita Directos:</span><span className="font-mono">${totals.totalSimpleVisitBonus.toLocaleString()}</span></div>
+              <div className="flex justify-between text-xs font-black uppercase text-primary border-t pt-2"><span>Total Técnico (Antes de Anticipos):</span><span className="font-mono">${totals.technicianBase.toLocaleString()}</span></div>
               
               <div className="pt-2 border-t border-dashed space-y-4">
                 <div className="flex justify-between items-center">
@@ -347,7 +379,7 @@ export default function PayrollHubPage() {
 
             <div className="flex items-center gap-2 p-3 bg-blue-50 text-blue-700 rounded-lg text-[9px] font-bold uppercase leading-tight border border-blue-100">
               <Info className="h-4 w-4 shrink-0" />
-              Al liquidar, los reportes anticipados se marcarán como pagados y no se cobrarán de nuevo al cerrar el expediente.
+              Las visitas simples se pagan $10.000 directos al técnico sin aplicar el descuento administrativo del 10%.
             </div>
 
             <Button className="w-full h-14 font-black text-sm uppercase tracking-widest shadow-lg bg-green-600 hover:bg-green-700" onClick={handleGeneratePayroll} disabled={isProcessing || pendingInterventions.length === 0}>

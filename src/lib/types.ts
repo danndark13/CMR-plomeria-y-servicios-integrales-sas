@@ -72,13 +72,17 @@ export interface TechnicianIntervention {
   authorName?: string;
   payrollStatus?: 'pending' | 'processed';
   payrollId?: string;
-  isReadyForPayroll?: boolean; // Nueva propiedad para liquidación anticipada
+  isReadyForPayroll?: boolean; 
+  isSimpleVisit?: boolean; // Nueva propiedad para identificar visitas de $20.000
 }
 
 export interface AssistanceCompany {
   id: string;
   name: string;
   accounts: string[];
+  contactPerson?: string;
+  contactEmail?: string;
+  contactPhone?: string;
 }
 
 export interface Technician {

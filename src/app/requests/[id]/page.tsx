@@ -32,7 +32,9 @@ import {
   PackageX,
   Hammer,
   Search,
-  HandCoins
+  HandCoins,
+  MapPin,
+  Car
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -41,6 +43,7 @@ import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@
 import { doc, setDoc, updateDoc, collection } from 'firebase/firestore'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
+import { cn } from "@/lib/utils"
 
 const UNITS: UnitOfMeasure[] = ['UND', 'KG', 'MTS', 'GL', 'PAR', 'LB', 'PQ', 'VIAJE']
 
@@ -61,6 +64,7 @@ export default function RequestDetailPage() {
     reportedValue: 0,
     usedRotomartillo: false,
     usedGeofono: false,
+    isSimpleVisit: false,
     detailedExpenses: []
   })
   
@@ -210,6 +214,7 @@ export default function RequestDetailPage() {
       laborCost: 0,
       usedRotomartillo: !!newIntervention.usedRotomartillo,
       usedGeofono: !!newIntervention.usedGeofono,
+      isSimpleVisit: !!newIntervention.isSimpleVisit,
       detailedExpenses: newIntervention.detailedExpenses || [],
       authorName: `${profile.firstName} ${profile.lastName}`,
       payrollStatus: 'pending'
@@ -226,7 +231,7 @@ export default function RequestDetailPage() {
         toast({ title: "Reporte Añadido" })
         setShowAddEntry(false)
         setLocalRequest(prev => prev ? { ...prev, ...updatedData } : null)
-        setNewIntervention({ type: 'Diagnóstico', notes: '', reportedValue: 0, usedRotomartillo: false, usedGeofono: false, detailedExpenses: [] })
+        setNewIntervention({ type: 'Diagnóstico', notes: '', reportedValue: 0, usedRotomartillo: false, usedGeofono: false, isSimpleVisit: false, detailedExpenses: [] })
       })
       .finally(() => setIsSaving(false))
   }
@@ -316,11 +321,15 @@ export default function RequestDetailPage() {
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label className="text-[10px] font-black uppercase">Dirección de Visita</Label>
-                <Input 
-                  value={localRequest.address || ""} 
-                  onChange={(e) => handleUpdateField('address', e.target.value.toUpperCase())}
-                  disabled={!canEdit}
-                />
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    value={localRequest.address || ""} 
+                    onChange={(e) => handleUpdateField('address', e.target.value.toUpperCase())}
+                    disabled={!canEdit}
+                    className="pl-10"
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -344,16 +353,42 @@ export default function RequestDetailPage() {
                   <CardTitle className="text-sm font-black uppercase">Nuevo Registro de Intervención</CardTitle>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-6">
-                  <div className="grid gap-4 md:grid-cols-3">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl flex items-center justify-between group">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600">
+                          <Car className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <Label htmlFor="simple-visit" className="text-sm font-black uppercase text-orange-800 block cursor-pointer">Visita Técnica Simple</Label>
+                          <p className="text-[9px] font-bold text-orange-600 uppercase">Valor Fijo $20.000 (No aplica Fee 10%)</p>
+                        </div>
+                      </div>
+                      <Switch 
+                        id="simple-visit" 
+                        checked={newIntervention.isSimpleVisit} 
+                        onCheckedChange={(v) => {
+                          setNewIntervention({
+                            ...newIntervention, 
+                            isSimpleVisit: v,
+                            reportedValue: v ? 20000 : newIntervention.reportedValue
+                          })
+                        }} 
+                      />
+                    </div>
+
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase">Técnico Asignado</Label>
                       <Select value={newIntervention.technicianId} onValueChange={(v) => setNewIntervention({...newIntervention, technicianId: v})}>
-                        <SelectTrigger className="h-10"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                        <SelectTrigger className="h-12"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                         <SelectContent>
                           {MOCK_TECHNICIANS.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase">Tipo de Intervención</Label>
                       <Select value={newIntervention.type} onValueChange={(v) => setNewIntervention({...newIntervention, type: v as InterventionType})}>
@@ -366,20 +401,26 @@ export default function RequestDetailPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase text-blue-600">Valor a Cobrar ($)</Label>
-                      <Input 
-                        type="number" 
-                        placeholder="Ej. 150000" 
-                        className="h-10 font-black border-blue-200"
-                        value={newIntervention.reportedValue}
-                        onChange={(e) => setNewIntervention({...newIntervention, reportedValue: Number(e.target.value)})}
-                      />
+                    <div className="space-y-2 md:col-span-2">
+                      <Label className="text-[10px] font-black uppercase text-blue-600">Valor Total a Cobrar Aseguradora ($)</Label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-blue-600">$</span>
+                        <Input 
+                          type="number" 
+                          placeholder="Ej. 150000" 
+                          className={cn("h-10 pl-7 font-black border-blue-200 bg-blue-50/30", newIntervention.isSimpleVisit && "opacity-50")}
+                          value={newIntervention.reportedValue}
+                          onChange={(e) => setNewIntervention({...newIntervention, reportedValue: Number(e.target.value)})}
+                          readOnly={newIntervention.isSimpleVisit}
+                        />
+                      </div>
                     </div>
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2 p-4 bg-slate-50 rounded-xl border border-dashed">
-                    <p className="text-[10px] font-black uppercase text-slate-500 col-span-2 tracking-widest">Alquiler de Herramientas Especiales</p>
+                    <p className="text-[10px] font-black uppercase text-slate-500 col-span-2 tracking-widest flex items-center gap-2">
+                      <Hammer className="h-3 w-3" /> Alquiler de Herramientas Especiales
+                    </p>
                     <div className="flex items-center space-x-2">
                       <Checkbox 
                         id="rotomartillo" 
@@ -406,7 +447,7 @@ export default function RequestDetailPage() {
                     <Label className="text-[10px] font-black uppercase">Notas Técnicas / Hallazgos</Label>
                     <Textarea 
                       placeholder="Describa el trabajo realizado..." 
-                      className="min-h-[100px]"
+                      className="min-h-[100px] font-medium"
                       value={newIntervention.notes}
                       onChange={(e) => setNewIntervention({...newIntervention, notes: e.target.value})}
                     />
@@ -415,7 +456,7 @@ export default function RequestDetailPage() {
                   <div className="space-y-4 p-4 bg-white rounded-xl border border-slate-200 shadow-inner">
                     <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Facturas de Materiales / Gastos</Label>
                     <div className="grid gap-2 md:grid-cols-12">
-                      <Input placeholder="Descripción" className="md:col-span-5 h-8 text-xs" value={tempExpense.description} onChange={(e) => setTempExpense({...tempExpense, description: e.target.value.toUpperCase()})} />
+                      <Input placeholder="Descripción" className="md:col-span-5 h-8 text-xs font-bold" value={tempExpense.description} onChange={(e) => setTempExpense({...tempExpense, description: e.target.value.toUpperCase()})} />
                       <Select value={tempExpense.unit} onValueChange={(v) => setTempExpense({...tempExpense, unit: v as UnitOfMeasure})}>
                         <SelectTrigger className="md:col-span-2 h-8 text-[10px] font-bold"><SelectValue /></SelectTrigger>
                         <SelectContent>{UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
@@ -438,7 +479,7 @@ export default function RequestDetailPage() {
                   </div>
 
                   <Button className="w-full font-black shadow-lg h-12 text-sm uppercase tracking-widest bg-primary hover:bg-primary/90" onClick={handleSaveIntervention} disabled={isSaving}>
-                    REGISTRAR REPORTE TÉCNICO
+                    {isSaving ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Save className="h-5 w-5 mr-2" />} REGISTRAR REPORTE TÉCNICO
                   </Button>
                 </CardContent>
               </Card>
@@ -446,11 +487,14 @@ export default function RequestDetailPage() {
 
             <div className="space-y-4">
               {interventions.length > 0 ? [...interventions].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((item) => (
-                <Card key={item.id} className="overflow-hidden border-none shadow-md">
+                <Card key={item.id} className={cn("overflow-hidden border-none shadow-md", item.isSimpleVisit && "border-l-4 border-l-orange-500")}>
                   <CardHeader className="bg-slate-50 py-3 flex flex-row items-center justify-between border-b">
                     <div className="flex items-center gap-3">
                       <div className="flex flex-col">
-                        <span className="text-sm font-black uppercase text-primary">Intervención Técnico: {MOCK_TECHNICIANS.find(t => t.id === item.technicianId)?.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-black uppercase text-primary">Intervención: {MOCK_TECHNICIANS.find(t => t.id === item.technicianId)?.name}</span>
+                          {item.isSimpleVisit && <Badge className="bg-orange-500 text-white font-black uppercase text-[8px]">Visita Técnica</Badge>}
+                        </div>
                         <span className="text-[9px] font-bold text-slate-400 uppercase">{new Date(item.date).toLocaleString()}</span>
                       </div>
                       <div className="flex gap-2">
@@ -477,7 +521,7 @@ export default function RequestDetailPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="pt-4 space-y-4">
-                    <p className="text-sm text-slate-700 leading-relaxed italic border-l-4 border-slate-200 pl-4">"{item.notes}"</p>
+                    <p className="text-sm text-slate-700 font-medium leading-relaxed italic border-l-4 border-slate-200 pl-4">"{item.notes}"</p>
                     
                     {item.detailedExpenses && item.detailedExpenses.length > 0 && (
                       <div className="grid gap-2">
@@ -514,7 +558,7 @@ export default function RequestDetailPage() {
                   </CardContent>
                 </Card>
               )) : (
-                <div className="py-20 text-center border-2 border-dashed rounded-xl"><p className="text-sm font-bold text-slate-400">Sin reportes registrados</p></div>
+                <div className="py-20 text-center border-2 border-dashed rounded-xl bg-slate-50/50"><p className="text-sm font-bold text-slate-400 italic">Sin reportes registrados</p></div>
               )}
             </div>
           </div>
