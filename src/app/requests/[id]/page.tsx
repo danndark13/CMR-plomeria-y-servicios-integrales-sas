@@ -361,7 +361,7 @@ export default function RequestDetailPage() {
                         </div>
                         <div>
                           <Label htmlFor="simple-visit" className="text-sm font-black uppercase text-orange-800 block cursor-pointer">Visita Técnica Simple</Label>
-                          <p className="text-[9px] font-bold text-orange-600 uppercase">Valor Fijo $20.000 (No aplica Fee 10%)</p>
+                          <p className="text-[9px] font-bold text-orange-600 uppercase">Base $20.000 sin Fee 10%</p>
                         </div>
                       </div>
                       <Switch 
@@ -371,7 +371,7 @@ export default function RequestDetailPage() {
                           setNewIntervention({
                             ...newIntervention, 
                             isSimpleVisit: v,
-                            reportedValue: v ? 20000 : newIntervention.reportedValue
+                            reportedValue: v ? Math.max(20000, newIntervention.reportedValue || 0) : newIntervention.reportedValue
                           })
                         }} 
                       />
@@ -408,12 +408,14 @@ export default function RequestDetailPage() {
                         <Input 
                           type="number" 
                           placeholder="Ej. 150000" 
-                          className={cn("h-10 pl-7 font-black border-blue-200 bg-blue-50/30", newIntervention.isSimpleVisit && "opacity-50")}
+                          className={cn("h-10 pl-7 font-black border-blue-200 bg-blue-50/50", newIntervention.isSimpleVisit && "border-orange-200 bg-orange-50/30")}
                           value={newIntervention.reportedValue}
                           onChange={(e) => setNewIntervention({...newIntervention, reportedValue: Number(e.target.value)})}
-                          readOnly={newIntervention.isSimpleVisit}
                         />
                       </div>
+                      {newIntervention.isSimpleVisit && (
+                        <p className="text-[9px] text-orange-600 font-bold uppercase mt-1">Los primeros $20.000 están libres de descuento administrativo.</p>
+                      )}
                     </div>
                   </div>
 
