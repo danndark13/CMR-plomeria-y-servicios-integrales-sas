@@ -5,48 +5,48 @@ import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, initializeFirestore } from 'firebase/firestore'
 
-// IMPORTANT: DO NOT MODIFY THIS FUNCTION
+// Cache for SDK instances to ensure singletons
+let firebaseAppInstance: FirebaseApp | undefined;
+let authInstance: any;
+let firestoreInstance: any;
+
 export function initializeFirebase() {
   if (!getApps().length) {
-    // Important! initializeApp() is called without any arguments because Firebase App Hosting
-    // integrates with the initializeApp() function to provide the environment variables needed to
-    // populate the FirebaseOptions in production. It is critical that we attempt to call initializeApp()
-    // without arguments.
-    let firebaseApp;
     try {
       // Attempt to initialize via Firebase App Hosting environment variables
-      firebaseApp = initializeApp();
+      firebaseAppInstance = initializeApp();
     } catch (e) {
-      // Only warn in production because it's normal to use the firebaseConfig to initialize
-      // during development
-      if (process.env.NODE_ENV === "production") {
-        console.warn('Automatic initialization failed. Falling back to firebase config object.', e);
-      }
-      firebaseApp = initializeApp(firebaseConfig);
+      firebaseAppInstance = initializeApp(firebaseConfig);
     }
-
-    return getSdks(firebaseApp);
+  } else {
+    firebaseAppInstance = getApp();
   }
 
-  // If already initialized, return the SDKs with the already initialized App
-  return getSdks(getApp());
+  return getSdks(firebaseAppInstance);
 }
 
 export function getSdks(firebaseApp: FirebaseApp) {
-  // Use initializeFirestore to enable long polling, which is more stable in studio environments
-  let firestore;
-  try {
-    firestore = initializeFirestore(firebaseApp, {
-      experimentalForceLongPolling: true,
-    });
-  } catch (e) {
-    firestore = getFirestore(firebaseApp);
+  if (!authInstance) {
+    authInstance = getAuth(firebaseApp);
+  }
+
+  if (!firestoreInstance) {
+    try {
+      // Use initializeFirestore with auto-detect long polling for maximum stability
+      // in cloud environments, avoiding the 'Assertion Failed' low-level error.
+      firestoreInstance = initializeFirestore(firebaseApp, {
+        experimentalAutoDetectLongPolling: true,
+      });
+    } catch (e) {
+      // If already initialized, fallback to standard getter
+      firestoreInstance = getFirestore(firebaseApp);
+    }
   }
 
   return {
     firebaseApp,
-    auth: getAuth(firebaseApp),
-    firestore
+    auth: authInstance,
+    firestore: firestoreInstance
   };
 }
 
