@@ -84,24 +84,30 @@ export function useCollection<T = any>(
         setError(null);
         setIsLoading(false);
       },
-      (error: FirestoreError) => {
-        // This logic extracts the path from either a ref or a query
-        const path: string =
-          memoizedTargetRefOrQuery.type === 'collection'
-            ? (memoizedTargetRefOrQuery as CollectionReference).path
-            : (memoizedTargetRefOrQuery as unknown as InternalQuery)._query.path.canonicalString()
+      (err: FirestoreError) => {
+        // Only propagate permission-denied errors to the global listener to avoid UI crashes on network hiccups
+        if (err.code === 'permission-denied') {
+          const path: string =
+            memoizedTargetRefOrQuery.type === 'collection'
+              ? (memoizedTargetRefOrQuery as CollectionReference).path
+              : (memoizedTargetRefOrQuery as unknown as InternalQuery)._query.path.canonicalString()
 
-        const contextualError = new FirestorePermissionError({
-          operation: 'list',
-          path,
-        })
+          const contextualError = new FirestorePermissionError({
+            operation: 'list',
+            path,
+          })
 
-        setError(contextualError)
-        setData(null)
-        setIsLoading(false)
+          setError(contextualError)
+          setData(null)
+          setIsLoading(false)
 
-        // trigger global error propagation
-        errorEmitter.emit('permission-error', contextualError);
+          // trigger global error propagation
+          errorEmitter.emit('permission-error', contextualError);
+        } else {
+          // For other errors (like connectivity 'unavailable'), just update local state
+          setError(err);
+          setIsLoading(false);
+        }
       }
     );
 
