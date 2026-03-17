@@ -104,26 +104,23 @@ export default function BillingReportPage() {
       .finally(() => setIsProcessing(false))
   }
 
+  // LÓGICA ACTUALIZADA: El valor sugerido es SIEMPRE el Bruto Reportado por los técnicos
   const calculateSuggested = (req: ServiceRequest) => {
-    const labor = (req.interventions || []).reduce((s, i) => s + (i.laborCost || 0), 0)
-    const materials = (req.interventions || []).flatMap(i => i.detailedExpenses || [])
-      .filter(e => !e.isUnused)
-      .reduce((s, e) => s + (e.amount || 0), 0)
-    return labor + materials
+    return (req.interventions || []).reduce((s, i) => s + (i.reportedValue || 0), 0)
   }
 
   const handleExportExcel = () => {
     if (!selectedCompany) return
     
     const titleRow = ["PLOMERÍA Y SERVICIOS INTEGRALES RYS SAS", "", "", "", ""]
-    const headers = ["EXPEDIENTE", "ASEGURADO", "CUENTA", "TIPO DE SERVICIO", "VALOR"]
+    const headers = ["EXPEDIENTE", "ASEGURADO", "CUENTA", "TIPO DE SERVICIO", "VALOR SUGERIDO (BRUTO REPORTADO)"]
     
     const rows = preValidatedRequests.map(req => [
       req.claimNumber,
       req.insuredName.toUpperCase(),
       req.accountName.toUpperCase(),
       req.category.toUpperCase(),
-      req.approvedAmount || calculateSuggested(req)
+      calculateSuggested(req)
     ])
 
     const csvContent = [
@@ -241,7 +238,7 @@ export default function BillingReportPage() {
                   <TableRow className="bg-muted/30">
                     <TableHead className="font-black uppercase text-[10px]">Expediente</TableHead>
                     <TableHead className="font-black uppercase text-[10px]">Asegurado</TableHead>
-                    <TableHead className="text-right font-black uppercase text-[10px]">Costo Sugerido</TableHead>
+                    <TableHead className="text-right font-black uppercase text-[10px]">Costo Sugerido (Bruto)</TableHead>
                     <TableHead className="text-right font-black uppercase text-[10px]">V. Aprobado</TableHead>
                     <TableHead className="text-right font-black uppercase text-[10px]">Acciones</TableHead>
                   </TableRow>
@@ -255,8 +252,10 @@ export default function BillingReportPage() {
                     <TableRow key={req.id} className="hover:bg-primary/5">
                       <TableCell><span className="font-mono font-black text-primary">{req.claimNumber}</span></TableCell>
                       <TableCell><span className="font-bold text-sm">{req.insuredName}</span></TableCell>
-                      <TableCell className="text-right font-mono text-xs text-slate-400">
-                        ${calculateSuggested(req).toLocaleString()}
+                      <TableCell className="text-right">
+                        <span className="font-mono font-black text-slate-600 bg-slate-100 px-2 py-1 rounded">
+                          ${calculateSuggested(req).toLocaleString()}
+                        </span>
                       </TableCell>
                       <TableCell className="text-right">
                         <span className="font-mono font-black text-orange-600">
@@ -374,8 +373,8 @@ export default function BillingReportPage() {
           <form onSubmit={handleValidateBilling} className="space-y-6 pt-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="p-3 bg-slate-50 rounded-lg border border-dashed">
-                <p className="text-[9px] font-black uppercase text-slate-400">Costo Sugerido</p>
-                <p className="text-sm font-black text-slate-600">${validatingRequest ? calculateSuggested(validatingRequest).toLocaleString() : 0}</p>
+                <p className="text-[9px] font-black uppercase text-slate-400">Costo Sugerido (Bruto Reportado)</p>
+                <p className="text-sm font-black text-blue-600">${validatingRequest ? calculateSuggested(validatingRequest).toLocaleString() : 0}</p>
               </div>
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase tracking-widest text-blue-600">Valor Aprobado (Cobro)</Label>
