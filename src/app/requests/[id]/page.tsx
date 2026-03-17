@@ -38,11 +38,22 @@ import {
   DollarSign,
   Info
 } from "lucide-react"
+import { 
+  AlertDialog, 
+  AlertDialogAction, 
+  AlertDialogCancel, 
+  AlertDialogContent, 
+  AlertDialogDescription, 
+  AlertDialogFooter, 
+  AlertDialogHeader, 
+  AlertDialogTitle,
+  AlertDialogTrigger
+} from "@/components/ui/alert-dialog"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
 import { toast } from "@/hooks/use-toast"
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase'
-import { doc, updateDoc, collection } from 'firebase/firestore'
+import { doc, updateDoc, collection, deleteDoc } from 'firebase/firestore'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { cn } from "@/lib/utils"
@@ -123,8 +134,9 @@ export default function RequestDetailPage() {
     }
   }, [firestoreRequest, id, isRequestLoading])
 
-  const isAdmin = profile?.roleId === 'Administrador' || profile?.roleId === 'Gerente'
-  const isAccounting = profile?.roleId === 'Contabilidad'
+  const isDev = profile?.roleId === 'Desarrollador'
+  const isAdmin = profile?.roleId === 'Administrador' || profile?.roleId === 'Gerente' || isDev
+  const isAccounting = profile?.roleId === 'Contabilidad' || isDev
   const isCustomerService = profile?.roleId === 'Servicio al Cliente'
   const isTech = profile?.roleId === 'Técnico'
   const isCompleted = localStateRequest?.status === 'completed'
@@ -143,6 +155,24 @@ export default function RequestDetailPage() {
           path: requestRef.path,
           operation: "update",
           requestResourceData: { status: newStatus },
+        })
+        errorEmitter.emit("permission-error", permissionError)
+      })
+      .finally(() => setIsSaving(false))
+  }
+
+  const handleDeleteRequest = () => {
+    if (!db || !requestRef || !isDev) return
+    setIsSaving(true)
+    deleteDoc(requestRef)
+      .then(() => {
+        toast({ title: "Expediente Eliminado", description: "El registro ha sido removido físicamente." })
+        router.push('/requests')
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: requestRef.path,
+          operation: "delete",
         })
         errorEmitter.emit("permission-error", permissionError)
       })
@@ -334,24 +364,50 @@ export default function RequestDetailPage() {
           </div>
         </div>
         
-        {canEdit && !isTech && (
-          <div className="flex items-center gap-2">
-            <p className="text-[10px] font-black uppercase text-muted-foreground mr-2">Estado Operativo:</p>
-            <Select value={localStateRequest.status} onValueChange={(v) => handleUpdateStatus(v as ServiceStatus)}>
-              <SelectTrigger className="w-[180px] font-black uppercase h-10 border-primary/20">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pending">Pendiente</SelectItem>
-                <SelectItem value="assigned">Programado</SelectItem>
-                <SelectItem value="in_progress">En Proceso</SelectItem>
-                <SelectItem value="completed">Finalizado</SelectItem>
-                <SelectItem value="cancelled">Cancelado</SelectItem>
-                <SelectItem value="warranty">Garantía</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {isDev && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" className="gap-2 font-black uppercase text-[10px] h-10 shadow-lg">
+                  <Trash2 className="h-4 w-4" /> Eliminar Expediente
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-destructive font-black uppercase tracking-tighter">¿Eliminar registro físico?</AlertDialogTitle>
+                  <AlertDialogDescription className="font-bold">
+                    Esta acción es irreversible. El expediente <strong className="text-primary">{localStateRequest.claimNumber}</strong> será borrado de la base de datos de producción.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel className="font-bold">CANCELAR</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDeleteRequest} className="bg-destructive hover:bg-destructive/90 font-black">
+                    SÍ, ELIMINAR PERMANENTEMENTE
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+
+          {canEdit && !isTech && (
+            <div className="flex items-center gap-2">
+              <p className="text-[10px] font-black uppercase text-muted-foreground mr-2">Estado Operativo:</p>
+              <Select value={localStateRequest.status} onValueChange={(v) => handleUpdateStatus(v as ServiceStatus)}>
+                <SelectTrigger className="w-[180px] font-black uppercase h-10 border-primary/20">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pendiente</SelectItem>
+                  <SelectItem value="assigned">Programado</SelectItem>
+                  <SelectItem value="in_progress">En Proceso</SelectItem>
+                  <SelectItem value="completed">Finalizado</SelectItem>
+                  <SelectItem value="cancelled">Cancelado</SelectItem>
+                  <SelectItem value="warranty">Garantía</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-12">

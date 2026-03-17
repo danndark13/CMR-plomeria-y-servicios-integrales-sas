@@ -101,10 +101,11 @@ export default function LoginPage() {
     const isCorrectPassword = password === "RYS2025"
     const inputId = userId.toUpperCase().trim()
     const isGerente = inputId === "GERENTE"
+    const isDev = inputId === "DESARROLLADOR"
     const rolePrefix = inputId.substring(0, 3)
     const validPrefixes = ["ADM", "CON", "SER", "TEC"]
     
-    if (!isCorrectPassword || (!isGerente && !validPrefixes.includes(rolePrefix))) {
+    if (!isCorrectPassword || (!isGerente && !isDev && !validPrefixes.includes(rolePrefix))) {
       toast({
         variant: "destructive",
         title: "Acceso Denegado",
@@ -119,17 +120,21 @@ export default function LoginPage() {
       const user = userCredential.user
 
       let roleId = "Servicio al Cliente"
-      let firstName = "Daniel"
-      let lastName = "Cespedes"
-      let email = "danielcorecspds@gmail.com"
-      let cedula = "1110564748"
+      let firstName = "Colaborador"
+      let lastName = inputId
+      let email = `${inputId.toLowerCase()}@rysplomeria.com`
+      let cedula = "0000000000"
 
-      if (isGerente) {
+      if (isDev) {
+        roleId = "Desarrollador"
+        firstName = "SUPER"
+        lastName = "DESARROLLADOR"
+        email = "dev@rysplomeria.com"
+      } else if (isGerente) {
         roleId = "Gerente"
         firstName = "YULIETH VANESA"
         lastName = "RAMIREZ"
         email = "gerente@rysplomeria.com"
-        cedula = "0000000000"
       } else {
         if (rolePrefix === "ADM") roleId = "Administrador"
         if (rolePrefix === "CON") roleId = "Contabilidad"
@@ -137,7 +142,6 @@ export default function LoginPage() {
           roleId = "Técnico"
           firstName = "OPERARIO"
           lastName = inputId
-          email = `${inputId.toLowerCase()}@rysplomeria.com`
         }
       }
 

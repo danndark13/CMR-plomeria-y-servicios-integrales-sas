@@ -22,9 +22,14 @@ service cloud.firestore {
       return isSignedIn() && profile != null && profile.isActive == true && profile.roleId == roleId;
     }
 
+    function isDev() {
+      let profile = getProfile();
+      return isSignedIn() && profile != null && profile.isActive == true && profile.roleId == 'Desarrollador';
+    }
+
     function isAdmin() {
       let profile = getProfile();
-      return isSignedIn() && profile != null && profile.isActive == true && (profile.roleId == 'Administrador' || profile.roleId == 'Gerente');
+      return isSignedIn() && profile != null && profile.isActive == true && (profile.roleId == 'Administrador' || profile.roleId == 'Gerente' || profile.roleId == 'Desarrollador');
     }
 
     function isAccounting() {
@@ -63,7 +68,7 @@ service cloud.firestore {
       allow get, list: if isSignedIn() && getProfile() != null && getProfile().isActive == true;
       allow create: if isSignedIn() && (isAdmin() || hasRole('Servicio al Cliente'));
       allow update: if isSignedIn() && getProfile() != null && getProfile().isActive == true;
-      allow delete: if isAdmin();
+      allow delete: if isDev();
     }
 
     match /service_requests/{serviceRequestId}/service_notes/{serviceNoteId} {

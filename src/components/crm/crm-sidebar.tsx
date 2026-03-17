@@ -21,7 +21,8 @@ import {
   Receipt,
   Globe,
   Info,
-  Wallet
+  Wallet,
+  Wrench
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -74,7 +75,8 @@ export function CRMSidebar() {
   }
 
   const role = profile?.roleId || (isLoading ? 'Cargando...' : 'Sin Rol')
-  const isAdmin = role === 'Administrador' || role === 'Gerente'
+  const isDev = role === 'Desarrollador'
+  const isAdmin = role === 'Administrador' || role === 'Gerente' || isDev
   const isTech = role === 'Técnico'
   const isAccounting = role === 'Contabilidad' || isAdmin
 
@@ -121,7 +123,7 @@ export function CRMSidebar() {
             <span className="text-sm font-black truncate text-slate-900 group-hover:text-primary transition-colors">
               {displayName}
             </span>
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+            <span className={cn("text-[10px] font-bold uppercase tracking-widest", isDev ? "text-red-600" : "text-muted-foreground")}>
               {role}
             </span>
           </div>

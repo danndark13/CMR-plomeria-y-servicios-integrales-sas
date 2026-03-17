@@ -133,11 +133,11 @@ export default function AdminUsersPage() {
 
   const toggleUserStatus = (u: any) => {
     if (!db) return
-    if (u.username === 'GERENTE') {
+    if (u.username === 'GERENTE' || u.username === 'DESARROLLADOR') {
       toast({
         variant: "destructive",
         title: "Acción Protegida",
-        description: "El usuario Gerente no puede ser desactivado por seguridad del sistema."
+        description: "Este usuario no puede ser desactivado por seguridad del sistema."
       })
       return
     }
@@ -247,6 +247,7 @@ export default function AdminUsersPage() {
                       <SelectValue placeholder="Seleccionar rol" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="Desarrollador">Desarrollador (Super Acceso)</SelectItem>
                       <SelectItem value="Gerente">Gerente</SelectItem>
                       <SelectItem value="Administrador">Administrador</SelectItem>
                       <SelectItem value="Contabilidad">Contabilidad</SelectItem>
@@ -352,7 +353,7 @@ export default function AdminUsersPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge className="bg-slate-800 text-white font-black uppercase text-[9px] tracking-tighter">
+                      <Badge className={cn("text-white font-black uppercase text-[9px] tracking-tighter", u.roleId === 'Desarrollador' ? 'bg-red-600' : 'bg-slate-800')}>
                         {u.roleId}
                       </Badge>
                     </TableCell>
@@ -381,7 +382,7 @@ export default function AdminUsersPage() {
                             <DropdownMenuItem 
                               className={u.isActive ? "text-destructive font-bold" : "text-green-600 font-bold"} 
                               onClick={() => toggleUserStatus(u)}
-                              disabled={isProcessing || u.username === 'GERENTE'}
+                              disabled={isProcessing || u.username === 'GERENTE' || u.username === 'DESARROLLADOR'}
                             >
                               <Power className="h-4 w-4 mr-2" /> {u.isActive ? "Suspender Acceso" : "Reactivar"}
                             </DropdownMenuItem>
