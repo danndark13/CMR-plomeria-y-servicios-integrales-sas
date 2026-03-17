@@ -41,8 +41,8 @@ import {
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
 import { toast } from "@/hooks/use-toast"
-import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase'
-import { doc, updateDoc, collection } from 'firebase/firestore'
+import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
+import { doc, updateDoc } from 'firebase/firestore'
 import { cn } from "@/lib/utils"
 
 const UNITS: UnitOfMeasure[] = ['UND', 'KG', 'MTS', 'GL', 'PAR', 'LB', 'PQ', 'VIAJE']
@@ -53,7 +53,6 @@ export default function RequestDetailPage() {
   const { user } = useUser()
   const db = useFirestore()
   
-  const [localRequest, setLocalRequest] = setDoc<ServiceRequest | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [showAddEntry, setShowAddEntry] = useState(false)
   const [showAddAdvance, setShowAddAdvance] = useState(false)
@@ -120,30 +119,6 @@ export default function RequestDetailPage() {
         toast({ title: "Estado Actualizado" })
       })
       .finally(() => setIsSaving(false))
-  }
-
-  const handleToggleExpenseUsage = (interventionId: string, expenseId: string, currentUnused: boolean) => {
-    if (!db || !requestRef || !canEdit || !localStateRequest || isTech) return
-
-    const updatedInterventions = (localStateRequest.interventions || []).map(interv => {
-      if (interv.id === interventionId) {
-        const updatedExpenses = (interv.detailedExpenses || []).map(exp => {
-          if (exp.id === expenseId) {
-            return { ...exp, isUnused: !currentUnused }
-          }
-          return exp
-        })
-        return { ...interv, detailedExpenses: updatedExpenses }
-      }
-      return interv
-    })
-
-    const updatedData = {
-      interventions: updatedInterventions,
-      updatedAt: new Date().toISOString()
-    }
-
-    updateDoc(requestRef, updatedData)
   }
 
   const handleApproveForPayroll = (interventionId: string) => {
