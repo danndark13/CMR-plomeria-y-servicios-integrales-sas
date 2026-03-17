@@ -23,7 +23,9 @@ import {
   Save,
   Clock,
   Briefcase,
-  DollarSign
+  DollarSign,
+  CheckCircle2,
+  ClipboardCheck
 } from "lucide-react"
 import { MOCK_REQUESTS, MOCK_COMPANIES } from "@/lib/mock-data"
 import { toast } from "@/hooks/use-toast"
@@ -60,7 +62,9 @@ export default function BillingReportPage() {
     return matchesCompany && matchesSearch && isCompleted
   })
 
-  const preValidatedRequests = filteredRequests.filter(r => r.billingStatus !== 'validated' && r.billingStatus !== 'paid')
+  // CATEGORÍAS DE FACTURACIÓN
+  const pendingRequests = filteredRequests.filter(r => r.billingStatus === 'pending' || !r.billingStatus)
+  const preValidatedRequests = filteredRequests.filter(r => r.billingStatus === 'pre_validated')
   const validatedRequests = filteredRequests.filter(r => r.billingStatus === 'validated' || r.billingStatus === 'paid')
 
   // Group validated requests by Invoice Number
@@ -70,6 +74,15 @@ export default function BillingReportPage() {
     acc[inv].push(req)
     return acc
   }, {} as Record<string, ServiceRequest[]>)
+
+  const handleSetPreValidated = (requestId: string) => {
+    if (!db) return
+    setIsProcessing(true)
+    const docRef = doc(db, "service_requests", requestId)
+    updateDoc(docRef, { billingStatus: 'pre_validated' as BillingStatus, updatedAt: new Date().toISOString() })
+      .then(() => toast({ title: "Prevalidado", description: "Expediente listo para facturar." }))
+      .finally(() => setIsProcessing(false))
+  }
 
   const handleValidateBilling = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -97,14 +110,9 @@ export default function BillingReportPage() {
         toast({ title: "Conciliación Exitosa", description: `Expediente ${validatingRequest.claimNumber} validado correctamente.` })
         setValidatingRequest(null)
       })
-      .catch((error) => {
-        console.error("Error validando factura:", error)
-        toast({ variant: "destructive", title: "Error", description: "No se pudo actualizar el estado de facturación." })
-      })
       .finally(() => setIsProcessing(false))
   }
 
-  // LÓGICA ACTUALIZADA: El valor sugerido es SIEMPRE el Bruto Reportado por los técnicos
   const calculateSuggested = (req: ServiceRequest) => {
     return (req.interventions || []).reduce((s, i) => s + (i.reportedValue || 0), 0)
   }
@@ -136,7 +144,7 @@ export default function BillingReportPage() {
     link.download = `Prevalidado_${selectedCompany.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`
     link.click()
     
-    toast({ title: "Excel Generado", description: "El reporte de prevalidado se ha descargado correctamente." })
+    toast({ title: "Excel Generado", description: "Reporte de prevalidado descargado." })
   }
 
   const isLoadingTotal = isUserLoading || isRequestsLoading
@@ -146,7 +154,7 @@ export default function BillingReportPage() {
       <div className="flex flex-col gap-8">
         <div>
           <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">Módulo Contable: Facturación</h1>
-          <p className="text-muted-foreground font-medium">Seleccione una aseguradora para procesar conciliaciones y facturas.</p>
+          <p className="text-muted-foreground font-medium">Seleccione una aseguradora para procesar conciliaciones y facturas de forma independiente.</p>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -191,7 +199,7 @@ export default function BillingReportPage() {
           </Button>
           <div>
             <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">{selectedCompany.name}</h1>
-            <p className="text-muted-foreground font-medium">Gestión de cartera y expedientes finalizados.</p>
+            <p className="text-muted-foreground font-medium">Gestión de cartera independiente.</p>
           </div>
         </div>
         <Button onClick={handleExportExcel} className="gap-2 bg-green-600 hover:bg-green-700 font-bold shadow-lg h-12">
@@ -202,34 +210,31 @@ export default function BillingReportPage() {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input 
-          placeholder="Buscar por expediente o asegurado..." 
+          placeholder="Buscar expediente..." 
           className="pl-10 h-11"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
       </div>
 
-      <Tabs defaultValue="conciliation" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-[500px] mb-6 h-12 bg-slate-100 p-1">
-          <TabsTrigger 
-            value="conciliation" 
-            className="font-black uppercase tracking-widest text-[11px] data-[state=active]:bg-blue-600 data-[state=active]:text-white h-full transition-all"
-          >
-            PREVALIDADO
+      <Tabs defaultValue="pending" className="w-full">
+        <TabsList className="grid w-full grid-cols-3 max-w-[600px] mb-6 h-12 bg-slate-100 p-1">
+          <TabsTrigger value="pending" className="font-black uppercase tracking-widest text-[10px] data-[state=active]:bg-orange-500 data-[state=active]:text-white transition-all">
+            POR PREVALIDAR
           </TabsTrigger>
-          <TabsTrigger 
-            value="validated" 
-            className="font-black uppercase tracking-widest text-[11px] data-[state=active]:bg-green-600 data-[state=active]:text-white h-full transition-all"
-          >
-            VALIDADO
+          <TabsTrigger value="pre_validated" className="font-black uppercase tracking-widest text-[10px] data-[state=active]:bg-blue-600 data-[state=active]:text-white transition-all">
+            PREVALIDADOS
+          </TabsTrigger>
+          <TabsTrigger value="facturados" className="font-black uppercase tracking-widest text-[10px] data-[state=active]:bg-green-600 data-[state=active]:text-white transition-all">
+            FACTURADOS
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="conciliation">
-          <Card className="overflow-hidden border-t-4 border-t-blue-500 shadow-xl">
+        <TabsContent value="pending">
+          <Card className="overflow-hidden border-t-4 border-t-orange-500 shadow-xl">
             <CardHeader className="bg-slate-50/80 border-b">
               <CardTitle className="text-sm font-black flex items-center gap-2 uppercase tracking-wider">
-                <Clock className="h-4 w-4 text-blue-500" /> Expedientes en Conciliación
+                <Clock className="h-4 w-4 text-orange-500" /> Expedientes por Revisar
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
@@ -238,42 +243,30 @@ export default function BillingReportPage() {
                   <TableRow className="bg-muted/30">
                     <TableHead className="font-black uppercase text-[10px]">Expediente</TableHead>
                     <TableHead className="font-black uppercase text-[10px]">Asegurado</TableHead>
-                    <TableHead className="text-right font-black uppercase text-[10px]">Costo Sugerido (Bruto)</TableHead>
-                    <TableHead className="text-right font-black uppercase text-[10px]">V. Aprobado</TableHead>
-                    <TableHead className="text-right font-black uppercase text-[10px]">Acciones</TableHead>
+                    <TableHead className="text-right font-black uppercase text-[10px]">V. Reportado</TableHead>
+                    <TableHead className="text-right font-black uppercase text-[10px]">Acción</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoadingTotal ? (
-                    <TableRow><TableCell colSpan={5} className="h-40 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary/20" /></TableCell></TableRow>
-                  ) : preValidatedRequests.length === 0 ? (
-                    <TableRow><TableCell colSpan={5} className="h-40 text-center text-muted-foreground italic">No hay expedientes pendientes por conciliar.</TableCell></TableRow>
-                  ) : preValidatedRequests.map((req) => (
+                    <TableRow><TableCell colSpan={4} className="h-40 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary/20" /></TableCell></TableRow>
+                  ) : pendingRequests.length === 0 ? (
+                    <TableRow><TableCell colSpan={4} className="h-40 text-center text-muted-foreground italic">No hay expedientes pendientes.</TableCell></TableRow>
+                  ) : pendingRequests.map((req) => (
                     <TableRow key={req.id} className="hover:bg-primary/5">
                       <TableCell><span className="font-mono font-black text-primary">{req.claimNumber}</span></TableCell>
-                      <TableCell><span className="font-bold text-sm">{req.insuredName}</span></TableCell>
+                      <TableCell><span className="font-bold text-sm uppercase">{req.insuredName}</span></TableCell>
+                      <TableCell className="text-right font-mono font-bold text-slate-600">${calculateSuggested(req).toLocaleString()}</TableCell>
                       <TableCell className="text-right">
-                        <span className="font-mono font-black text-slate-600 bg-slate-100 px-2 py-1 rounded">
-                          ${calculateSuggested(req).toLocaleString()}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span className="font-mono font-black text-orange-600">
-                          ${(req.approvedAmount || 0).toLocaleString()}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Link href={`/requests/${req.id}`}>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary"><FileText className="h-4 w-4" /></Button>
-                          </Link>
-                          <Button 
-                            className="h-8 font-black text-[10px] uppercase tracking-tighter bg-blue-600 hover:bg-blue-700 text-white"
-                            onClick={() => setValidatingRequest(req)}
-                          >
-                            CONCILIAR Y FACTURAR
-                          </Button>
-                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="font-black text-[9px] uppercase border-orange-200 text-orange-600 hover:bg-orange-50"
+                          onClick={() => handleSetPreValidated(req.id)}
+                          disabled={isProcessing}
+                        >
+                          MARCAR PREVALIDADO
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -283,18 +276,60 @@ export default function BillingReportPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="validated">
+        <TabsContent value="pre_validated">
+          <Card className="overflow-hidden border-t-4 border-t-blue-500 shadow-xl">
+            <CardHeader className="bg-slate-50/80 border-b">
+              <CardTitle className="text-sm font-black flex items-center gap-2 uppercase tracking-wider">
+                <ClipboardCheck className="h-4 w-4 text-blue-500" /> Listos para Conciliar y Facturar
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/30">
+                    <TableHead className="font-black uppercase text-[10px]">Expediente</TableHead>
+                    <TableHead className="font-black uppercase text-[10px]">Asegurado</TableHead>
+                    <TableHead className="text-right font-black uppercase text-[10px]">Costo Sugerido</TableHead>
+                    <TableHead className="text-right font-black uppercase text-[10px]">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoadingTotal ? (
+                    <TableRow><TableCell colSpan={4} className="h-40 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary/20" /></TableCell></TableRow>
+                  ) : preValidatedRequests.length === 0 ? (
+                    <TableRow><TableCell colSpan={4} className="h-40 text-center text-muted-foreground italic">No hay expedientes prevalidados.</TableCell></TableRow>
+                  ) : preValidatedRequests.map((req) => (
+                    <TableRow key={req.id} className="hover:bg-primary/5">
+                      <TableCell><span className="font-mono font-black text-primary">{req.claimNumber}</span></TableCell>
+                      <TableCell><span className="font-bold text-sm uppercase">{req.insuredName}</span></TableCell>
+                      <TableCell className="text-right font-mono font-black text-blue-600">${calculateSuggested(req).toLocaleString()}</TableCell>
+                      <TableCell className="text-right">
+                        <Button 
+                          className="h-8 font-black text-[10px] uppercase bg-blue-600 hover:bg-blue-700 text-white"
+                          onClick={() => setValidatingRequest(req)}
+                        >
+                          FACTURAR
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="facturados">
           <div className="space-y-8">
             {isLoadingTotal ? (
               <div className="h-60 flex flex-col items-center justify-center gap-4 bg-white rounded-xl border border-dashed">
                 <Loader2 className="h-8 w-8 animate-spin text-primary opacity-20" />
-                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Organizando facturas...</p>
+                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Cargando historial...</p>
               </div>
             ) : Object.keys(groupedByInvoice).length === 0 ? (
               <Card className="border-dashed py-20 flex flex-col items-center justify-center text-center text-muted-foreground">
                 <Receipt className="h-12 w-12 opacity-10 mb-4" />
-                <p className="text-lg font-bold">Sin facturas generadas</p>
-                <p className="text-xs uppercase font-black tracking-tighter">Valida servicios en la pestaña de conciliación</p>
+                <p className="text-lg font-bold">Sin facturas generadas para esta empresa</p>
               </Card>
             ) : Object.entries(groupedByInvoice).sort((a,b) => b[0].localeCompare(a[0])).map(([invoiceNum, requests]) => {
               const totalFactura = requests.reduce((sum, r) => sum + (r.approvedAmount || 0), 0)
@@ -324,29 +359,21 @@ export default function BillingReportPage() {
                   </CardHeader>
                   <CardContent className="p-0">
                     <Table>
-                      <TableHeader>
-                        <TableRow className="bg-slate-50">
-                          <TableHead className="font-black uppercase text-[10px]">Expediente</TableHead>
-                          <TableHead className="font-black uppercase text-[10px]">Asegurado</TableHead>
-                          <TableHead className="font-black uppercase text-[10px]">Cuenta Cliente</TableHead>
-                          <TableHead className="text-right font-black uppercase text-[10px]">Valor Aprobado</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
+                      <TableHeader><TableRow className="bg-slate-50">
+                        <TableHead className="font-black uppercase text-[10px]">Expediente</TableHead>
+                        <TableHead className="font-black uppercase text-[10px]">Asegurado</TableHead>
+                        <TableHead className="text-right font-black uppercase text-[10px]">Valor Aprobado</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow></TableHeader>
                       <TableBody>
                         {requests.map((req) => (
-                          <TableRow key={req.id} className="hover:bg-primary/5 border-b-slate-100 last:border-0 transition-colors">
+                          <TableRow key={req.id} className="hover:bg-primary/5 transition-colors">
                             <TableCell><span className="font-mono font-black text-primary">{req.claimNumber}</span></TableCell>
-                            <TableCell><span className="font-bold text-sm">{req.insuredName}</span></TableCell>
-                            <TableCell><span className="text-[10px] font-black uppercase text-muted-foreground">{req.accountName}</span></TableCell>
-                            <TableCell className="text-right font-mono font-black text-slate-800">
-                              ${(req.approvedAmount || 0).toLocaleString()}
-                            </TableCell>
+                            <TableCell><span className="font-bold text-xs uppercase">{req.insuredName}</span></TableCell>
+                            <TableCell className="text-right font-mono font-black text-slate-800">${(req.approvedAmount || 0).toLocaleString()}</TableCell>
                             <TableCell className="text-right">
                               <Link href={`/requests/${req.id}`}>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10">
-                                  <ChevronRight className="h-4 w-4" />
-                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10"><ChevronRight className="h-4 w-4" /></Button>
                               </Link>
                             </TableCell>
                           </TableRow>
@@ -365,19 +392,17 @@ export default function BillingReportPage() {
       <Dialog open={!!validatingRequest} onOpenChange={(v) => !v && setValidatingRequest(null)}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-black uppercase tracking-tighter text-primary">Módulo de Conciliación</DialogTitle>
-            <DialogDescription>
-              Ajuste el valor final y registre la factura para el expediente <strong className="text-primary">{validatingRequest?.claimNumber}</strong>.
-            </DialogDescription>
+            <DialogTitle className="text-2xl font-black uppercase tracking-tighter text-primary">Facturación Electrónica</DialogTitle>
+            <DialogDescription>Asignación de factura para <strong className="text-primary">{validatingRequest?.claimNumber}</strong>.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleValidateBilling} className="space-y-6 pt-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="p-3 bg-slate-50 rounded-lg border border-dashed">
-                <p className="text-[9px] font-black uppercase text-slate-400">Costo Sugerido (Bruto Reportado)</p>
+                <p className="text-[9px] font-black uppercase text-slate-400">Bruto Reportado</p>
                 <p className="text-sm font-black text-blue-600">${validatingRequest ? calculateSuggested(validatingRequest).toLocaleString() : 0}</p>
               </div>
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-blue-600">Valor Aprobado (Cobro)</Label>
+                <Label className="text-[10px] font-black uppercase tracking-widest text-blue-600">Valor Aprobado</Label>
                 <div className="relative">
                   <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-blue-600" />
                   <Input 
@@ -394,24 +419,17 @@ export default function BillingReportPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase tracking-widest">N° Factura Electrónica</Label>
-                  <div className="relative">
-                    <Receipt className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input name="invoiceNumber" placeholder="Ej. FE-1025" required className="pl-10 font-bold uppercase" />
-                  </div>
+                  <Label className="text-[10px] font-black uppercase tracking-widest">N° Factura</Label>
+                  <Input name="invoiceNumber" placeholder="FE-1025" required className="font-bold uppercase h-10" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase tracking-widest">Consecutivo RYS</Label>
-                  <div className="relative">
-                    <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input name="billingConsecutive" placeholder="Ej. 2025-001" required className="pl-10 font-bold uppercase" />
-                  </div>
+                  <Input name="billingConsecutive" placeholder="2025-001" required className="font-bold uppercase h-10" />
                 </div>
               </div>
-
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase tracking-widest">Notas de Conciliación</Label>
-                <Textarea name="accountingNotes" placeholder="Descuentos, glosas o acuerdos especiales..." className="text-xs" />
+                <Label className="text-[10px] font-black uppercase tracking-widest">Notas</Label>
+                <Textarea name="accountingNotes" placeholder="Notas de conciliación..." className="text-xs" />
               </div>
             </div>
 

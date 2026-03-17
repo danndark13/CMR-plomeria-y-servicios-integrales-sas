@@ -27,7 +27,8 @@ import {
   MapPin,
   Phone,
   FileText,
-  FileSpreadsheet
+  FileSpreadsheet,
+  X
 } from "lucide-react"
 import { 
   Dialog, 
@@ -49,10 +50,12 @@ import { toast } from "@/hooks/use-toast"
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { ServiceRequest } from "@/lib/types"
+import { cn } from "@/lib/utils"
 
 export default function RequestsPage() {
   const router = useRouter()
   const [searchTerm, setSearchTerm] = useState("")
+  const [selectedCompanyFilter, setSelectedCompanyFilter] = useState<string>("ALL")
   const [isCreating, setIsCreating] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   
@@ -92,7 +95,8 @@ export default function RequestsPage() {
   const { data: firestoreAccounts } = useCollection(clientAccountsQuery)
 
   const isTech = profile?.roleId === 'Técnico'
-  const isAdmin = profile?.roleId === 'Administrador' || profile?.roleId === 'Gerente'
+  const isDev = profile?.roleId === 'Desarrollador'
+  const isAdmin = profile?.roleId === 'Administrador' || profile?.roleId === 'Gerente' || isDev
 
   const allRequests = useMemo(() => {
     const combined = [...(firestoreRequests || [])]
@@ -120,14 +124,23 @@ export default function RequestsPage() {
 
   const filteredRequests = useMemo(() => {
     return allRequests.filter(req => {
-      return (
+      const matchesSearch = (
         (req.claimNumber || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
         (req.insuredName || "").toLowerCase().includes(searchTerm.toLowerCase())
       )
+      const matchesCompany = selectedCompanyFilter === "ALL" || req.companyId === selectedCompanyFilter
+      return matchesSearch && matchesCompany
     }).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
-  }, [allRequests, searchTerm])
+  }, [allRequests, searchTerm, selectedCompanyFilter])
 
-  const allCompanies = (firestoreCompanies && firestoreCompanies.length > 0) ? firestoreCompanies : MOCK_COMPANIES
+  const allCompanies = useMemo(() => {
+    const combined = [...(firestoreCompanies || [])]
+    const seenIds = new Set(combined.map(c => c.id))
+    MOCK_COMPANIES.forEach(mc => {
+      if (!seenIds.has(mc.id)) combined.push(mc)
+    })
+    return combined
+  }, [firestoreCompanies])
 
   // Dynamic accounts logic
   const currentCompany = allCompanies.find(c => c.id === selectedCompanyId)
@@ -226,16 +239,15 @@ export default function RequestsPage() {
     const link = document.body.appendChild(document.createElement("a"))
     const url = URL.createObjectURL(blob)
     link.href = url
-    link.download = `Bitacora_RYS_${new Date().toISOString().split('T')[0]}.csv`
+    link.download = `Bitacora_${selectedCompanyFilter === "ALL" ? "Global" : selectedCompanyFilter}_RYS_${new Date().toISOString().split('T')[0]}.csv`
     link.click()
     document.body.removeChild(link)
 
     toast({ title: "Planilla Generada" })
   }
 
-  const role = profile?.roleId
-  const canCreate = isAdmin || role === 'Servicio al Cliente'
-  const canExport = isAdmin || role === 'Servicio al Cliente' || role === 'Contabilidad'
+  const canCreate = isAdmin || profile?.roleId === 'Servicio al Cliente'
+  const canExport = isAdmin || profile?.roleId === 'Servicio al Cliente' || profile?.roleId === 'Contabilidad'
   const isLoadingTotal = isUserLoading || isRequestsLoading
 
   return (
@@ -244,7 +256,7 @@ export default function RequestsPage() {
         <div>
           <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">Bitácora de Servicios</h1>
           <p className="text-muted-foreground font-medium">
-            {role === 'Técnico' ? 'Tus servicios registrados y programados.' : 'Listado de expedientes activos e históricos.'}
+            {profile?.roleId === 'Técnico' ? 'Tus servicios registrados y programados.' : 'Listado de expedientes activos e históricos.'}
           </p>
         </div>
         <div className="flex gap-2">
@@ -263,8 +275,8 @@ export default function RequestsPage() {
 
       <Card className="shadow-md border-none overflow-hidden">
         <CardHeader className="p-4 border-b bg-slate-50/50">
-          <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-            <div className="relative w-full md:w-96">
+          <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
+            <div className="relative w-full lg:w-96">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input 
                 placeholder="Buscar por Expediente, Cliente..." 
@@ -273,6 +285,23 @@ export default function RequestsPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+            
+            {!isTech && (
+              <div className="flex items-center gap-3 w-full lg:w-auto">
+                <span className="text-[10px] font-black uppercase text-muted-foreground shrink-0"><Filter className="h-3 w-3 inline mr-1" /> Empresa:</span>
+                <Select value={selectedCompanyFilter} onValueChange={setSelectedCompanyFilter}>
+                  <SelectTrigger className="h-10 w-full lg:w-[220px] font-bold uppercase text-[11px] border-primary/20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">TODAS LAS EMPRESAS</SelectItem>
+                    {allCompanies.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -296,7 +325,7 @@ export default function RequestsPage() {
                 </TableRow>
               ) : filteredRequests.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="h-40 text-center text-muted-foreground italic">No se encontraron servicios vinculados a tu perfil.</TableCell>
+                  <TableCell colSpan={4} className="h-40 text-center text-muted-foreground italic">No se encontraron servicios con los filtros aplicados.</TableCell>
                 </TableRow>
               ) : filteredRequests.map((req) => {
                 return (
