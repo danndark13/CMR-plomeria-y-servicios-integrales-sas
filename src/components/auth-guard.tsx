@@ -17,8 +17,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const auth = useAuth()
   const router = useRouter()
   const pathname = usePathname()
-  const [isChecking, setIsChecking] = useState(true)
+  const [mounted, setMounted] = useState(false)
   const lastActivity = useRef<number>(Date.now())
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const profileRef = useMemoFirebase(() => {
     if (!user || !db) return null
@@ -27,7 +31,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { data: profile, isLoading: isProfileLoading } = useDoc(profileRef)
 
   useEffect(() => {
-    if (isUserLoading) return
+    if (!mounted || isUserLoading) return
 
     const isLoginPage = pathname === "/login"
 
@@ -40,23 +44,22 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       const timer = setTimeout(() => {
         if (!profile && auth) {
           console.warn("AuthGuard: Profile not found after wait, signing out.")
-          signOut(auth).then(() => router.push("/login"))
+          signOut(auth).then(() => {
+            router.push("/login")
+            window.location.reload()
+          })
         }
       }, 2000)
       return () => clearTimeout(timer)
-    } else if (user && profile) {
-      setIsChecking(false)
-    } else {
-      setIsChecking(false)
     }
-  }, [user, isUserLoading, pathname, router, profile, isProfileLoading, auth])
+  }, [user, isUserLoading, pathname, router, profile, isProfileLoading, auth, mounted])
 
   const handleActivity = useCallback(() => {
     lastActivity.current = Date.now()
   }, [])
 
   useEffect(() => {
-    if (!user || !auth || typeof window === 'undefined') return
+    if (!user || !auth || !mounted) return
 
     const events = ["mousedown", "mousemove", "keypress", "scroll", "touchstart"]
     events.forEach(name => window.addEventListener(name, handleActivity))
@@ -76,9 +79,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       events.forEach(name => window.removeEventListener(name, handleActivity))
       clearInterval(interval)
     }
-  }, [user, auth, router, handleActivity])
+  }, [user, auth, router, handleActivity, mounted])
 
-  if (isUserLoading || (isChecking && pathname !== "/login")) {
+  if (!mounted || isUserLoading || (user && isProfileLoading && pathname !== "/login")) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
         <div className="h-16 w-16 rounded-2xl bg-white shadow-xl flex items-center justify-center">
@@ -90,8 +93,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       </div>
     )
   }
-
-  if (!user && pathname !== "/login") return null
 
   return <>{children}</>
 }
