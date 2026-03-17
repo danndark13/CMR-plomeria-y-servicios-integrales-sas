@@ -42,7 +42,8 @@ import {
   User as UserIcon,
   ShieldCheck,
   Wrench,
-  CircleCheck
+  CircleCheck,
+  Calendar
 } from "lucide-react"
 import { 
   AlertDialog, 
@@ -171,6 +172,27 @@ export default function RequestDetailPage() {
       .then(() => toast({ title: "Estado Actualizado" }))
       .finally(() => setIsSaving(false))
   }
+
+  const handleUpdateMetadata = (field: string, value: any, interventionId?: string) => {
+    if (!db || !requestRef || !isDev || !localStateRequest) return;
+
+    let updateData: any = {};
+    if (interventionId) {
+      const updatedInterventions = localStateRequest.interventions.map(i => {
+        if (i.id === interventionId) {
+          return { ...i, [field]: value };
+        }
+        return i;
+      });
+      updateData = { interventions: updatedInterventions };
+    } else {
+      updateData = { [field]: value };
+    }
+
+    updateDoc(requestRef, { ...updateData, updatedAt: new Date().toISOString() })
+      .then(() => toast({ title: "Metadatos Actualizados" }))
+      .catch(() => toast({ variant: "destructive", title: "Error al actualizar" }));
+  };
 
   const handleDeleteRequest = () => {
     if (!db || !requestRef || !isDev) return
@@ -409,9 +431,33 @@ export default function RequestDetailPage() {
                 <p className="text-[10px] font-black uppercase text-slate-400">Ubicación</p>
                 <p className="font-medium uppercase flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-primary" /> {localStateRequest.address} • {localStateRequest.city}</p>
               </div>
-              <div className="space-y-1 md:col-span-2 pt-2 border-t border-dashed">
+              <div className="space-y-3 md:col-span-2 pt-2 border-t border-dashed">
                 <p className="text-[10px] font-black uppercase text-slate-400">Descripción</p>
                 <p className="text-xs text-slate-600">{localStateRequest.description}</p>
+                
+                {isDev && (
+                  <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl space-y-4">
+                    <p className="text-[9px] font-black text-red-600 uppercase flex items-center gap-2"><ShieldCheck className="h-3 w-3" /> Panel de Desarrollador: Metadatos del Expediente</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-[8px] font-black uppercase">Fecha de Apertura (ISO)</Label>
+                        <Input 
+                          defaultValue={localStateRequest.createdAt} 
+                          onBlur={(e) => handleUpdateMetadata('createdAt', e.target.value)}
+                          className="h-8 text-[10px] font-mono"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[8px] font-black uppercase">Creado por (ID Usuario)</Label>
+                        <Input 
+                          defaultValue={localStateRequest.createdBy} 
+                          onBlur={(e) => handleUpdateMetadata('createdBy', e.target.value)}
+                          className="h-8 text-[10px] font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -626,20 +672,43 @@ export default function RequestDetailPage() {
               {[...interventions].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((item) => (
                 <Card key={item.id} className="overflow-hidden border-none shadow-md">
                   <CardHeader className="bg-slate-50 py-3 flex flex-row items-center justify-between border-b">
-                    <div className="flex flex-col">
+                    <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-black uppercase text-slate-400">{new Date(item.date).toLocaleString()}</span>
+                        {isDev ? (
+                          <div className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3 text-red-500" />
+                            <Input 
+                              defaultValue={item.date} 
+                              onBlur={(e) => handleUpdateMetadata('date', e.target.value, item.id)}
+                              className="h-6 text-[9px] font-mono w-40 px-1 border-red-200"
+                            />
+                          </div>
+                        ) : (
+                          <span className="text-[10px] font-black uppercase text-slate-400">{new Date(item.date).toLocaleString()}</span>
+                        )}
                         {item.isSimpleVisit && <Badge className="bg-orange-500 text-[8px] font-black">Visita $20k</Badge>}
                         {item.payrollStatus === 'processed' && <Badge className="bg-green-600 text-white text-[8px]">PAGADO</Badge>}
                       </div>
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-2">
                         <Badge className="bg-primary/10 text-primary text-[9px] font-black">{item.type}</Badge>
                         <span className="text-[10px] font-bold text-slate-500 uppercase">Téc: {item.technicianId}</span>
                       </div>
                     </div>
                     <div className="text-right flex flex-col items-end gap-2">
                       <div className="flex items-center gap-2 text-[9px] font-black uppercase text-primary/60">
-                        <UserIcon className="h-3 w-3" /> Registrado por: {item.authorName || 'SISTEMA'}
+                        <UserIcon className="h-3 w-3" /> 
+                        {isDev ? (
+                          <div className="flex items-center gap-1">
+                            <span className="shrink-0">Autor:</span>
+                            <Input 
+                              defaultValue={item.authorName} 
+                              onBlur={(e) => handleUpdateMetadata('authorName', e.target.value, item.id)}
+                              className="h-6 text-[9px] font-bold w-32 px-1 border-primary/20"
+                            />
+                          </div>
+                        ) : (
+                          `Registrado por: ${item.authorName || 'SISTEMA'}`
+                        )}
                       </div>
                       {isAdmin && item.payrollStatus !== 'processed' && (
                         <Button 
