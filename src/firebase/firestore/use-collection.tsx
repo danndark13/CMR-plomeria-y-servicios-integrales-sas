@@ -48,8 +48,8 @@ export interface InternalQuery extends Query<DocumentData> {
  *  
  * @template T Optional type for document data. Defaults to any.
  * @param {CollectionReference<DocumentData> | Query<DocumentData> | null | undefined} targetRefOrQuery -
- * The Firestore CollectionReference or Query. Waits if null/undefined.
- * @returns {UseCollectionResult<T>} Object with data, isLoading, error.
+ * El Firestore CollectionReference o Query. Espera si es null/undefined.
+ * @returns {UseCollectionResult<T>} Objeto con data, isLoading, error.
  */
 export function useCollection<T = any>(
     memoizedTargetRefOrQuery: ((CollectionReference<DocumentData> | Query<DocumentData>) & {__memo?: boolean})  | null | undefined,
@@ -72,7 +72,7 @@ export function useCollection<T = any>(
     setIsLoading(true);
     setError(null);
 
-    // Directly use memoizedTargetRefOrQuery as it's assumed to be the final query
+    // Direct use of memoizedTargetRefOrQuery as the source of truth
     const unsubscribe = onSnapshot(
       memoizedTargetRefOrQuery,
       (snapshot: QuerySnapshot<DocumentData>) => {
@@ -85,7 +85,7 @@ export function useCollection<T = any>(
         setIsLoading(false);
       },
       (err: FirestoreError) => {
-        // Only propagate permission-denied errors to the global listener to avoid UI crashes on network hiccups
+        // Only propagate permission-denied errors to the global listener
         if (err.code === 'permission-denied') {
           const path: string =
             memoizedTargetRefOrQuery.type === 'collection'
@@ -104,15 +104,24 @@ export function useCollection<T = any>(
           // trigger global error propagation
           errorEmitter.emit('permission-error', contextualError);
         } else {
-          // For other errors (like connectivity 'unavailable'), just update local state
+          // For other errors (like connectivity 'unavailable'), update local state
           setError(err);
           setIsLoading(false);
         }
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      try {
+        unsubscribe();
+      } catch (e) {
+        // SILENT CATCH: SDK assertion errors on unmount are frequent in dev environments
+        // We catch them to prevent app-level crash overlays.
+        console.warn("Firestore listener cleanup warning (safely ignored):", e);
+      }
+    };
   }, [memoizedTargetRefOrQuery]); // Re-run if the target query/reference changes.
+
   if(memoizedTargetRefOrQuery && !memoizedTargetRefOrQuery.__memo) {
     throw new Error(memoizedTargetRefOrQuery + ' was not properly memoized using useMemoFirebase');
   }

@@ -46,12 +46,12 @@ export function getSdks(firebaseApp: FirebaseApp) {
     try {
       /**
        * EXTREME STABILITY CONFIGURATION FOR CLOUD WORKSTATIONS
-       * 1. experimentalForceLongPolling: Uses standard HTTP instead of WebSockets.
-       * 2. localCache: memoryLocalCache(): Disables disk persistence (IndexedDB).
+       * 1. experimentalAutoDetectLongPolling: Automatically switches to HTTP if WebSockets fail.
+       * 2. localCache: memoryLocalCache(): Disables disk persistence (IndexedDB) to prevent multi-tab conflicts.
        * This avoids "INTERNAL ASSERTION FAILED" errors caused by network interruptions.
        */
       firestoreInstance = initializeFirestore(firebaseApp, {
-        experimentalForceLongPolling: true,
+        experimentalAutoDetectLongPolling: true,
         localCache: memoryLocalCache(),
       });
     } catch (e) {

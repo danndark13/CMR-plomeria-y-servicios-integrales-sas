@@ -35,8 +35,8 @@ export interface UseDocResult<T> {
  *
  * @template T Optional type for document data. Defaults to any.
  * @param {DocumentReference<DocumentData> | null | undefined} docRef -
- * The Firestore DocumentReference. Waits if null/undefined.
- * @returns {UseDocResult<T>} Object with data, isLoading, error.
+ * El Firestore DocumentReference. Espera si es null/undefined.
+ * @returns {UseDocResult<T>} Objeto con data, isLoading, error.
  */
 export function useDoc<T = any>(
   memoizedDocRef: DocumentReference<DocumentData> | null | undefined,
@@ -92,7 +92,15 @@ export function useDoc<T = any>(
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      try {
+        unsubscribe();
+      } catch (e) {
+        // SILENT CATCH: SDK assertion errors on unmount are frequent in dev environments
+        // We catch them to prevent app-level crash overlays.
+        console.warn("Firestore doc listener cleanup warning (safely ignored):", e);
+      }
+    };
   }, [memoizedDocRef]); // Re-run if the memoizedDocRef changes.
 
   return { data, isLoading, error };
