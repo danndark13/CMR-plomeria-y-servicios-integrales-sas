@@ -9,27 +9,34 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { UserPlus, Mail, Shield, MoreVertical, Key, Power, UserCog, Phone, Fingerprint, Loader2, Save, Search, CreditCard, X, AlertCircle } from "lucide-react"
+import { UserPlus, Mail, Shield, MoreVertical, Key, Power, UserCog, Phone, Fingerprint, Loader2, Save, Search, CreditCard, X, AlertCircle, Trash2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { toast } from "@/hooks/use-toast"
-import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase"
-import { collection, doc, updateDoc, setDoc } from "firebase/firestore"
+import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from "@/firebase"
+import { collection, doc, updateDoc, setDoc, deleteDoc } from "firebase/firestore"
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { cn } from "@/lib/utils"
 
 export default function AdminUsersPage() {
   const db = useFirestore()
-  const { user } = useUser()
+  const { user: currentUser } = useUser()
   const [isProcessing, setIsProcessing] = useState(false)
   const [editingUser, setEditingUser] = useState<any>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
 
+  const profileRef = useMemoFirebase(() => {
+    if (!db || !currentUser) return null
+    return doc(db, "user_profiles", currentUser.uid)
+  }, [db, currentUser])
+  const { data: myProfile } = useDoc(profileRef)
+  const isDev = myProfile?.roleId === 'Desarrollador'
+
   const usersQuery = useMemoFirebase(() => {
-    if (!db || !user) return null
+    if (!db || !currentUser) return null
     return collection(db, "user_profiles")
-  }, [db, user])
+  }, [db, currentUser])
 
   const { data: users, isLoading } = useCollection(usersQuery)
 
@@ -158,6 +165,29 @@ export default function AdminUsersPage() {
           path: docRef.path,
           operation: "update",
           requestResourceData: update,
+        })
+        errorEmitter.emit("permission-error", permissionError)
+      })
+      .finally(() => setIsProcessing(false))
+  }
+
+  const handleDeleteUser = (u: any) => {
+    if (!db || !isDev) return
+    if (u.username === 'GERENTE' || u.username === 'DESARROLLADOR') {
+      toast({ variant: "destructive", title: "Prohibido", description: "No puedes eliminar cuentas maestras." })
+      return
+    }
+
+    setIsProcessing(true)
+    const docRef = doc(db, "user_profiles", u.id)
+    deleteDoc(docRef)
+      .then(() => {
+        toast({ title: "Usuario Eliminado", description: "El perfil ha sido removido de la base de datos." })
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: docRef.path,
+          operation: "delete",
         })
         errorEmitter.emit("permission-error", permissionError)
       })
@@ -386,6 +416,18 @@ export default function AdminUsersPage() {
                             >
                               <Power className="h-4 w-4 mr-2" /> {u.isActive ? "Suspender Acceso" : "Reactivar"}
                             </DropdownMenuItem>
+                            {isDev && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                  className="text-red-600 font-black uppercase text-[10px]"
+                                  onClick={() => handleDeleteUser(u)}
+                                  disabled={isProcessing}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" /> Eliminar Perfil Físico
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>

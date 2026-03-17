@@ -49,7 +49,7 @@ service cloud.firestore {
       allow get, list: if isSignedIn();
       allow create: if isSignedIn();
       allow update: if (isAdmin() || isOwner(userProfileId)) && resource != null;
-      allow delete: if isAdmin() && resource != null;
+      allow delete: if isDev();
     }
 
     match /assistance_companies/{companyId} {
