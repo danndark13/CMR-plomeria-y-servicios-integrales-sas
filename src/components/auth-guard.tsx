@@ -9,7 +9,7 @@ import { signOut } from "firebase/auth"
 import { Loader2, ShieldAlert } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 
-const INACTIVITY_TIMEOUT = 30 * 60 * 1000 // 30 minutos en milisegundos
+const INACTIVITY_TIMEOUT = 30 * 60 * 1000 // 30 minutos
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, isUserLoading } = useUser()
@@ -20,43 +20,43 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const [isChecking, setIsChecking] = useState(true)
   const lastActivity = useRef<number>(Date.now())
 
-  // 1. Fetch profile to ensure user is fully authorized
   const profileRef = useMemoFirebase(() => {
     if (!user || !db) return null
     return doc(db, "user_profiles", user.uid)
   }, [user, db])
   const { data: profile, isLoading: isProfileLoading } = useDoc(profileRef)
 
-  // 2. Handle Redirection logic
   useEffect(() => {
     if (isUserLoading) return
 
     const isLoginPage = pathname === "/login"
 
     if (!user && !isLoginPage) {
-      // No hay usuario y no está en login -> Redirigir a login
       router.push("/login")
     } else if (user && isLoginPage) {
-      // Hay usuario pero está en login -> Redirigir al inicio
       router.push("/")
     } else if (user && !isProfileLoading && !profile && !isLoginPage) {
-      // Usuario autenticado pero sin perfil en Firestore (sesión huérfana)
-      // Forzar cierre de sesión para limpiar el estado
-      if (auth) {
-        signOut(auth).then(() => router.push("/login"))
-      }
+      // Pequeña espera para asegurar que Firestore haya propagado el perfil recién creado
+      const timer = setTimeout(() => {
+        if (!profile && auth) {
+          console.warn("AuthGuard: Profile not found after wait, signing out.")
+          signOut(auth).then(() => router.push("/login"))
+        }
+      }, 2000)
+      return () => clearTimeout(timer)
+    } else if (user && profile) {
+      setIsChecking(false)
     } else {
       setIsChecking(false)
     }
   }, [user, isUserLoading, pathname, router, profile, isProfileLoading, auth])
 
-  // 3. Inactivity Timer logic
   const handleActivity = useCallback(() => {
     lastActivity.current = Date.now()
   }, [])
 
   useEffect(() => {
-    if (!user || !auth) return
+    if (!user || !auth || typeof window === 'undefined') return
 
     const events = ["mousedown", "mousemove", "keypress", "scroll", "touchstart"]
     events.forEach(name => window.addEventListener(name, handleActivity))
@@ -64,17 +64,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     const interval = setInterval(() => {
       const now = Date.now()
       if (now - lastActivity.current > INACTIVITY_TIMEOUT) {
-        toast({
-          title: "Sesión Expirada",
-          description: "Se ha cerrado la sesión por 30 minutos de inactividad.",
-          variant: "destructive"
-        })
+        toast({ title: "Sesión Expirada", description: "Cierre por inactividad.", variant: "destructive" })
         signOut(auth).then(() => {
           router.push("/login")
-          window.location.reload() // Asegurar limpieza total de estado
+          window.location.reload()
         })
       }
-    }, 10000) // Revisar cada 10 segundos
+    }, 15000)
 
     return () => {
       events.forEach(name => window.removeEventListener(name, handleActivity))
@@ -82,7 +78,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
   }, [user, auth, router, handleActivity])
 
-  // 4. Loading state screen
   if (isUserLoading || (isChecking && pathname !== "/login")) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
@@ -90,17 +85,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
           <Loader2 className="h-8 w-8 animate-spin text-primary opacity-40" />
         </div>
         <div className="text-center">
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Autenticando Acceso</p>
-          <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">RYS Gestión Operativa</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Sincronizando Acceso</p>
         </div>
       </div>
     )
   }
 
-  // 5. Unauthorized access prevention (even if checking is false)
-  if (!user && pathname !== "/login") {
-    return null // Evitar flash de contenido protegido
-  }
+  if (!user && pathname !== "/login") return null
 
   return <>{children}</>
 }
