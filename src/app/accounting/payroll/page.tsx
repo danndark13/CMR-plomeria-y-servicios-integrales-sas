@@ -57,11 +57,20 @@ export default function PayrollHubPage() {
 
   const selectedTech = MOCK_TECHNICIANS.find(t => t.id === selectedTechId)
 
-  // Calculations
+  // ACTUALIZACIÓN LÓGICA: Intervenciones pendientes son aquellas marcadas para nómina O de expedientes validados
   const pendingInterventions = useMemo(() => {
     return (allRequests || []).flatMap(req => 
       (req.interventions || [])
-        .filter(i => i.technicianId === selectedTechId && i.payrollStatus !== 'processed' && req.billingStatus === 'validated')
+        .filter(i => {
+          const isCorrectTech = i.technicianId === selectedTechId
+          const notProcessed = i.payrollStatus !== 'processed'
+          // Caso 1: Expediente ya validado en facturación
+          const caseValidated = req.billingStatus === 'validated'
+          // Caso 2: Aprobación anticipada desde la bitácora
+          const earlyApproved = i.isReadyForPayroll === true
+          
+          return isCorrectTech && notProcessed && (caseValidated || earlyApproved)
+        })
         .map(i => ({ ...i, request: req }))
     )
   }, [allRequests, selectedTechId])
@@ -88,9 +97,9 @@ export default function PayrollHubPage() {
       if (i.usedRotomartillo) rentals += 80000
       if (i.usedGeofono) rentals += 120000
 
-      const afterCosts = gross - materialExpenses - rentals
-      const fee = afterCosts > 0 ? afterCosts * 0.10 : 0
-      const toSplit = afterCosts - fee
+      const subtotalCosts = gross - materialExpenses - rentals
+      const fee = subtotalCosts > 0 ? subtotalCosts * 0.10 : 0
+      const toSplit = subtotalCosts - fee
 
       totalGross += gross
       totalExpenses += materialExpenses
@@ -142,16 +151,31 @@ export default function PayrollHubPage() {
     
     batch.set(doc(db, "payroll_history", payrollId), payrollRecord)
 
+    // Actualizar estados de intervenciones y anticipos
     const requestIds = new Set([...pendingInterventions.map(i => i.request.id), ...pendingAdvances.map(a => a.request.id)])
     requestIds.forEach(reqId => {
-      const req = allRequests?.find(r => r.id === reqId)
+      const req = (allRequests || []).find(r => r.id === reqId)
       if (!req) return
+      
       const updatedInterventions = req.interventions.map(i => {
-        if (i.technicianId === selectedTechId && i.payrollStatus !== 'processed') return { ...i, payrollStatus: 'processed' as const, payrollId }
+        const isTarget = pendingInterventions.some(pi => pi.id === i.id && pi.request.id === reqId)
+        if (isTarget) {
+          return { ...i, payrollStatus: 'processed' as const, payrollId, isReadyForPayroll: false }
+        }
         return i
       })
-      const updatedAdvances = (req.advances || []).map(a => ({ ...a, isPaidInPayroll: true, payrollId }))
-      batch.update(doc(db, "service_requests", reqId), { interventions: updatedInterventions, advances: updatedAdvances, updatedAt: new Date().toISOString() })
+      
+      const updatedAdvances = (req.advances || []).map(a => {
+        const isTarget = pendingAdvances.some(pa => pa.id === a.id && pa.request.id === reqId)
+        if (isTarget) return { ...a, isPaidInPayroll: true, payrollId }
+        return a
+      })
+
+      batch.update(doc(db, "service_requests", reqId), { 
+        interventions: updatedInterventions, 
+        advances: updatedAdvances, 
+        updatedAt: new Date().toISOString() 
+      })
     })
 
     try {
@@ -170,19 +194,29 @@ export default function PayrollHubPage() {
       <div className="flex flex-col gap-8">
         <div>
           <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">Nómina y Liquidación</h1>
-          <p className="text-muted-foreground font-medium">Gestión de pagos técnicos bajo el modelo 50/50 RYS (Post-Gastos).</p>
+          <p className="text-muted-foreground font-medium">Gestión de pagos técnicos (50/50 RYS). Incluye reportes anticipados y cierres validados.</p>
         </div>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {MOCK_TECHNICIANS.map((tech) => (
-            <Card key={tech.id} className="hover:shadow-xl transition-all cursor-pointer group border-l-4 border-l-primary" onClick={() => setSelectedTechId(tech.id)}>
-              <CardHeader className="pb-4">
-                <Avatar className="h-12 w-12 mb-2"><AvatarImage src={`https://picsum.photos/seed/${tech.id}/100/100`} /><AvatarFallback>{tech.name.substring(0,2)}</AvatarFallback></Avatar>
-                <CardTitle className="text-lg font-black uppercase">{tech.name}</CardTitle>
-                <CardDescription className="text-[10px] font-bold uppercase">{tech.specialties.join(" • ")}</CardDescription>
-              </CardHeader>
-              <CardContent><Button variant="ghost" className="w-full justify-between text-xs font-bold p-0 group-hover:text-primary">Liquidar Técnico <ChevronRight className="h-4 w-4" /></Button></CardContent>
-            </Card>
-          ))}
+          {MOCK_TECHNICIANS.map((tech) => {
+            const techPending = (allRequests || []).flatMap(r => r.interventions || [])
+              .filter(i => i.technicianId === tech.id && i.payrollStatus !== 'processed' && (i.isReadyForPayroll || (allRequests?.find(r => r.interventions?.includes(i))?.billingStatus === 'validated')))
+            
+            return (
+              <Card key={tech.id} className="hover:shadow-xl transition-all cursor-pointer group border-l-4 border-l-primary" onClick={() => setSelectedTechId(tech.id)}>
+                <CardHeader className="pb-4">
+                  <Avatar className="h-12 w-12 mb-2"><AvatarImage src={`https://picsum.photos/seed/${tech.id}/100/100`} /><AvatarFallback>{tech.name.substring(0,2)}</AvatarFallback></Avatar>
+                  <CardTitle className="text-lg font-black uppercase">{tech.name}</CardTitle>
+                  <CardDescription className="text-[10px] font-bold uppercase">{tech.specialties.join(" • ")}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex justify-between items-center">
+                    <Button variant="ghost" className="text-xs font-bold p-0 group-hover:text-primary">Ver Liquidación <ChevronRight className="h-4 w-4" /></Button>
+                    {techPending.length > 0 && <Badge className="bg-orange-500">{techPending.length} pendientes</Badge>}
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       </div>
     )
@@ -225,24 +259,23 @@ export default function PayrollHubPage() {
           <Card className="shadow-md border-none overflow-hidden">
             <CardHeader className="bg-slate-900 text-white flex flex-row items-center justify-between">
               <div>
-                <CardTitle className="text-sm font-black uppercase tracking-widest">Servicios Conciliados para Pago</CardTitle>
-                <CardDescription className="text-white/40 text-[10px] uppercase font-bold">Cálculo individual por cada intervención</CardDescription>
+                <CardTitle className="text-sm font-black uppercase tracking-widest">Servicios Listos para Pago</CardTitle>
+                <CardDescription className="text-white/40 text-[10px] uppercase font-bold">Incluye aprobaciones anticipadas y cierres validados</CardDescription>
               </div>
               <Badge className="bg-green-500 text-[10px] font-black">{pendingInterventions.length} REPORTES</Badge>
             </CardHeader>
             <CardContent className="p-0">
               <Table>
                 <TableHeader><TableRow className="bg-muted/30">
-                  <TableHead className="font-black uppercase text-[10px]">Expediente</TableHead>
+                  <TableHead className="font-black uppercase text-[10px]">Expediente / Tipo</TableHead>
                   <TableHead className="text-right font-black uppercase text-[10px]">V. Cobro</TableHead>
-                  <TableHead className="text-right font-black uppercase text-[10px]">Maquinaria</TableHead>
-                  <TableHead className="text-right font-black uppercase text-[10px]">Materiales</TableHead>
+                  <TableHead className="text-right font-black uppercase text-[10px]">Materiales/Equipos</TableHead>
                   <TableHead className="text-right font-black uppercase text-[10px]">Fee (10%)</TableHead>
-                  <TableHead className="text-right font-black uppercase text-[10px]">Subtotal</TableHead>
+                  <TableHead className="text-right font-black uppercase text-[10px]">Base Reparto</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
                   {pendingInterventions.length === 0 ? (
-                    <TableRow><TableCell colSpan={6} className="h-32 text-center text-muted-foreground italic">No hay servicios validados pendientes por pagar.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={5} className="h-32 text-center text-muted-foreground italic">No hay servicios pendientes por pagar.</TableCell></TableRow>
                   ) : pendingInterventions.map((item) => {
                     const materialExpenses = (item.detailedExpenses || []).filter(e => !e.isUnused).reduce((s, e) => s + (e.amount || 0), 0)
                     let rentals = 0
@@ -254,16 +287,17 @@ export default function PayrollHubPage() {
 
                     return (
                       <TableRow key={item.id}>
-                        <TableCell><div className="flex flex-col"><span className="font-mono font-black text-primary text-xs">{item.request.claimNumber}</span><span className="text-[9px] font-bold text-slate-400 uppercase">{item.request.accountName}</span></div></TableCell>
-                        <TableCell className="text-right font-mono font-bold text-slate-700">${(item.reportedValue || 0).toLocaleString()}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex flex-col gap-1 items-end">
-                            {item.usedRotomartillo && <Badge className="bg-orange-100 text-orange-700 text-[8px] px-1">ROT ($80k)</Badge>}
-                            {item.usedGeofono && <Badge className="bg-orange-100 text-orange-700 text-[8px] px-1">GEO ($120k)</Badge>}
-                            {!item.usedRotomartillo && !item.usedGeofono && <span className="text-[9px] text-slate-300">N/A</span>}
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-mono font-black text-primary text-xs">{item.request.claimNumber}</span>
+                            <div className="flex gap-1 items-center">
+                              <span className="text-[8px] font-bold text-slate-400 uppercase">{item.type}</span>
+                              {item.isReadyForPayroll && <Badge className="h-3 text-[7px] bg-orange-100 text-orange-700">ANTICIPADO</Badge>}
+                            </div>
                           </div>
                         </TableCell>
-                        <TableCell className="text-right font-mono text-xs text-destructive">-${materialExpenses.toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono font-bold text-slate-700">${(item.reportedValue || 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono text-xs text-destructive">-${(materialExpenses + rentals).toLocaleString()}</TableCell>
                         <TableCell className="text-right font-mono text-xs text-orange-600">-${fee.toLocaleString()}</TableCell>
                         <TableCell className="text-right font-mono font-black text-primary">${splitBase.toLocaleString()}</TableCell>
                       </TableRow>
@@ -313,7 +347,7 @@ export default function PayrollHubPage() {
 
             <div className="flex items-center gap-2 p-3 bg-blue-50 text-blue-700 rounded-lg text-[9px] font-bold uppercase leading-tight border border-blue-100">
               <Info className="h-4 w-4 shrink-0" />
-              La fórmula aplicada resta costos y fee antes de dividir el 50% para el colaborador.
+              Al liquidar, los reportes anticipados se marcarán como pagados y no se cobrarán de nuevo al cerrar el expediente.
             </div>
 
             <Button className="w-full h-14 font-black text-sm uppercase tracking-widest shadow-lg bg-green-600 hover:bg-green-700" onClick={handleGeneratePayroll} disabled={isProcessing || pendingInterventions.length === 0}>

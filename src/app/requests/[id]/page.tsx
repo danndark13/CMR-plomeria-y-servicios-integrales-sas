@@ -31,7 +31,8 @@ import {
   PackageCheck,
   PackageX,
   Hammer,
-  Search
+  Search,
+  HandCoins
 } from "lucide-react"
 import { StatusBadge } from "@/components/crm/status-badge"
 import { CategoryIcon } from "@/components/crm/category-icon"
@@ -53,14 +54,7 @@ export default function RequestDetailPage() {
   const [isSaving, setIsSaving] = useState(false)
   
   const [showAddEntry, setShowAddEntry] = useState(false)
-  const [showScheduleVisit, setShowScheduleVisit] = useState(false)
   
-  const [scheduleData, setScheduleData] = useState({
-    date: '',
-    time: '',
-    technicianId: ''
-  })
-
   const [newIntervention, setNewIntervention] = useState<Partial<TechnicianIntervention>>({
     type: 'Diagnóstico',
     notes: '',
@@ -155,6 +149,29 @@ export default function RequestDetailPage() {
     setLocalRequest(prev => prev ? { ...prev, ...updatedData } : null)
   }
 
+  const handleApproveForPayroll = (interventionId: string) => {
+    if (!db || !requestRef || !isPrivilegedRole) return
+
+    const updatedInterventions = (localRequest.interventions || []).map(interv => {
+      if (interv.id === interventionId) {
+        return { ...interv, isReadyForPayroll: true }
+      }
+      return interv
+    })
+
+    const updatedData = {
+      interventions: updatedInterventions,
+      updatedAt: new Date().toISOString()
+    }
+
+    updateDoc(requestRef, updatedData)
+      .then(() => {
+        toast({ title: "Reporte Aprobado", description: "El reporte ya está disponible en el módulo de nómina." })
+        setLocalRequest(prev => prev ? { ...prev, ...updatedData } : null)
+      })
+      .catch(err => console.error(err))
+  }
+
   const handleAddExpense = () => {
     if (!tempExpense.description || !tempExpense.quantity || !tempExpense.unitValue) return
     const totalAmount = (tempExpense.quantity || 0) * (tempExpense.unitValue || 0)
@@ -194,7 +211,8 @@ export default function RequestDetailPage() {
       usedRotomartillo: !!newIntervention.usedRotomartillo,
       usedGeofono: !!newIntervention.usedGeofono,
       detailedExpenses: newIntervention.detailedExpenses || [],
-      authorName: `${profile.firstName} ${profile.lastName}`
+      authorName: `${profile.firstName} ${profile.lastName}`,
+      payrollStatus: 'pending'
     }
 
     const updatedInterventions = [...(localRequest.interventions || []), intervention]
@@ -420,14 +438,14 @@ export default function RequestDetailPage() {
                   </div>
 
                   <Button className="w-full font-black shadow-lg h-12 text-sm uppercase tracking-widest bg-primary hover:bg-primary/90" onClick={handleSaveIntervention} disabled={isSaving}>
-                    REGISTRAR REPORTE PARA LIQUIDACIÓN
+                    REGISTRAR REPORTE TÉCNICO
                   </Button>
                 </CardContent>
               </Card>
             )}
 
             <div className="space-y-4">
-              {interventions.length > 0 ? [...interventions].reverse().map((item, idx) => (
+              {interventions.length > 0 ? [...interventions].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((item) => (
                 <Card key={item.id} className="overflow-hidden border-none shadow-md">
                   <CardHeader className="bg-slate-50 py-3 flex flex-row items-center justify-between border-b">
                     <div className="flex items-center gap-3">
@@ -435,7 +453,18 @@ export default function RequestDetailPage() {
                         <span className="text-sm font-black uppercase text-primary">Intervención Técnico: {MOCK_TECHNICIANS.find(t => t.id === item.technicianId)?.name}</span>
                         <span className="text-[9px] font-bold text-slate-400 uppercase">{new Date(item.date).toLocaleString()}</span>
                       </div>
-                      <Badge className="bg-primary/10 text-primary font-black uppercase text-[9px]">{item.type}</Badge>
+                      <div className="flex gap-2">
+                        <Badge className="bg-primary/10 text-primary font-black uppercase text-[9px]">{item.type}</Badge>
+                        {item.payrollStatus === 'processed' ? (
+                          <Badge className="bg-green-100 text-green-700 font-black uppercase text-[9px] flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" /> Liquidado
+                          </Badge>
+                        ) : item.isReadyForPayroll ? (
+                          <Badge className="bg-orange-100 text-orange-700 font-black uppercase text-[9px] flex items-center gap-1">
+                            <HandCoins className="h-3 w-3" /> Pendiente Pago
+                          </Badge>
+                        ) : null}
+                      </div>
                     </div>
                     <div className="text-right flex flex-col items-end gap-1">
                        <span className="text-[10px] font-black text-blue-600 uppercase">A Cobrar: ${item.reportedValue?.toLocaleString()}</span>
@@ -449,6 +478,7 @@ export default function RequestDetailPage() {
                   </CardHeader>
                   <CardContent className="pt-4 space-y-4">
                     <p className="text-sm text-slate-700 leading-relaxed italic border-l-4 border-slate-200 pl-4">"{item.notes}"</p>
+                    
                     {item.detailedExpenses && item.detailedExpenses.length > 0 && (
                       <div className="grid gap-2">
                         <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Insumos y Gastos</p>
@@ -468,6 +498,19 @@ export default function RequestDetailPage() {
                         ))}
                       </div>
                     )}
+
+                    {isPrivilegedRole && item.payrollStatus !== 'processed' && !item.isReadyForPayroll && (
+                      <div className="pt-4 border-t border-dashed flex justify-end">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-8 gap-2 font-black text-[10px] uppercase text-orange-600 border-orange-200 hover:bg-orange-50"
+                          onClick={() => handleApproveForPayroll(item.id)}
+                        >
+                          <HandCoins className="h-3.5 w-3.5" /> Aprobar para Nómina Individual
+                        </Button>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )) : (
@@ -485,22 +528,22 @@ export default function RequestDetailPage() {
             <CardContent className="space-y-4">
               <div className="p-4 bg-white rounded-xl border space-y-3">
                 <div className="flex justify-between text-xs font-bold text-slate-500 uppercase">
-                  <span>Bruto Reportado:</span>
+                  <span>Bruto Reportado (Total):</span>
                   <span className="font-mono text-slate-800">${interventions.reduce((s, i) => s + (i.reportedValue || 0), 0).toLocaleString()}</span>
                 </div>
-                <div className="flex justify-between text-xs font-bold text-slate-500 uppercase">
-                  <span>Fee RYS (10%):</span>
-                  <span className="font-mono text-destructive">-${(interventions.reduce((s, i) => s + (i.reportedValue || 0), 0) * 0.1).toLocaleString()}</span>
+                <div className="flex justify-between text-[10px] font-bold text-orange-600 uppercase border-t pt-2">
+                  <span>Liquidado Anticipadamente:</span>
+                  <span className="font-mono">${interventions.filter(i => i.payrollStatus === 'processed' || i.isReadyForPayroll).reduce((s, i) => s + (i.reportedValue || 0), 0).toLocaleString()}</span>
                 </div>
-                <div className="border-t pt-2 flex justify-between text-sm font-black text-primary uppercase">
-                  <span>Liquidación Base:</span>
-                  <span className="font-mono">${(interventions.reduce((s, i) => s + (i.reportedValue || 0), 0) * 0.9).toLocaleString()}</span>
+                <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase">
+                  <span>Pendiente por Cobro:</span>
+                  <span className="font-mono">${interventions.filter(i => i.payrollStatus !== 'processed' && !i.isReadyForPayroll).reduce((s, i) => s + (i.reportedValue || 0), 0).toLocaleString()}</span>
                 </div>
               </div>
               
               <div className="flex items-center gap-2 p-3 bg-blue-50 text-blue-700 rounded-lg text-[9px] font-bold uppercase leading-tight border border-blue-100">
                 <Calculator className="h-4 w-4 shrink-0" />
-                Esta cifra es informativa. La liquidación final 50/50 se realiza en el módulo de nómina.
+                Los reportes marcados para nómina aparecerán directamente en el módulo de liquidación del técnico.
               </div>
             </CardContent>
           </Card>

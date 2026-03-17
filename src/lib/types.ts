@@ -72,6 +72,7 @@ export interface TechnicianIntervention {
   authorName?: string;
   payrollStatus?: 'pending' | 'processed';
   payrollId?: string;
+  isReadyForPayroll?: boolean; // Nueva propiedad para liquidación anticipada
 }
 
 export interface AssistanceCompany {
