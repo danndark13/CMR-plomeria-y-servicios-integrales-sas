@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo } from "react"
@@ -33,6 +32,7 @@ import { toast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase"
 import { collection, doc, writeBatch } from "firebase/firestore"
 import { TechnicianIntervention, ServiceRequest, PayrollRecord, Advance } from "@/lib/types"
+import { cn } from "@/lib/utils"
 
 export default function PayrollHubPage() {
   const db = useFirestore()
