@@ -110,6 +110,7 @@ export default function PayrollHubPage() {
       let rentals = 0
       if (i.usedRotomartillo) rentals += 80000
       if (i.usedGeofono) rentals += 120000
+      if (i.usedPlanchaTermofusion) rentals += 70000
       const totalDirectCosts = materialExpenses + rentals
 
       totalGross += gross
@@ -195,6 +196,7 @@ export default function PayrollHubPage() {
           let rentals = 0
           if (i.usedRotomartillo) rentals += 80000
           if (i.usedGeofono) rentals += 120000
+          if (i.usedPlanchaTermofusion) rentals += 70000
           
           let techNet = 0
           const subtotal = i.reportedValue - (matCost + rentals)
@@ -528,6 +530,7 @@ export default function PayrollHubPage() {
                     let rentals = 0
                     if (item.usedRotomartillo) rentals += 80000
                     if (item.usedGeofono) rentals += 120000
+                    if (item.usedPlanchaTermofusion) rentals += 70000
                     const totalCosts = materialExpenses + rentals
                     let techNet = 0
                     if (item.isSimpleVisit) {

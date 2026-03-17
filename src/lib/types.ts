@@ -72,6 +72,7 @@ export interface TechnicianIntervention {
   laborCost: number;     // Mantenemos por compatibilidad
   usedRotomartillo: boolean; // Alquiler $80.000
   usedGeofono: boolean;      // Alquiler $120.000
+  usedPlanchaTermofusion: boolean; // Alquiler $70.000
   detailedExpenses: Expense[];
   authorName?: string;
   payrollStatus?: 'pending' | 'processed';
@@ -103,7 +104,7 @@ export interface PayrollRecord {
   date: string;
   totalGross: number;      // Total cobrado a aseguradoras
   feeAmount: number;       // El 10% descontado
-  totalRentals: number;    // Rotomartillo + Geofono
+  totalRentals: number;    // Rotomartillo + Geofono + Plancha
   totalExpenses: number;   // Facturas de materiales UTILIZADOS
   totalAdvances: number;   // Adelantos
   amountToSplit: number;   // Valor que queda para dividir en 2

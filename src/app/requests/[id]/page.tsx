@@ -85,6 +85,7 @@ export default function RequestDetailPage() {
     reportedValue: 0,
     usedRotomartillo: false,
     usedGeofono: false,
+    usedPlanchaTermofusion: false,
     isSimpleVisit: false,
     detailedExpenses: [],
     authorizedByAdvisor: ''
@@ -260,6 +261,7 @@ export default function RequestDetailPage() {
       laborCost: 0,
       usedRotomartillo: !!newIntervention.usedRotomartillo,
       usedGeofono: !!newIntervention.usedGeofono,
+      usedPlanchaTermofusion: !!newIntervention.usedPlanchaTermofusion,
       isSimpleVisit: !!newIntervention.isSimpleVisit,
       detailedExpenses: newIntervention.detailedExpenses || [],
       authorName: `${profile.firstName} ${profile.lastName}`,
@@ -272,7 +274,7 @@ export default function RequestDetailPage() {
       .then(() => {
         toast({ title: "Reporte Añadido" })
         setShowAddEntry(false)
-        setNewIntervention({ type: 'Diagnóstico', notes: '', reportedValue: 0, usedRotomartillo: false, usedGeofono: false, isSimpleVisit: false, detailedExpenses: [], authorizedByAdvisor: '' })
+        setNewIntervention({ type: 'Diagnóstico', notes: '', reportedValue: 0, usedRotomartillo: false, usedGeofono: false, usedPlanchaTermofusion: false, isSimpleVisit: false, detailedExpenses: [], authorizedByAdvisor: '' })
       })
       .finally(() => setIsSaving(false))
   }
@@ -489,7 +491,7 @@ export default function RequestDetailPage() {
                       <Hammer className="h-4 w-4 text-primary" />
                       <span className="text-[10px] font-black uppercase tracking-widest">Alquiler de Equipos Especiales</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="flex items-center justify-between p-2 bg-white rounded-lg border">
                         <Label className="text-xs font-bold uppercase">Rotomartillo</Label>
                         <Switch checked={newIntervention.usedRotomartillo} onCheckedChange={(v) => setNewIntervention({...newIntervention, usedRotomartillo: v})} />
@@ -497,6 +499,10 @@ export default function RequestDetailPage() {
                       <div className="flex items-center justify-between p-2 bg-white rounded-lg border">
                         <Label className="text-xs font-bold uppercase">Geófono</Label>
                         <Switch checked={newIntervention.usedGeofono} onCheckedChange={(v) => setNewIntervention({...newIntervention, usedGeofono: v})} />
+                      </div>
+                      <div className="flex items-center justify-between p-2 bg-white rounded-lg border">
+                        <Label className="text-xs font-bold uppercase">Termo Fusión</Label>
+                        <Switch checked={newIntervention.usedPlanchaTermofusion} onCheckedChange={(v) => setNewIntervention({...newIntervention, usedPlanchaTermofusion: v})} />
                       </div>
                     </div>
                   </div>
@@ -630,13 +636,14 @@ export default function RequestDetailPage() {
                   <CardContent className="pt-4 space-y-4">
                     <p className="text-sm font-medium italic border-l-4 border-primary/20 pl-4">"{item.notes}"</p>
                     
-                    {(item.usedRotomartillo || item.usedGeofono || (item.detailedExpenses || []).length > 0) && (
+                    {(item.usedRotomartillo || item.usedGeofono || item.usedPlanchaTermofusion || (item.detailedExpenses || []).length > 0) && (
                       <div className="bg-slate-50 p-3 rounded-lg border border-dashed grid gap-3 md:grid-cols-2">
                         <div className="space-y-2">
                           <p className="text-[9px] font-black uppercase text-muted-foreground flex items-center gap-1"><Wrench className="h-3 w-3" /> Equipos y Gastos</p>
                           <div className="flex flex-wrap gap-2">
                             {item.usedRotomartillo && <Badge variant="outline" className="bg-white text-[8px] font-bold">ROTOMARTILLO</Badge>}
                             {item.usedGeofono && <Badge variant="outline" className="bg-white text-[8px] font-bold">GEÓFONO</Badge>}
+                            {item.usedPlanchaTermofusion && <Badge variant="outline" className="bg-white text-[8px] font-bold uppercase">PLANCHA TERMO FUSIÓN</Badge>}
                             {(item.detailedExpenses || []).map((ex, i) => (
                               <Badge key={i} variant="outline" className={cn("bg-white text-[8px] font-bold", ex.isUnused && "border-orange-200 text-orange-600")}>
                                 {ex.description} (${ex.amount.toLocaleString()})
