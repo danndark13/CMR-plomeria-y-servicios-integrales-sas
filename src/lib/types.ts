@@ -38,6 +38,7 @@ export interface Expense {
   quantity?: number;
   unitValue?: number;
   isUnused: boolean; // Si es true, queda en inventario y no suma al costo del servicio en nómina
+  isReturned?: boolean; // Si es true, el material fue devuelto a la bodega central
 }
 
 export interface Advance {

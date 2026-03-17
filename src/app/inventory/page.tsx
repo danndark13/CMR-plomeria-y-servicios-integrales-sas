@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from "react"
@@ -21,10 +22,12 @@ import {
   X,
   History,
   AlertCircle,
-  PackageCheck
+  PackageCheck,
+  ArrowRightLeft,
+  RotateCcw
 } from "lucide-react"
 import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase"
-import { collection, addDoc, serverTimestamp } from "firebase/firestore"
+import { collection, addDoc, serverTimestamp, doc, updateDoc, writeBatch } from "firebase/firestore"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { toast } from "@/hooks/use-toast"
 import { ServiceRequest, Expense } from "@/lib/types"
@@ -79,8 +82,8 @@ export default function InventoryPage() {
       (req.interventions || []).forEach(interv => {
         if (interv.technicianId === techId) {
           (interv.detailedExpenses || []).forEach(exp => {
-            // Un material está en stock si isUnused es explícitamente true
-            if (exp.isUnused === true) {
+            // Un material está en stock si isUnused es true y NO ha sido devuelto
+            if (exp.isUnused === true && !exp.isReturned) {
               unusedExpenses.push(exp)
             }
           })
@@ -92,13 +95,72 @@ export default function InventoryPage() {
     const grouped = unusedExpenses.reduce((acc, exp) => {
       const key = exp.description.toUpperCase().trim()
       if (!acc[key]) {
-        acc[key] = { description: key, quantity: 0, unit: exp.unit || 'UND' }
+        acc[key] = { description: key, quantity: 0, unit: exp.unit || 'UND', unitValue: exp.unitValue || 0 }
       }
       acc[key].quantity += (exp.quantity || 1)
       return acc
-    }, {} as Record<string, { description: string, quantity: number, unit: string }>)
+    }, {} as Record<string, { description: string, quantity: number, unit: string, unitValue: number }>)
 
     return Object.values(grouped)
+  }
+
+  const handleReturnToWarehouse = async (techId: string, itemDescription: string, quantityToReturn: number, unitValue: number) => {
+    if (!db) return
+    setIsProcessing(true)
+
+    try {
+      const batch = writeBatch(db)
+      let remainingToProcess = quantityToReturn
+
+      // 1. Mark items as returned in service requests
+      for (const req of allRequests) {
+        if (remainingToProcess <= 0) break
+
+        const updatedInterventions = (req.interventions || []).map(interv => {
+          if (interv.technicianId !== techId) return interv
+
+          const updatedExpenses = (interv.detailedExpenses || []).map(exp => {
+            if (remainingToProcess > 0 && exp.description.toUpperCase().trim() === itemDescription.toUpperCase().trim() && exp.isUnused && !exp.isReturned) {
+              const returningFromThis = Math.min(remainingToProcess, exp.quantity || 1)
+              remainingToProcess -= returningFromThis
+              return { ...exp, isReturned: true }
+            }
+            return exp
+          })
+          return { ...interv, detailedExpenses: updatedExpenses }
+        })
+
+        if (JSON.stringify(req.interventions) !== JSON.stringify(updatedInterventions)) {
+          batch.update(doc(db, "service_requests", req.id), { interventions: updatedInterventions, updatedAt: new Date().toISOString() })
+        }
+      }
+
+      // 2. Add to Warehouse Inventory
+      const existingItem = (inventoryItems || []).find(i => i.description.toUpperCase().trim() === itemDescription.toUpperCase().trim())
+      if (existingItem) {
+        batch.update(doc(db, "inventory", existingItem.id), {
+          quantity: existingItem.quantity + quantityToReturn,
+          updatedAt: serverTimestamp()
+        })
+      } else {
+        const newItemRef = doc(collection(db, "inventory"))
+        batch.set(newItemRef, {
+          description: itemDescription.toUpperCase().trim(),
+          quantity: quantityToReturn,
+          unitValue: unitValue,
+          updatedAt: serverTimestamp(),
+          lastModifiedBy: user?.uid || "SISTEMA"
+        })
+      }
+
+      await batch.commit()
+      toast({ title: "Retorno Procesado", description: `${quantityToReturn} unidades de ${itemDescription} devueltas a bodega.` })
+    } catch (error) {
+      console.error("Error returning items:", error)
+      toast({ variant: "destructive", title: "Error", description: "No se pudo procesar la devolución." })
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   const filteredItems = (inventoryItems || []).filter(item => 
@@ -137,8 +199,8 @@ export default function InventoryPage() {
           <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">Gestión de Inventario</h1>
           <p className="text-muted-foreground font-medium">Control de existencias en bodega y stock asignado a técnicos (Sobrantes de obra).</p>
         </div>
-        <Button className="gap-2 shadow-lg h-12 font-bold" onClick={() => setIsAddingItem(true)}>
-          <Plus className="h-5 w-5" /> Cargar Nuevo Insumo
+        <Button className="gap-2 shadow-lg h-12 font-black bg-primary hover:bg-primary/90" onClick={() => setIsAddingItem(true)}>
+          <Plus className="h-5 w-5" /> CARGAR NUEVO INSUMO
         </Button>
       </div>
 
@@ -215,35 +277,44 @@ export default function InventoryPage() {
               const techName = tech.name || `${tech.firstName} ${tech.lastName}`
               
               return (
-                <Card key={techId} className="border-l-4 border-l-orange-500 shadow-sm hover:shadow-md transition-all group">
-                  <CardHeader className="pb-2">
+                <Card key={techId} className="border-l-4 border-l-orange-500 shadow-sm hover:shadow-md transition-all group overflow-hidden">
+                  <CardHeader className="pb-2 bg-orange-50/30 border-b">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="h-10 w-10 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600"><Users className="h-6 w-6" /></div>
                         <div>
                           <CardTitle className="text-sm font-black uppercase">{techName}</CardTitle>
-                          <CardDescription className="text-[10px] font-bold uppercase">ID: {tech.username || tech.id}</CardDescription>
+                          <CardDescription className="text-[10px] font-bold uppercase">Custodia de Materiales</CardDescription>
                         </div>
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3 mt-2">
-                      <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2 border-b pb-1">
-                        <PackageCheck className="h-3 w-3 text-orange-600" /> Materiales en Posesión (No descontados de nómina)
-                      </p>
-                      <div className="grid gap-2">
-                        {fieldStock.length === 0 ? (
-                          <div className="p-4 bg-slate-50 rounded-lg border border-dashed text-center">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase italic">Sin materiales en stock de campo</span>
-                          </div>
-                        ) : fieldStock.map((item, idx) => (
-                          <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-lg border shadow-sm">
+                  <CardContent className="p-0">
+                    <div className="space-y-0">
+                      {fieldStock.length === 0 ? (
+                        <div className="p-10 text-center">
+                          <span className="text-[10px] font-black text-slate-300 uppercase italic tracking-widest">Sin materiales en stock de campo</span>
+                        </div>
+                      ) : fieldStock.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-4 bg-white border-b last:border-0 hover:bg-slate-50 transition-colors">
+                          <div className="flex flex-col">
                             <span className="text-xs font-black uppercase text-slate-700">{item.description}</span>
-                            <Badge className="bg-orange-500 text-white font-black">{item.quantity} {item.unit}</Badge>
+                            <span className="text-[9px] font-bold text-slate-400 uppercase">{item.quantity} {item.unit} x ${item.unitValue.toLocaleString()}</span>
                           </div>
-                        ))}
-                      </div>
+                          <div className="flex items-center gap-3">
+                            <Badge className="bg-orange-500 text-white font-black text-[10px]">{item.quantity} {item.unit}</Badge>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="h-8 gap-2 font-black text-[9px] uppercase border-primary text-primary hover:bg-primary hover:text-white"
+                              onClick={() => handleReturnToWarehouse(techId, item.description, item.quantity, item.unitValue)}
+                              disabled={isProcessing}
+                            >
+                              {isProcessing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} DEVOLVER A BODEGA
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </CardContent>
                 </Card>
@@ -281,7 +352,7 @@ export default function InventoryPage() {
             </div>
             <DialogFooter className="gap-2">
               <Button type="button" variant="outline" onClick={() => setIsAddingItem(false)} disabled={isProcessing} className="font-bold">CANCELAR</Button>
-              <Button type="submit" disabled={isProcessing} className="font-black gap-2">
+              <Button type="submit" disabled={isProcessing} className="font-black gap-2 shadow-lg h-12 bg-green-600 hover:bg-green-700">
                 {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} REGISTRAR ENTRADA
               </Button>
             </DialogFooter>
