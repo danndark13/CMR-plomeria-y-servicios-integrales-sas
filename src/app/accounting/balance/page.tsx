@@ -44,6 +44,7 @@ import { Badge } from "@/components/ui/badge"
 import { MOCK_TECHNICIANS } from "@/lib/mock-data"
 import { ServiceRequest, PayrollRecord } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import Link from "next/link"
 
 type TimePeriod = 'today' | 'yesterday' | 'last_week' | 'month' | 'year' | 'semester_1' | 'semester_2' | 'all';
 
@@ -68,6 +69,7 @@ export default function BalanceGeneralPage() {
 
   // 2. Helper for date filtering
   const isInPeriod = (dateStr: string, period: TimePeriod) => {
+    if (!dateStr) return false
     const date = new Date(dateStr)
     const now = new Date()
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
