@@ -58,6 +58,7 @@ export const MOCK_COMPANIES: AssistanceCompany[] = [
 ];
 
 export const MOCK_TECHNICIANS: Technician[] = [
+  { id: 'TEC01', name: 'OPERARIO TEC01', specialties: ['Plomería', 'Electricidad'], activeTasks: 0 },
   { id: 'WILMAR', name: 'WILMAR BUITRAGO', specialties: ['Plomería', 'Destaponamiento'], activeTasks: 4 },
   { id: 'JAIVER', name: 'JAIVER OCAMPO', specialties: ['Plomería', 'Instalación'], activeTasks: 1 },
   { id: 'NORVEY', name: 'NORVEY MARIN', specialties: ['Electricidad', 'Plomería'], activeTasks: 0 },
