@@ -32,10 +32,11 @@ export function getSdks(firebaseApp: FirebaseApp) {
 
   if (!firestoreInstance) {
     try {
-      // Use initializeFirestore with auto-detect long polling for maximum stability
-      // in cloud environments, avoiding the 'Assertion Failed' low-level error.
+      // Use initializeFirestore with forced long polling for maximum stability
+      // in cloud environments, avoiding the 'Assertion Failed' low-level error
+      // that occurs when WebSockets fail.
       firestoreInstance = initializeFirestore(firebaseApp, {
-        experimentalAutoDetectLongPolling: true,
+        experimentalForceLongPolling: true,
       });
     } catch (e) {
       // If already initialized, fallback to standard getter
