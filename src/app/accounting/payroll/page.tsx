@@ -71,7 +71,35 @@ export default function PayrollHubPage() {
   }, [db, user])
   const { data: payrollHistory, isLoading: isHistoryLoading } = useCollection(payrollQuery)
 
-  const selectedTech = MOCK_TECHNICIANS.find(t => t.id === selectedTechId)
+  // Fetch users to include newly created technicians like Brayan
+  const usersQuery = useMemoFirebase(() => {
+    if (!db || !user) return null
+    return collection(db, "user_profiles")
+  }, [db, user])
+  const { data: allUsers } = useCollection(usersQuery)
+
+  const allTechnicians = useMemo(() => {
+    const uniqueMap = new Map()
+    // Add real users with role 'Técnico'
+    if (allUsers) {
+      allUsers.filter(u => u.roleId === 'Técnico').forEach(u => {
+        const uname = (u.username || u.id).toUpperCase().trim()
+        if (!uniqueMap.has(uname)) {
+          uniqueMap.set(uname, { id: uname, name: `${u.firstName} ${u.lastName || ''}`.trim(), specialties: ['Técnico'] })
+        }
+      })
+    }
+    // Add mock ones if not present
+    MOCK_TECHNICIANS.forEach(mt => {
+      const uname = mt.id.toUpperCase().trim()
+      if (!uniqueMap.has(uname)) {
+        uniqueMap.set(uname, mt)
+      }
+    })
+    return Array.from(uniqueMap.values()).sort((a, b) => a.name.localeCompare(b.name))
+  }, [allUsers])
+
+  const selectedTech = allTechnicians.find(t => t.id === selectedTechId)
 
   const pendingInterventions = useMemo(() => {
     return (allRequests || []).flatMap(req => 
@@ -148,7 +176,7 @@ export default function PayrollHubPage() {
     records.forEach((record, index) => {
       if (index > 0) doc.addPage()
       
-      const techName = MOCK_TECHNICIANS.find(t => t.id === record.technicianId)?.name || record.technicianId
+      const techName = allTechnicians.find(t => t.id === record.technicianId)?.name || record.technicianId
       const dateStr = new Date(record.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
 
       // HEADER
@@ -184,7 +212,6 @@ export default function PayrollHubPage() {
       // ITEMS TABLE
       const tableRows: any[] = []
       
-      // Add Interventions
       const relatedRequests = (allRequests || []).filter(r => 
         r.interventions?.some(i => i.payrollId === record.id)
       )
@@ -200,7 +227,6 @@ export default function PayrollHubPage() {
           
           let techNet = 0
           const subtotal = i.reportedValue - (matCost + rentals)
-          // Hide fee calculation from view, show only net result for the tech
           const internalFee = subtotal > 0 ? subtotal * 0.10 : 0
           if (i.isSimpleVisit) {
             techNet = (20000 / 2) + ((Math.max(0, i.reportedValue - 20000) - (matCost + rentals) - internalFee) / 2)
@@ -267,7 +293,7 @@ export default function PayrollHubPage() {
     })
 
     doc.save(`Nomina_RYS_${new Date().toISOString().split('T')[0]}.pdf`)
-    toast({ title: "PDF Generado", description: "El reporte se ha descargado correctamente." })
+    toast({ title: "PDF Generado" })
   }
 
   const handleGeneratePayroll = async () => {
@@ -357,7 +383,7 @@ export default function PayrollHubPage() {
 
       batch.delete(doc(db, "payroll_history", record.id))
       await batch.commit()
-      toast({ title: "Registro Eliminado", description: "Los servicios han vuelto a estado pendiente de pago." })
+      toast({ title: "Registro Eliminado" })
     } catch (e) {
       toast({ variant: "destructive", title: "Error al eliminar" })
     } finally {
@@ -381,11 +407,13 @@ export default function PayrollHubPage() {
 
           <TabsContent value="liquidar">
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-              {MOCK_TECHNICIANS.map((tech) => {
+              {allTechnicians.map((tech) => {
                 const techPending = (allRequests || []).flatMap(r => r.interventions || [])
                   .filter(i => i.technicianId === tech.id && i.payrollStatus !== 'processed' && (i.isReadyForPayroll || (allRequests?.find(r => r.interventions?.includes(i))?.billingStatus === 'validated')))
                 const advPending = (allRequests || []).flatMap(r => r.advances || []).filter(a => a.technicianId === tech.id && !a.isPaidInPayroll)
                 
+                if (techPending.length === 0 && advPending.length === 0) return null;
+
                 return (
                   <Card key={tech.id} className="hover:shadow-xl transition-all cursor-pointer group border-l-4 border-l-primary" onClick={() => setSelectedTechId(tech.id)}>
                     <CardHeader className="pb-4">
@@ -405,6 +433,15 @@ export default function PayrollHubPage() {
                   </Card>
                 )
               })}
+              {allTechnicians.filter(t => {
+                const tp = (allRequests || []).flatMap(r => r.interventions || []).filter(i => i.technicianId === t.id && i.payrollStatus !== 'processed' && (i.isReadyForPayroll || (allRequests?.find(r => r.interventions?.includes(i))?.billingStatus === 'validated')))
+                const ap = (allRequests || []).flatMap(r => r.advances || []).filter(a => a.technicianId === t.id && !a.isPaidInPayroll)
+                return tp.length > 0 || ap.length > 0
+              }).length === 0 && (
+                <div className="col-span-full py-20 text-center text-muted-foreground italic border-2 border-dashed rounded-xl bg-slate-50">
+                  No hay técnicos con servicios pendientes de liquidar.
+                </div>
+              )}
             </div>
           </TabsContent>
 
@@ -454,7 +491,7 @@ export default function PayrollHubPage() {
                           />
                         </TableCell>
                         <TableCell><Badge variant="outline" className="font-mono font-black text-primary border-primary/20">{liq.id}</Badge></TableCell>
-                        <TableCell><span className="font-bold uppercase text-xs">{(MOCK_TECHNICIANS.find(t => t.id === liq.technicianId)?.name || liq.technicianId).toUpperCase()}</span></TableCell>
+                        <TableCell><span className="font-bold uppercase text-xs">{(allTechnicians.find(t => t.id === liq.technicianId)?.name || liq.technicianId).toUpperCase()}</span></TableCell>
                         <TableCell><span className="text-[10px] font-bold text-slate-500 uppercase">{new Date(liq.date).toLocaleDateString()}</span></TableCell>
                         <TableCell className="text-right font-mono font-black text-green-600">${liq.netPaid.toLocaleString()}</TableCell>
                         <TableCell className="text-right">

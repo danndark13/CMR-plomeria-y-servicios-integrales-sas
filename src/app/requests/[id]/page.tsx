@@ -41,7 +41,8 @@ import {
   UserCheck,
   User as UserIcon,
   ShieldCheck,
-  Wrench
+  Wrench,
+  CircleCheck
 } from "lucide-react"
 import { 
   AlertDialog, 
@@ -180,6 +181,20 @@ export default function RequestDetailPage() {
         router.push('/requests')
       })
       .finally(() => setIsSaving(false))
+  }
+
+  const handleTogglePayrollReady = (interventionId: string) => {
+    if (!db || !requestRef || !isAdmin || !localStateRequest) return
+    
+    const updatedInterventions = localStateRequest.interventions.map(i => {
+      if (i.id === interventionId) {
+        return { ...i, isReadyForPayroll: !i.isReadyForPayroll }
+      }
+      return i
+    })
+
+    updateDoc(requestRef, { interventions: updatedInterventions, updatedAt: new Date().toISOString() })
+      .then(() => toast({ title: "Estado Nómina Actualizado" }))
   }
 
   const handleAddExpense = () => {
@@ -615,21 +630,30 @@ export default function RequestDetailPage() {
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] font-black uppercase text-slate-400">{new Date(item.date).toLocaleString()}</span>
                         {item.isSimpleVisit && <Badge className="bg-orange-500 text-[8px] font-black">Visita $20k</Badge>}
+                        {item.payrollStatus === 'processed' && <Badge className="bg-green-600 text-white text-[8px]">PAGADO</Badge>}
                       </div>
                       <div className="flex items-center gap-2 mt-1">
                         <Badge className="bg-primary/10 text-primary text-[9px] font-black">{item.type}</Badge>
                         <span className="text-[10px] font-bold text-slate-500 uppercase">Téc: {item.technicianId}</span>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right flex flex-col items-end gap-2">
                       <div className="flex items-center gap-2 text-[9px] font-black uppercase text-primary/60">
                         <UserIcon className="h-3 w-3" /> Registrado por: {item.authorName || 'SISTEMA'}
                       </div>
-                      {canModifyHistory && (
-                        <div className="flex items-center gap-2 mt-1 justify-end">
-                          <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
-                          <span className="text-[8px] font-black uppercase text-green-600">Acceso Edición Activo</span>
-                        </div>
+                      {isAdmin && item.payrollStatus !== 'processed' && (
+                        <Button 
+                          size="sm" 
+                          variant={item.isReadyForPayroll ? "default" : "outline"}
+                          className={cn(
+                            "h-7 text-[9px] font-black uppercase gap-1 px-3",
+                            item.isReadyForPayroll ? "bg-green-600 hover:bg-green-700" : "border-primary text-primary"
+                          )}
+                          onClick={() => handleTogglePayrollReady(item.id)}
+                        >
+                          {item.isReadyForPayroll ? <CircleCheck className="h-3 w-3" /> : <Calculator className="h-3 w-3" />}
+                          {item.isReadyForPayroll ? "HABILITADO PARA NÓMINA" : "HABILITAR PARA NÓMINA"}
+                        </Button>
                       )}
                     </div>
                   </CardHeader>
@@ -686,8 +710,8 @@ export default function RequestDetailPage() {
                   <span>Materiales marcados como "Stock" no suman costo al servicio pero restan inventario.</span>
                 </div>
                 <div className="flex items-center gap-2 text-primary font-bold">
-                  <ShieldCheck className="h-4 w-4" />
-                  <span>Gerencia y Desarrollador supervisan la calidad del reporte técnico.</span>
+                  <Calculator className="h-4 w-4" />
+                  <span>Usa "Habilitar para Nómina" para pagar reportes antes de conciliar la factura global.</span>
                 </div>
               </div>
 
