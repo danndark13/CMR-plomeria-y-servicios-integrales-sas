@@ -97,7 +97,7 @@ export function ChatWidget() {
       const uname = (u.username || "").toUpperCase().trim()
       if (!uname) return
       
-      // Filter logic for technicians
+      // Filter logic for technicians: Only CS and Admin, but NOT Daniel Cespedes
       if (myProfile.roleId === 'Técnico') {
         const isRestricted = (u.firstName + ' ' + u.lastName).toUpperCase().includes('DANIEL CESPEDES')
         const isAllowedRole = u.roleId === 'Administrador' || u.roleId === 'Servicio al Cliente'

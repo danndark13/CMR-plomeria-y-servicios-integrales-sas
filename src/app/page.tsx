@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
@@ -93,6 +94,8 @@ export default function DashboardPage() {
     setMounted(true)
   }, [])
 
+  const isTech = profile?.roleId === 'Técnico'
+
   const allRequests = useMemo(() => {
     const combined = [...(firestoreRequests || [])]
     const seenIds = new Set(combined.map(r => r.id))
@@ -106,8 +109,17 @@ export default function DashboardPage() {
         seenClaims.add(mockClaim)
       }
     }
+
+    // STRICT FILTER FOR TECHNICIANS
+    if (isTech && profile) {
+      return combined.filter(req => 
+        req.interventions?.some(i => i.technicianId === profile.username) ||
+        req.scheduledVisit?.technicianId === profile.username
+      );
+    }
+
     return combined
-  }, [firestoreRequests])
+  }, [firestoreRequests, isTech, profile])
 
   const allCompanies = useMemo(() => {
     return (firestoreCompanies && firestoreCompanies.length > 0) ? firestoreCompanies : MOCK_COMPANIES
@@ -128,7 +140,6 @@ export default function DashboardPage() {
     return Array.from(new Set([...mockAccounts, ...dbAccounts])).sort()
   }, [selectedCompanyId, currentCompany, firestoreAccounts])
 
-  // 2. Conditional return for loading states comes AFTER hooks
   if (!mounted || isUserLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
@@ -196,16 +207,104 @@ export default function DashboardPage() {
       .finally(() => setIsProcessing(false))
   }
 
-  const activeRequests = allRequests.filter(r => r.status !== 'completed' && r.status !== 'cancelled')
   const todayStr = new Date().toLocaleDateString()
   const todayVisits = allRequests.flatMap(req => 
     (req.interventions || [])
-      .filter(i => new Date(i.date).toLocaleDateString() === todayStr)
+      .filter(i => new Date(i.date).toLocaleDateString() === todayStr && (isTech ? i.technicianId === profile?.username : true))
       .map(i => ({ ...i, request: req }))
   ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
   const canCreate = profile?.roleId === 'Administrador' || profile?.roleId === 'Servicio al Cliente'
 
+  // DIFFERENT UI FOR TECHNICIAN
+  if (isTech) {
+    return (
+      <div className="flex flex-col gap-8">
+        <div>
+          <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">Mi Panel Técnico</h1>
+          <p className="text-muted-foreground font-medium">Gestiona tus servicios asignados y agenda diaria.</p>
+        </div>
+
+        <div className="grid gap-8 lg:grid-cols-12">
+          {/* CALENDAR COLUMN */}
+          <Card className="lg:col-span-7 border-accent/20 bg-accent/5 shadow-sm overflow-hidden">
+            <CardHeader className="bg-accent/10 border-b">
+              <CardTitle className="text-lg flex items-center gap-2 text-accent-foreground font-black uppercase">
+                <CalendarDays className="h-5 w-5 text-accent" /> Mi Agenda Hoy
+              </CardTitle>
+              <CardDescription className="text-accent-foreground/70 font-bold uppercase text-[10px]">Visitas programadas para el día de hoy.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                {todayVisits.length > 0 ? (
+                  todayVisits.map((visit) => (
+                    <div key={`${visit.id}-${visit.request.id}`} className="p-4 bg-white rounded-xl border border-accent/20 shadow-sm space-y-3 group hover:border-accent transition-all">
+                      <div className="flex justify-between items-start">
+                        <span className="text-[10px] font-black text-primary bg-primary/10 px-2 py-0.5 rounded uppercase">{visit.request.claimNumber}</span>
+                        <span className="text-xs font-mono font-black text-accent">
+                          {new Date(visit.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-black uppercase text-slate-700">{visit.request.insuredName}</p>
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-1 mt-1">
+                          <MapPin className="h-3 w-3" /> {visit.request.address}
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t border-dashed">
+                         <StatusBadge status={visit.request.status} />
+                         <Link href={`/requests/${visit.request.id}`}>
+                           <Button size="sm" className="h-8 text-[10px] bg-accent hover:bg-accent/90 font-black uppercase">Iniciar Reporte</Button>
+                         </Link>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-20 text-center text-muted-foreground">
+                    <CalendarDays className="h-12 w-12 mx-auto opacity-10 mb-4" />
+                    <p className="text-[10px] font-black uppercase tracking-widest">Sin servicios para hoy</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* LAST 4 SERVICES COLUMN */}
+          <Card className="lg:col-span-5 shadow-sm border-l-4 border-l-primary">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2 font-black uppercase">
+                <History className="h-5 w-5 text-primary" /> Mis Últimos 4 Servicios
+              </CardTitle>
+              <CardDescription className="font-bold uppercase text-[10px]">Historial reciente de intervenciones.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {allRequests.slice(0, 4).map((req) => (
+                  <Link href={`/requests/${req.id}`} key={req.id} className="flex items-center gap-4 p-3 rounded-xl hover:bg-muted/50 transition-colors group border border-transparent hover:border-primary/10">
+                    <div className="h-10 w-10 shrink-0 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 group-hover:bg-primary/20 group-hover:text-primary transition-colors">
+                      <CategoryIcon category={req.category} className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-black truncate text-primary uppercase">{req.claimNumber}</p>
+                      <p className="text-[9px] text-muted-foreground font-bold uppercase truncate">{req.insuredName}</p>
+                    </div>
+                    <StatusBadge status={req.status} />
+                  </Link>
+                ))}
+                <Link href="/requests">
+                  <Button variant="ghost" className="w-full mt-4 text-[10px] font-black uppercase gap-2 hover:text-primary">
+                    Ver Bitácora Completa <ArrowRight className="h-3 w-3" />
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
+
+  // ADMIN / CS / ACCOUNTING UI (Original)
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

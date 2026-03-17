@@ -241,9 +241,9 @@ export default function RequestDetailPage() {
   const interventions = localStateRequest.interventions || []
   const advances = localStateRequest.advances || []
 
-  const visibleInterventions = isTech 
-    ? interventions.filter(i => i.technicianId === profile?.username)
-    : interventions
+  // TECHNICIAN PRIVACY LOGIC: Filter visible reports
+  // Technicians see ALL reports but with restricted data for others' reports
+  const visibleInterventions = interventions; 
 
   const visibleAdvances = isTech
     ? (advances || []).filter(a => a.technicianId === profile?.username)
@@ -259,7 +259,7 @@ export default function RequestDetailPage() {
           <div className="space-y-1">
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-black text-primary uppercase">{localStateRequest.claimNumber}</h1>
-              <StatusBadge status={localStateRequest.status} />
+              {!isTech && <StatusBadge status={localStateRequest.status} />}
             </div>
             <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
               <CategoryIcon category={localStateRequest.category} className="h-3 w-3" /> {localStateRequest.category}
@@ -298,12 +298,14 @@ export default function RequestDetailPage() {
                 <p className="text-[10px] font-black uppercase text-slate-400">Asegurado</p>
                 <p className="font-bold uppercase">{localStateRequest.insuredName}</p>
               </div>
-              <div className="space-y-1">
-                <p className="text-[10px] font-black uppercase text-slate-400">Teléfono</p>
-                <p className="font-medium">{localStateRequest.phoneNumber}</p>
-              </div>
+              {!isTech && (
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black uppercase text-slate-400">Teléfono</p>
+                  <p className="font-medium">{localStateRequest.phoneNumber}</p>
+                </div>
+              )}
               <div className="space-y-1 md:col-span-2">
-                <p className="text-[10px] font-black uppercase text-slate-400">Dirección</p>
+                <p className="text-[10px] font-black uppercase text-slate-400">Dirección / Ciudad</p>
                 <p className="font-medium uppercase flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-primary" /> {localStateRequest.address}</p>
               </div>
               <div className="space-y-1 md:col-span-2 pt-2 border-t border-dashed">
@@ -316,7 +318,7 @@ export default function RequestDetailPage() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-black uppercase tracking-tighter flex items-center gap-2">
-                <ClipboardList className="h-5 w-5 text-primary" /> Mis Reportes Técnicos
+                <ClipboardList className="h-5 w-5 text-primary" /> Historial de Reportes
               </h2>
               <div className="flex gap-2">
                 {canEdit && !isTech && (
@@ -522,6 +524,8 @@ export default function RequestDetailPage() {
                   ))}
 
                   {[...visibleInterventions].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((item) => {
+                    const isMyReport = isTech ? item.technicianId === profile?.username : true;
+                    
                     const materialExpenses = (item.detailedExpenses || []).filter(e => !e.isUnused && !e.isReturned).reduce((s, e) => s + (e.amount || 0), 0)
                     let rentals = 0
                     if (item.usedRotomartillo) rentals += 80000
@@ -554,14 +558,17 @@ export default function RequestDetailPage() {
                               <div className="flex items-center gap-2 mt-1">
                                 <Badge className="bg-primary/10 text-primary font-black uppercase text-[9px]">{item.type}</Badge>
                                 {!isTech && <span className="text-[10px] font-bold text-slate-500">Técnico: {item.technicianId}</span>}
+                                {isTech && !isMyReport && <span className="text-[10px] font-bold text-slate-400 italic">Reportado por Colaborador</span>}
                               </div>
                             </div>
                           </div>
                           <div className="text-right flex items-center gap-4">
-                             <div>
-                               <p className="text-[8px] font-black uppercase text-slate-400">Pago Técnico Neto</p>
-                               <p className="text-lg font-black text-green-600">${techShare.toLocaleString()}</p>
-                             </div>
+                             {isMyReport && (
+                               <div>
+                                 <p className="text-[8px] font-black uppercase text-slate-400">Pago Técnico Neto</p>
+                                 <p className="text-lg font-black text-green-600">${techShare.toLocaleString()}</p>
+                               </div>
+                             )}
                              {isPrivilegedRole && item.payrollStatus !== 'processed' && !item.isReadyForPayroll && (
                                <Button size="sm" onClick={() => handleApproveForPayroll(item.id)} className="bg-blue-600 hover:bg-blue-700 text-[9px] font-black uppercase h-8">
                                  Aprobar Nómina
@@ -575,7 +582,7 @@ export default function RequestDetailPage() {
                         <CardContent className="pt-4 space-y-4">
                           <p className="text-sm text-slate-700 font-medium italic border-l-4 border-slate-200 pl-4">"{item.notes}"</p>
                           
-                          {(item.detailedExpenses?.length > 0 || rentals > 0) && (
+                          {isMyReport && (item.detailedExpenses?.length > 0 || rentals > 0) && (
                             <div className="grid gap-2">
                               <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Deducciones de Nómina (Materiales y Equipos)</p>
                               {rentals > 0 && (

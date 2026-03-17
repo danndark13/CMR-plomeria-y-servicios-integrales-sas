@@ -91,6 +91,8 @@ export default function RequestsPage() {
   }, [db, user])
   const { data: firestoreAccounts } = useCollection(clientAccountsQuery)
 
+  const isTech = profile?.roleId === 'Técnico'
+
   const allRequests = useMemo(() => {
     const combined = [...(firestoreRequests || [])]
     const seenIds = new Set(combined.map(r => r.id))
@@ -104,25 +106,26 @@ export default function RequestsPage() {
         seenClaims.add(mockClaim)
       }
     }
+
+    // STRICT FILTER FOR TECHNICIANS
+    if (isTech && profile) {
+      return combined.filter(req => 
+        req.interventions?.some(i => i.technicianId === profile.username) ||
+        req.scheduledVisit?.technicianId === profile.username
+      );
+    }
+
     return combined
-  }, [firestoreRequests])
+  }, [firestoreRequests, isTech, profile])
 
   const filteredRequests = useMemo(() => {
     return allRequests.filter(req => {
-      // Role-based filtering for Technicians
-      const isTech = profile?.roleId === 'Técnico'
-      if (isTech) {
-        const hasReport = req.interventions?.some(i => i.technicianId === profile?.username)
-        const isScheduled = req.scheduledVisit?.technicianId === profile?.username
-        if (!hasReport && !isScheduled) return false
-      }
-
       return (
         (req.claimNumber || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
         (req.insuredName || "").toLowerCase().includes(searchTerm.toLowerCase())
       )
     }).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
-  }, [allRequests, searchTerm, profile])
+  }, [allRequests, searchTerm])
 
   const allCompanies = (firestoreCompanies && firestoreCompanies.length > 0) ? firestoreCompanies : MOCK_COMPANIES
 
@@ -279,15 +282,16 @@ export default function RequestsPage() {
             <TableHeader>
               <TableRow className="bg-muted/30">
                 <TableHead className="font-black uppercase text-[10px] tracking-widest">Expediente / Categoría</TableHead>
-                <TableHead className="font-black uppercase text-[10px] tracking-widest">Cliente</TableHead>
-                <TableHead className="font-black uppercase text-[10px] tracking-widest text-center">Estado</TableHead>
+                <TableHead className="font-black uppercase text-[10px] tracking-widest">Cliente / Cuenta</TableHead>
+                {!isTech && <TableHead className="font-black uppercase text-[10px] tracking-widest text-center">Estado</TableHead>}
+                {isTech && <TableHead className="font-black uppercase text-[10px] tracking-widest">Dirección / Ciudad</TableHead>}
                 <TableHead className="text-right font-black uppercase text-[10px] tracking-widest">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoadingTotal ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="h-40 text-center">
+                  <TableCell colSpan={isTech ? 4 : 4} className="h-40 text-center">
                     <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary/20" />
                     <p className="mt-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest">Sincronizando bitácora...</p>
                   </TableCell>
@@ -297,7 +301,6 @@ export default function RequestsPage() {
                   <TableCell colSpan={4} className="h-40 text-center text-muted-foreground italic">No se encontraron servicios vinculados a tu perfil.</TableCell>
                 </TableRow>
               ) : filteredRequests.map((req) => {
-                const companyName = allCompanies.find(c => c.id === req.companyId)?.name || "N/A"
                 return (
                   <TableRow 
                     key={req.id} 
@@ -312,13 +315,20 @@ export default function RequestsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span className="font-bold text-slate-700 text-sm truncate max-w-[200px]">{req.insuredName}</span>
+                        <span className="font-bold text-slate-700 text-sm truncate max-w-[200px] uppercase">{req.insuredName}</span>
                         <span className="text-[10px] text-muted-foreground font-medium uppercase">{req.accountName}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-center">
-                      <StatusBadge status={req.status} />
-                    </TableCell>
+                    {!isTech && (
+                      <TableCell className="text-center">
+                        <StatusBadge status={req.status} />
+                      </TableCell>
+                    )}
+                    {isTech && (
+                      <TableCell>
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">{req.address}</span>
+                      </TableCell>
+                    )}
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
                         <Button variant="outline" size="sm" className="h-8 gap-1 font-bold text-xs border-primary/20 text-primary hover:bg-primary/5">
