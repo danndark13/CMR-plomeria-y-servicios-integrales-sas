@@ -144,7 +144,7 @@ export default function RequestDetailPage() {
   const canEdit = isPrivilegedRole || (isCustomerService && !isCompleted) || (isTech && !isCompleted)
 
   const handleUpdateStatus = (newStatus: ServiceStatus) => {
-    if (!db || !requestRef || !canEdit) return
+    if (!db || !requestRef) return
     setIsSaving(true)
     updateDoc(requestRef, { status: newStatus, updatedAt: new Date().toISOString() })
       .then(() => {

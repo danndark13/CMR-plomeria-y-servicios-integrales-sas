@@ -45,11 +45,11 @@ import { MOCK_REQUESTS, MOCK_COMPANIES, MOCK_TECHNICIANS } from "@/lib/mock-data
 import { StatusBadge } from "@/components/crm/status-badge"
 import Link from "next/link"
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase'
-import { collection, doc, addDoc, setDoc } from 'firebase/firestore'
+import { collection, doc, addDoc, setDoc, updateDoc } from 'firebase/firestore'
 import { toast } from "@/hooks/use-toast"
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
-import { ServiceRequest } from "@/lib/types"
+import { ServiceRequest, ServiceStatus } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 export default function RequestsPage() {
@@ -97,6 +97,7 @@ export default function RequestsPage() {
   const isTech = profile?.roleId === 'Técnico'
   const isDev = profile?.roleId === 'Desarrollador'
   const isAdmin = profile?.roleId === 'Administrador' || profile?.roleId === 'Gerente' || isDev
+  const canManageStatus = isAdmin || profile?.roleId === 'Servicio al Cliente'
 
   const allRequests = useMemo(() => {
     const combined = [...(firestoreRequests || [])]
@@ -152,6 +153,21 @@ export default function RequestsPage() {
       .map(acc => acc.name)
     return Array.from(new Set([...mockAccounts, ...dbAccounts])).sort()
   }, [selectedCompanyId, currentCompany, firestoreAccounts])
+
+  const handleUpdateStatus = (requestId: string, newStatus: ServiceStatus) => {
+    if (!db) return
+    const docRef = doc(db, "service_requests", requestId)
+    updateDoc(docRef, { status: newStatus, updatedAt: new Date().toISOString() })
+      .then(() => toast({ title: "Estado Actualizado", description: `Expediente movido a ${newStatus}.` }))
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: docRef.path,
+          operation: "update",
+          requestResourceData: { status: newStatus },
+        })
+        errorEmitter.emit("permission-error", permissionError)
+      })
+  }
 
   const handleCreateService = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -213,7 +229,7 @@ export default function RequestsPage() {
 
   const handleExportExcel = () => {
     const headers = [
-      "Expediente", "Fecha", "Asistencia", "Cuenta", "Asegurado", "Dirección", "Tipo de Servicio"
+      "Expediente", "Fecha", "Asistencia", "Cuenta", "Asegurado", "Dirección", "Tipo de Servicio", "Estado"
     ]
 
     const csvRows = filteredRequests.map(req => {
@@ -226,7 +242,8 @@ export default function RequestsPage() {
         req.accountName,
         req.insuredName,
         (req.address || "").replace(/,/g, " "),
-        req.category
+        req.category,
+        req.status
       ]
     })
 
@@ -310,7 +327,7 @@ export default function RequestsPage() {
               <TableRow className="bg-muted/30">
                 <TableHead className="font-black uppercase text-[10px] tracking-widest">Expediente / Categoría</TableHead>
                 <TableHead className="font-black uppercase text-[10px] tracking-widest">Cliente / Cuenta</TableHead>
-                {!isTech && <TableHead className="font-black uppercase text-[10px] tracking-widest text-center">Estado</TableHead>}
+                {!isTech && <TableHead className="font-black uppercase text-[10px] tracking-widest text-center">Estado Operativo</TableHead>}
                 {isTech && <TableHead className="font-black uppercase text-[10px] tracking-widest">Dirección / Ciudad</TableHead>}
                 <TableHead className="text-right font-black uppercase text-[10px] tracking-widest">Acciones</TableHead>
               </TableRow>
@@ -347,8 +364,24 @@ export default function RequestsPage() {
                       </div>
                     </TableCell>
                     {!isTech && (
-                      <TableCell className="text-center">
-                        <StatusBadge status={req.status} />
+                      <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
+                        {canManageStatus ? (
+                          <Select defaultValue={req.status} onValueChange={(v) => handleUpdateStatus(req.id, v as ServiceStatus)}>
+                            <SelectTrigger className="h-8 w-[140px] text-[10px] font-black uppercase border-primary/20 mx-auto">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">Pendiente</SelectItem>
+                              <SelectItem value="assigned">Programado</SelectItem>
+                              <SelectItem value="in_progress">En Proceso</SelectItem>
+                              <SelectItem value="completed">Finalizado</SelectItem>
+                              <SelectItem value="cancelled">Cancelado</SelectItem>
+                              <SelectItem value="warranty">Garantía</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <StatusBadge status={req.status} />
+                        )}
                       </TableCell>
                     )}
                     {isTech && (
