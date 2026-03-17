@@ -1,3 +1,4 @@
+
 "use client"
 
 import Link from "next/link"
@@ -19,7 +20,8 @@ import {
   RefreshCw,
   Receipt,
   Globe,
-  Info
+  Info,
+  Wallet
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -79,9 +81,10 @@ export function CRMSidebar() {
   const navigationItems = [
     { title: "Panel Principal", icon: LayoutDashboard, href: "/", show: true },
     { title: "Contabilidad", icon: Calculator, href: "/accounting", show: isAdmin || isAccounting },
+    { title: "Mis Liquidaciones", icon: Wallet, href: "/technician/settlements", show: isTech },
     { title: "Bitácora", icon: ClipboardList, href: "/requests", show: true },
     { title: "Calendario", icon: CalendarDays, href: "/calendar", show: true },
-    { title: "Inventario", icon: Package, href: "/inventory", show: isAdmin || isAccounting || isTech },
+    { title: "Inventario / Stock", icon: Package, href: "/inventory", show: true },
   ]
 
   const adminItems = [

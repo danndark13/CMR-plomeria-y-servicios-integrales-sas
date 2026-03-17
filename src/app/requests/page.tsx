@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo } from "react"
@@ -107,12 +108,21 @@ export default function RequestsPage() {
   }, [firestoreRequests])
 
   const filteredRequests = useMemo(() => {
-    return allRequests.filter(req => 
-      (req.claimNumber || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (req.id || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (req.insuredName || "").toLowerCase().includes(searchTerm.toLowerCase())
-    ).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
-  }, [allRequests, searchTerm])
+    return allRequests.filter(req => {
+      // Role-based filtering for Technicians
+      const isTech = profile?.roleId === 'Técnico'
+      if (isTech) {
+        const hasReport = req.interventions?.some(i => i.technicianId === profile?.username)
+        const isScheduled = req.scheduledVisit?.technicianId === profile?.username
+        if (!hasReport && !isScheduled) return false
+      }
+
+      return (
+        (req.claimNumber || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (req.insuredName || "").toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    }).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+  }, [allRequests, searchTerm, profile])
 
   const allCompanies = (firestoreCompanies && firestoreCompanies.length > 0) ? firestoreCompanies : MOCK_COMPANIES
 
@@ -187,13 +197,11 @@ export default function RequestsPage() {
 
   const handleExportExcel = () => {
     const headers = [
-      "Expediente", "Fecha", "Asistencia", "Cuenta", "Asegurado", "Dirección", "Tipo de Servicio",
-      "Valor Total Cobrado"
+      "Expediente", "Fecha", "Asistencia", "Cuenta", "Asegurado", "Dirección", "Tipo de Servicio"
     ]
 
     const csvRows = filteredRequests.map(req => {
       const companyName = allCompanies.find(c => c.id === req.companyId)?.name || "N/A"
-      const totalCobrado = req.approvedAmount || req.requestedAmount || 0
 
       return [
         req.claimNumber,
@@ -202,8 +210,7 @@ export default function RequestsPage() {
         req.accountName,
         req.insuredName,
         (req.address || "").replace(/,/g, " "),
-        req.category,
-        totalCobrado
+        req.category
       ]
     })
 
@@ -235,7 +242,9 @@ export default function RequestsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">Bitácora de Servicios</h1>
-          <p className="text-muted-foreground font-medium">Listado de expedientes activos e históricos de la operación.</p>
+          <p className="text-muted-foreground font-medium">
+            {role === 'Técnico' ? 'Tus servicios registrados y programados.' : 'Listado de expedientes activos e históricos.'}
+          </p>
         </div>
         <div className="flex gap-2">
           {canExport && (
@@ -263,11 +272,6 @@ export default function RequestsPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="gap-2 h-10 font-bold">
-                <Filter className="h-4 w-4" /> Filtros
-              </Button>
-            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -275,7 +279,7 @@ export default function RequestsPage() {
             <TableHeader>
               <TableRow className="bg-muted/30">
                 <TableHead className="font-black uppercase text-[10px] tracking-widest">Expediente / Categoría</TableHead>
-                <TableHead className="font-black uppercase text-[10px] tracking-widest">Asistencia / Cliente</TableHead>
+                <TableHead className="font-black uppercase text-[10px] tracking-widest">Cliente</TableHead>
                 <TableHead className="font-black uppercase text-[10px] tracking-widest text-center">Estado</TableHead>
                 <TableHead className="text-right font-black uppercase text-[10px] tracking-widest">Acciones</TableHead>
               </TableRow>
@@ -287,6 +291,10 @@ export default function RequestsPage() {
                     <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary/20" />
                     <p className="mt-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest">Sincronizando bitácora...</p>
                   </TableCell>
+                </TableRow>
+              ) : filteredRequests.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="h-40 text-center text-muted-foreground italic">No se encontraron servicios vinculados a tu perfil.</TableCell>
                 </TableRow>
               ) : filteredRequests.map((req) => {
                 const companyName = allCompanies.find(c => c.id === req.companyId)?.name || "N/A"
@@ -305,7 +313,7 @@ export default function RequestsPage() {
                     <TableCell>
                       <div className="flex flex-col">
                         <span className="font-bold text-slate-700 text-sm truncate max-w-[200px]">{req.insuredName}</span>
-                        <span className="text-[10px] text-muted-foreground font-medium uppercase">{companyName} • {req.accountName}</span>
+                        <span className="text-[10px] text-muted-foreground font-medium uppercase">{req.accountName}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-center">

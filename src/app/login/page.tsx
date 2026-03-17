@@ -103,7 +103,7 @@ export default function LoginPage() {
     const inputId = userId.toUpperCase().trim()
     const isGerente = inputId === "GERENTE"
     const rolePrefix = inputId.substring(0, 3)
-    const validPrefixes = ["ADM", "CON", "SER"]
+    const validPrefixes = ["ADM", "CON", "SER", "TEC"]
     
     if (!isCorrectPassword || (!isGerente && !validPrefixes.includes(rolePrefix))) {
       toast({
@@ -134,6 +134,12 @@ export default function LoginPage() {
       } else {
         if (rolePrefix === "ADM") roleId = "Administrador"
         if (rolePrefix === "CON") roleId = "Contabilidad"
+        if (rolePrefix === "TEC") {
+          roleId = "Técnico"
+          firstName = "OPERARIO"
+          lastName = inputId
+          email = `${inputId.toLowerCase()}@rysplomeria.com`
+        }
       }
 
       const profileRef = doc(firestore, "user_profiles", user.uid)
@@ -222,7 +228,7 @@ export default function LoginPage() {
                 <p>Si el botón azul no responde, es un bloqueo de tu navegador. Sigue estos pasos:</p>
                 <ol className="list-decimal pl-4 space-y-2 font-bold">
                   <li>Pulsa los <strong className="text-primary">TRES PUNTOS (⋮)</strong> arriba a la derecha en Chrome.</li>
-                  <li>Busca y pulsa la opción <strong className="text-primary">"Instalar aplicación"</strong> o "Añadir a pantalla de inicio".</li>
+                  <li>Busca y pulsa la option <strong className="text-primary">"Instalar aplicación"</strong> o "Añadir a pantalla de inicio".</li>
                 </ol>
                 <p className="text-destructive font-black">IMPORTANTE: Si no ves la opción, pulsa el botón de abajo para resetear la app y vuelve a intentar.</p>
               </AlertDescription>
@@ -262,7 +268,7 @@ export default function LoginPage() {
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input 
                     id="userId" 
-                    placeholder="EJ. ADMIN01" 
+                    placeholder="EJ. TEC01" 
                     className="pl-10 h-12 font-mono font-bold uppercase"
                     value={userId}
                     onChange={(e) => setUserId(e.target.value)}

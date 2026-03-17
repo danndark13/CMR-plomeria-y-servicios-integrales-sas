@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
-import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
 import { 
   collection, 
   doc, 
@@ -75,6 +75,12 @@ export function ChatWidget() {
   const [newMessage, setNewMessage] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  const profileRef = useMemoFirebase(() => {
+    if (!user || !db) return null
+    return doc(db, "user_profiles", user.uid)
+  }, [db, user])
+  const { data: myProfile } = useDoc(profileRef)
+
   // 1. Fetch Users
   const usersQuery = useMemoFirebase(() => {
     if (!db || !user) return null
@@ -82,15 +88,22 @@ export function ChatWidget() {
   }, [db, user])
   const { data: allUsers } = useCollection(usersQuery)
 
-  // DEDUPLICATION LOGIC: Consolidate users by username
+  // DEDUPLICATION & FILTER LOGIC: Restrict for Technicians
   const uniqueUsers = useMemo(() => {
-    if (!allUsers) return []
+    if (!allUsers || !myProfile) return []
     const uniqueMap = new Map()
+    
     allUsers.forEach(u => {
       const uname = (u.username || "").toUpperCase().trim()
       if (!uname) return
       
-      // If we already have this username, we keep the one that is active or has more info
+      // Filter logic for technicians
+      if (myProfile.roleId === 'Técnico') {
+        const isRestricted = (u.firstName + ' ' + u.lastName).toUpperCase().includes('DANIEL CESPEDES')
+        const isAllowedRole = u.roleId === 'Administrador' || u.roleId === 'Servicio al Cliente'
+        if (!isAllowedRole || isRestricted) return
+      }
+
       if (!uniqueMap.has(uname)) {
         uniqueMap.set(uname, u)
       } else {
@@ -101,7 +114,7 @@ export function ChatWidget() {
       }
     })
     return Array.from(uniqueMap.values())
-  }, [allUsers])
+  }, [allUsers, myProfile])
 
   // 2. Fetch My Chats
   const chatsQuery = useMemoFirebase(() => {
@@ -142,7 +155,7 @@ export function ChatWidget() {
     const messageData = {
       text: newMessage,
       senderId: user.uid,
-      senderName: (allUsers?.find(u => u.id === user.uid)?.firstName || "Usuario"),
+      senderName: (myProfile?.firstName || "Usuario"),
       timestamp: serverTimestamp()
     }
 
@@ -162,7 +175,6 @@ export function ChatWidget() {
   const startDirectChat = async (targetUser: any) => {
     if (!db || !user) return
 
-    // Check if chat already exists
     const existing = myChats?.find(c => 
       c.type === 'direct' && 
       c.participants.includes(targetUser.id) && 
@@ -205,7 +217,7 @@ export function ChatWidget() {
     setGroupName("")
   }
 
-  if (!user) return null
+  if (!user || !myProfile) return null
 
   return (
     <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end gap-4">
@@ -217,7 +229,7 @@ export function ChatWidget() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Users className="h-5 w-5" />
-                    <CardTitle className="text-lg font-black uppercase tracking-tighter">Chat Corporativo</CardTitle>
+                    <CardTitle className="text-lg font-black uppercase tracking-tighter">Chat RYS</CardTitle>
                   </div>
                   <Button variant="ghost" size="icon" className="text-white hover:bg-white/10 h-8 w-8" onClick={() => setIsVisible(false)}>
                     <X className="h-5 w-5" />
@@ -226,7 +238,7 @@ export function ChatWidget() {
                 <div className="relative mt-4">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-primary-foreground/60" />
                   <Input 
-                    placeholder="Buscar chat o colega..." 
+                    placeholder="Buscar colega..." 
                     className="h-9 pl-8 bg-white/10 border-white/20 text-white placeholder:text-white/40 text-xs"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -248,7 +260,7 @@ export function ChatWidget() {
                     </Button>
 
                     <div className="pt-2">
-                      <p className="px-3 text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-2">Chats Recientes</p>
+                      <p className="px-3 text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-2">Canales Activos</p>
                       {myChats?.filter(c => !searchTerm || (c.name || "").toLowerCase().includes(searchTerm.toLowerCase())).map(chat => {
                         const isGroup = chat.type === 'group'
                         const otherUserId = chat.participants.find((p: string) => p !== user.uid)
@@ -260,22 +272,16 @@ export function ChatWidget() {
                             className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 cursor-pointer group transition-all"
                             onClick={() => setActiveChat(chat as ChatRoom)}
                           >
-                            <Avatar className="h-10 w-10 border-2 border-white shadow-sm group-hover:scale-105 transition-transform">
-                              <AvatarImage src={`https://picsum.photos/seed/${chat.id}/100/100`} />
-                              <AvatarFallback className={isGroup ? "bg-accent" : "bg-primary"}>
+                            <Avatar className="h-10 w-10 border-2 border-white shadow-sm">
+                              <AvatarFallback className={isGroup ? "bg-accent text-white" : "bg-primary text-white"}>
                                 {isGroup ? <Users className="h-4 w-4" /> : otherUser?.firstName?.charAt(0)}
                               </AvatarFallback>
                             </Avatar>
                             <div className="flex-1 min-w-0">
-                              <div className="flex justify-between items-baseline">
-                                <p className="text-sm font-black truncate uppercase text-slate-800">
-                                  {isGroup ? chat.name : `${otherUser?.firstName} ${otherUser?.lastName}`}
-                                </p>
-                                <span className="text-[8px] font-bold text-muted-foreground uppercase">
-                                  {chat.lastMessageAt ? new Date(chat.lastMessageAt?.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                                </span>
-                              </div>
-                              <p className="text-xs text-muted-foreground truncate font-medium">{chat.lastMessage || "Sin mensajes"}</p>
+                              <p className="text-sm font-black truncate uppercase text-slate-800">
+                                {isGroup ? chat.name : `${otherUser?.firstName} ${otherUser?.lastName}`}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate font-medium">{chat.lastMessage || "Pulsa para chatear"}</p>
                             </div>
                           </div>
                         )
@@ -283,7 +289,7 @@ export function ChatWidget() {
                     </div>
 
                     <div className="pt-2">
-                      <p className="px-3 text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-2">Colaboradores</p>
+                      <p className="px-3 text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-2">Contactos Autorizados</p>
                       {uniqueUsers.filter(u => u.id !== user.uid && (!searchTerm || `${u.firstName} ${u.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()))).map(collab => (
                         <div 
                           key={collab.id} 
@@ -291,7 +297,6 @@ export function ChatWidget() {
                           onClick={() => startDirectChat(collab)}
                         >
                           <Avatar className="h-10 w-10 border-2 border-white shadow-sm">
-                            <AvatarImage src={`https://picsum.photos/seed/user-${collab.id}/100/100`} />
                             <AvatarFallback className="bg-slate-200 text-slate-600 font-bold">
                               {collab.firstName?.charAt(0)}
                             </AvatarFallback>
@@ -314,17 +319,11 @@ export function ChatWidget() {
                   <Button variant="ghost" size="icon" className="text-white h-8 w-8 hover:bg-white/10" onClick={() => setActiveChat(null)}>
                     <ChevronLeft className="h-5 w-5" />
                   </Button>
-                  <Avatar className="h-8 w-8 border border-white/20">
-                    <AvatarImage src={`https://picsum.photos/seed/${activeChat.id}/100/100`} />
-                    <AvatarFallback className={activeChat.type === 'group' ? 'bg-accent' : 'bg-primary'}>
-                      {activeChat.type === 'group' ? <Users className="h-3 w-3" /> : 'U'}
-                    </AvatarFallback>
-                  </Avatar>
                   <div className="flex-1 min-w-0">
                     <CardTitle className="text-sm font-black uppercase truncate tracking-tight">
                       {activeChat.type === 'group' ? activeChat.name : allUsers?.find(u => u.id === activeChat.participants.find(p => p !== user.uid))?.firstName}
                     </CardTitle>
-                    <p className="text-[8px] font-black uppercase text-white/60 tracking-widest">En línea</p>
+                    <p className="text-[8px] font-black uppercase text-white/60 tracking-widest">Chat Seguro RYS</p>
                   </div>
                   <Button variant="ghost" size="icon" className="text-white h-8 w-8 hover:bg-white/10" onClick={() => setIsVisible(false)}>
                     <X className="h-5 w-5" />
@@ -332,10 +331,9 @@ export function ChatWidget() {
                 </div>
               </CardHeader>
               <CardContent className="p-0 flex-1 overflow-hidden bg-slate-50 relative">
-                <div className="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] opacity-50" />
                 <ScrollArea className="h-full relative z-10">
                   <div className="p-4 space-y-4">
-                    {messages.map((msg, idx) => {
+                    {messages.map((msg) => {
                       const isMe = msg.senderId === user.uid
                       return (
                         <div key={msg.id} className={cn("flex flex-col max-w-[85%]", isMe ? "ml-auto items-end" : "mr-auto items-start")}>
@@ -350,12 +348,6 @@ export function ChatWidget() {
                           )}>
                             {msg.text}
                           </div>
-                          <div className="flex items-center gap-1 mt-1 px-1">
-                            <span className="text-[8px] font-bold text-slate-400 uppercase">
-                              {msg.timestamp ? new Date(msg.timestamp?.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                            </span>
-                            {isMe && <CheckCheck className="h-3 w-3 text-primary opacity-50" />}
-                          </div>
                         </div>
                       )
                     })}
@@ -366,12 +358,12 @@ export function ChatWidget() {
               <CardFooter className="p-3 bg-white border-t relative z-10">
                 <form onSubmit={handleSendMessage} className="flex w-full gap-2">
                   <Input 
-                    placeholder="Escribe un mensaje..." 
-                    className="flex-1 bg-slate-100 border-none h-10 rounded-xl font-medium focus-visible:ring-primary"
+                    placeholder="Mensaje..." 
+                    className="flex-1 bg-slate-100 border-none h-10 rounded-xl"
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                   />
-                  <Button type="submit" size="icon" className="h-10 w-10 rounded-xl shadow-lg bg-primary hover:bg-primary/90" disabled={!newMessage.trim()}>
+                  <Button type="submit" size="icon" className="h-10 w-10 rounded-xl shadow-lg" disabled={!newMessage.trim()}>
                     <Send className="h-4 w-4" />
                   </Button>
                 </form>
@@ -383,24 +375,18 @@ export function ChatWidget() {
 
       <Button 
         className={cn(
-          "h-16 w-16 rounded-full shadow-2xl transition-all duration-500 scale-100 hover:scale-110",
+          "h-16 w-16 rounded-full shadow-2xl transition-all duration-500 scale-100",
           isOpen ? "bg-slate-900 rotate-90" : "bg-primary"
         )}
         onClick={() => setIsVisible(!isOpen)}
       >
         {isOpen ? <X className="h-8 w-8" /> : <MessageSquare className="h-8 w-8" />}
-        {!isOpen && (
-          <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 border-2 border-white text-[9px] font-black text-white animate-bounce">
-            !
-          </span>
-        )}
       </Button>
 
-      {/* Group Creation Dialog */}
       <Dialog open={isCreatingGroup} onOpenChange={setIsCreatingGroup}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
-            <DialogTitle className="text-xl font-black uppercase text-primary tracking-tighter">Nuevo Grupo de Trabajo</DialogTitle>
+            <DialogTitle className="text-xl font-black uppercase text-primary tracking-tighter">Nuevo Grupo</DialogTitle>
           </DialogHeader>
           <div className="space-y-6 pt-4">
             <div className="space-y-2">
@@ -413,7 +399,7 @@ export function ChatWidget() {
               />
             </div>
             <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest">Seleccionar Integrantes</Label>
+              <Label className="text-[10px] font-black uppercase tracking-widest">Integrantes</Label>
               <ScrollArea className="h-[200px] border rounded-xl p-2 bg-slate-50">
                 <div className="space-y-2">
                   {uniqueUsers.filter(u => u.id !== user.uid).map(collab => (
@@ -427,11 +413,6 @@ export function ChatWidget() {
                         }}
                       />
                       <Label htmlFor={collab.id} className="flex items-center gap-3 cursor-pointer">
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-black">
-                            {collab.firstName?.charAt(0)}
-                          </AvatarFallback>
-                        </Avatar>
                         <div className="flex flex-col">
                           <span className="text-sm font-bold uppercase">{collab.firstName} {collab.lastName}</span>
                           <span className="text-[8px] font-black uppercase text-muted-foreground">{collab.roleId}</span>
