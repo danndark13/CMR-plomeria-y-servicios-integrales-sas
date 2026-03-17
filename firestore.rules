@@ -84,7 +84,12 @@ service cloud.firestore {
     }
 
     match /payroll_history/{payrollId} {
-      allow get, list: if isSignedIn() && (isAdmin() || isAccounting());
+      // Permitir leer a Admin, Contabilidad o al propio Técnico dueño del registro
+      allow get, list: if isSignedIn() && (
+        isAdmin() || 
+        isAccounting() || 
+        (getProfile() != null && resource.data.technicianId == getProfile().username)
+      );
       allow create, update: if isSignedIn() && (isAdmin() || isAccounting());
       allow delete: if isAdmin();
     }
