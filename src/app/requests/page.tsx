@@ -198,7 +198,8 @@ export default function RequestsPage() {
       companyId: selectedCompanyId,
       accountName: finalAccountName,
       insuredName: (formData.get("insuredName") as string).toUpperCase(),
-      address: formData.get("address") as string,
+      address: (formData.get("address") as string).toUpperCase(),
+      city: (formData.get("city") as string).toUpperCase(),
       phoneNumber: formData.get("phoneNumber") as string,
       description: formData.get("description") as string,
       status: 'pending',
@@ -229,7 +230,7 @@ export default function RequestsPage() {
 
   const handleExportExcel = () => {
     const headers = [
-      "Expediente", "Fecha", "Asistencia", "Cuenta", "Asegurado", "Dirección", "Tipo de Servicio", "Estado"
+      "Expediente", "Fecha", "Asistencia", "Cuenta", "Asegurado", "Dirección", "Ciudad", "Tipo de Servicio", "Estado"
     ]
 
     const csvRows = filteredRequests.map(req => {
@@ -242,6 +243,7 @@ export default function RequestsPage() {
         req.accountName,
         req.insuredName,
         (req.address || "").replace(/,/g, " "),
+        (req.city || "").replace(/,/g, " "),
         req.category,
         req.status
       ]
@@ -328,7 +330,7 @@ export default function RequestsPage() {
                 <TableHead className="font-black uppercase text-[10px] tracking-widest">Expediente / Categoría</TableHead>
                 <TableHead className="font-black uppercase text-[10px] tracking-widest">Cliente / Cuenta</TableHead>
                 {!isTech && <TableHead className="font-black uppercase text-[10px] tracking-widest text-center">Estado Operativo</TableHead>}
-                {isTech && <TableHead className="font-black uppercase text-[10px] tracking-widest">Dirección / Ciudad</TableHead>}
+                {isTech && <TableHead className="font-black uppercase text-[10px] tracking-widest">Ubicación</TableHead>}
                 <TableHead className="text-right font-black uppercase text-[10px] tracking-widest">Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -386,7 +388,7 @@ export default function RequestsPage() {
                     )}
                     {isTech && (
                       <TableCell>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">{req.address}</span>
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">{req.address} • {req.city}</span>
                       </TableCell>
                     )}
                     <TableCell className="text-right">
@@ -529,11 +531,20 @@ export default function RequestsPage() {
                     </div>
                   </div>
                </div>
-               <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase tracking-widest">Dirección de Visita</Label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input name="address" placeholder="Calle 1 #2-3" required className="pl-10 font-medium h-10" />
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest">Dirección de Visita</Label>
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input name="address" placeholder="Calle 1 #2-3" required className="pl-10 font-medium h-10 uppercase" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest">Ciudad</Label>
+                    <div className="relative">
+                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input name="city" placeholder="Ej. Bogota" required className="pl-10 font-bold uppercase h-10" />
+                    </div>
                   </div>
                </div>
             </div>

@@ -36,7 +36,8 @@ import {
   MapPin,
   Car,
   DollarSign,
-  Info
+  Info,
+  Building2
 } from "lucide-react"
 import { 
   AlertDialog, 
@@ -427,9 +428,13 @@ export default function RequestDetailPage() {
                   <p className="font-medium">{localStateRequest.phoneNumber}</p>
                 </div>
               )}
-              <div className="space-y-1 md:col-span-2">
-                <p className="text-[10px] font-black uppercase text-slate-400">Dirección / Ciudad</p>
+              <div className="space-y-1">
+                <p className="text-[10px] font-black uppercase text-slate-400">Dirección</p>
                 <p className="font-medium uppercase flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-primary" /> {localStateRequest.address}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[10px] font-black uppercase text-slate-400">Ciudad</p>
+                <p className="font-medium uppercase flex items-center gap-2"><Building2 className="h-3.5 w-3.5 text-primary" /> {localStateRequest.city}</p>
               </div>
               <div className="space-y-1 md:col-span-2 pt-2 border-t border-dashed">
                 <p className="text-[10px] font-black uppercase text-slate-400">Descripción del Problema</p>

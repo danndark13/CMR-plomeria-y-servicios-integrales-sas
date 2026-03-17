@@ -179,7 +179,8 @@ export default function DashboardPage() {
       companyId: selectedCompanyId,
       accountName: finalAccountName,
       insuredName: (formData.get("insuredName") as string).toUpperCase(),
-      address: formData.get("address") as string,
+      address: (formData.get("address") as string).toUpperCase(),
+      city: (formData.get("city") as string).toUpperCase(),
       phoneNumber: formData.get("phoneNumber") as string,
       description: formData.get("description") as string,
       status: 'pending',
@@ -247,7 +248,7 @@ export default function DashboardPage() {
                       <div>
                         <p className="text-sm font-black uppercase text-slate-700">{visit.request.insuredName}</p>
                         <p className="text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-1 mt-1">
-                          <MapPin className="h-3 w-3" /> {visit.request.address}
+                          <MapPin className="h-3 w-3" /> {visit.request.address} • {visit.request.city}
                         </p>
                       </div>
                       <div className="flex items-center justify-between pt-2 border-t border-dashed">
@@ -544,11 +545,20 @@ export default function DashboardPage() {
                     </div>
                   </div>
                </div>
-               <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase tracking-widest">Dirección de Visita</Label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input name="address" placeholder="Calle 1 #2-3" required className="pl-10 font-medium h-10" />
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest">Dirección de Visita</Label>
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input name="address" placeholder="Calle 1 #2-3" required className="pl-10 font-medium h-10 uppercase" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest">Ciudad</Label>
+                    <div className="relative">
+                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input name="city" placeholder="Ej. Bogota" required className="pl-10 font-bold uppercase h-10" />
+                    </div>
                   </div>
                </div>
             </div>

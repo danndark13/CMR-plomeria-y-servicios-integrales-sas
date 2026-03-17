@@ -1,3 +1,4 @@
+
 export type ServiceStatus = 'pending' | 'assigned' | 'in_progress' | 'completed' | 'cancelled' | 'warranty';
 
 export type ServiceCategory = 
@@ -121,6 +122,7 @@ export interface ServiceRequest {
   insuredName: string;
   claimNumber: string;
   address: string;
+  city: string;
   phoneNumber: string;
   description: string;
   interventions: TechnicianIntervention[];

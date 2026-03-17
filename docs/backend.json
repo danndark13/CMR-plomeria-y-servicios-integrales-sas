@@ -69,6 +69,7 @@
         "insuredName": { "type": "string" },
         "claimNumber": { "type": "string" },
         "address": { "type": "string" },
+        "city": { "type": "string" },
         "phoneNumber": { "type": "string" },
         "description": { "type": "string" },
         "report": { "type": "string" },
