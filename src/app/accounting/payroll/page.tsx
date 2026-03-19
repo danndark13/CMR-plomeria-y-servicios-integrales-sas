@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Textarea } from "@/components/ui/textarea"
 import { 
   Wallet, 
   ChevronRight,
@@ -31,7 +32,8 @@ import {
   Trash2,
   FileSpreadsheet,
   Download,
-  FileDown
+  FileDown,
+  MessageSquare
 } from "lucide-react"
 import { MOCK_TECHNICIANS } from "@/lib/mock-data"
 import { toast } from "@/hooks/use-toast"
@@ -51,6 +53,7 @@ export default function PayrollHubPage() {
   
   const [adjustmentAmount, setAdjustmentAmount] = useState(0)
   const [adjustmentReason, setAdjustmentReason] = useState("")
+  const [payrollNotes, setPayrollNotes] = useState("")
 
   const profileRef = useMemoFirebase(() => {
     if (!user || !db) return null
@@ -71,7 +74,6 @@ export default function PayrollHubPage() {
   }, [db, user])
   const { data: payrollHistory, isLoading: isHistoryLoading } = useCollection(payrollQuery)
 
-  // Fetch users to include newly created technicians like Brayan
   const usersQuery = useMemoFirebase(() => {
     if (!db || !user) return null
     return collection(db, "user_profiles")
@@ -80,7 +82,6 @@ export default function PayrollHubPage() {
 
   const allTechnicians = useMemo(() => {
     const uniqueMap = new Map()
-    // Add real users with role 'Técnico'
     if (allUsers) {
       allUsers.filter(u => u.roleId === 'Técnico').forEach(u => {
         const uname = (u.username || u.id).toUpperCase().trim()
@@ -89,7 +90,6 @@ export default function PayrollHubPage() {
         }
       })
     }
-    // Add mock ones if not present
     MOCK_TECHNICIANS.forEach(mt => {
       const uname = mt.id.toUpperCase().trim()
       if (!uniqueMap.has(uname)) {
@@ -186,7 +186,7 @@ export default function PayrollHubPage() {
       
       doc.setFontSize(10)
       doc.setTextColor(100)
-      doc.text("Nit: 901.456.789-0 | Comprobante de Liquidación Técnico", 105, 26, { align: 'center' })
+      doc.text("Nit: 901.601.017 | Comprobante de Liquidación Técnico", 105, 26, { align: 'center' })
       
       doc.setDrawColor(200)
       doc.line(20, 32, 190, 32)
@@ -258,31 +258,43 @@ export default function PayrollHubPage() {
         }
       })
 
+      let currentY = (doc as any).lastAutoTable.finalY + 10
+
+      // NOTES SECTION
+      if (record.notes) {
+        doc.setFontSize(10)
+        doc.setFont("helvetica", "bold")
+        doc.text("NOVEDADES / NOTAS:", 20, currentY)
+        doc.setFont("helvetica", "normal")
+        doc.setFontSize(9)
+        const splitNotes = doc.splitTextToSize(record.notes, 170)
+        doc.text(splitNotes, 20, currentY + 6)
+        currentY += (splitNotes.length * 5) + 15
+      }
+
       // FINALS SECTION
-      const finalY = (doc as any).lastAutoTable.finalY + 15
-      
       doc.setDrawColor(230)
       doc.setFillColor(245, 245, 245)
-      doc.rect(120, finalY, 70, 45, 'F')
+      doc.rect(120, currentY, 70, 45, 'F')
 
       doc.setFontSize(10)
       doc.setTextColor(80)
-      doc.text("SUBTOTAL SERVICIOS:", 125, finalY + 10)
-      doc.text(`$${(record.netPaid + record.totalAdvances - (record.adjustmentAmount || 0)).toLocaleString()}`, 185, finalY + 10, { align: 'right' })
+      doc.text("SUBTOTAL SERVICIOS:", 125, currentY + 10)
+      doc.text(`$${(record.netPaid + record.totalAdvances - (record.adjustmentAmount || 0)).toLocaleString()}`, 185, currentY + 10, { align: 'right' })
 
-      doc.text("ADELANTOS RECIBIDOS:", 125, finalY + 18)
-      doc.text(`-$${record.totalAdvances.toLocaleString()}`, 185, finalY + 18, { align: 'right' })
+      doc.text("ADELANTOS RECIBIDOS:", 125, currentY + 18)
+      doc.text(`-$${record.totalAdvances.toLocaleString()}`, 185, currentY + 18, { align: 'right' })
 
       if (record.adjustmentAmount !== 0) {
-        doc.text("AJUSTES / BONOS:", 125, finalY + 26)
-        doc.text(`${record.adjustmentAmount > 0 ? '+' : '-'}$${Math.abs(record.adjustmentAmount).toLocaleString()}`, 185, finalY + 26, { align: 'right' })
+        doc.text("AJUSTES / BONOS:", 125, currentY + 26)
+        doc.text(`${record.adjustmentAmount > 0 ? '+' : '-'}$${Math.abs(record.adjustmentAmount).toLocaleString()}`, 185, currentY + 26, { align: 'right' })
       }
 
       doc.setFontSize(14)
       doc.setTextColor(31, 91, 204)
       doc.setFont("helvetica", "bold")
-      doc.text("TOTAL PAGADO:", 125, finalY + 38)
-      doc.text(`$${record.netPaid.toLocaleString()}`, 185, finalY + 38, { align: 'right' })
+      doc.text("TOTAL PAGADO:", 125, currentY + 38)
+      doc.text(`$${record.netPaid.toLocaleString()}`, 185, currentY + 38, { align: 'right' })
 
       // FOOTER
       doc.setFontSize(8)
@@ -316,6 +328,7 @@ export default function PayrollHubPage() {
       netPaid: totals.netPaid,
       adjustmentAmount,
       adjustmentReason,
+      notes: payrollNotes,
       itemsCount: pendingInterventions.length,
       processedInterventionIds: pendingInterventions.map(i => i.id),
       processedAdvanceIds: pendingAdvances.map(a => a.id)
@@ -346,7 +359,7 @@ export default function PayrollHubPage() {
     try {
       await batch.commit()
       toast({ title: "Nómina Liquidada" })
-      setAdjustmentAmount(0); setAdjustmentReason(""); setSelectedTechId(null)
+      setAdjustmentAmount(0); setAdjustmentReason(""); setPayrollNotes(""); setSelectedTechId(null)
     } catch (error) {
       toast({ variant: "destructive", title: "Error" })
     } finally {
@@ -602,12 +615,27 @@ export default function PayrollHubPage() {
             <div className="space-y-3">
               <div className="flex justify-between text-xs font-bold uppercase text-slate-500"><span>Base Partición:</span><span className="font-mono">${totals.accumulatedToSplit.toLocaleString()}</span></div>
               <div className="flex justify-between text-xs font-black uppercase text-primary border-t pt-2"><span>Total Técnico (Bruto):</span><span className="font-mono">${totals.technicianBase.toLocaleString()}</span></div>
+              
               <div className="pt-2 border-t border-dashed space-y-4">
                 <div className="flex justify-between items-center"><div className="flex items-center gap-2"><HandCoins className="h-4 w-4 text-destructive" /><span className="text-[10px] font-black uppercase text-destructive">Adelantos</span></div><span className="font-mono font-bold text-destructive">-${totals.totalAdvances.toLocaleString()}</span></div>
-                <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-primary">Ajuste (+/-)</Label><Input type="number" value={adjustmentAmount} onChange={(e) => setAdjustmentAmount(Number(e.target.value))} className="font-black" /></div>
-                <div className="space-y-2"><Label className="text-[10px] font-black uppercase">Motivo</Label><Input value={adjustmentReason} onChange={(e) => setAdjustmentReason(e.target.value)} className="h-10 text-xs" /></div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-primary">Ajuste (+/-)</Label><Input type="number" value={adjustmentAmount} onChange={(e) => setAdjustmentAmount(Number(e.target.value))} className="font-black h-9" /></div>
+                  <div className="space-y-2"><Label className="text-[10px] font-black uppercase">Motivo Ajuste</Label><Input value={adjustmentReason} onChange={(e) => setAdjustmentReason(e.target.value.toUpperCase())} className="h-9 text-[10px]" /></div>
+                </div>
+
+                <div className="space-y-2 pt-2 border-t">
+                  <Label className="text-[10px] font-black uppercase flex items-center gap-2 text-slate-600"><MessageSquare className="h-3 w-3" /> Novedades / Notas de Nómina</Label>
+                  <Textarea 
+                    placeholder="Escriba aquí notas que aparecerán en el PDF..." 
+                    className="min-h-[80px] text-xs font-medium"
+                    value={payrollNotes}
+                    onChange={(e) => setPayrollNotes(e.target.value)}
+                  />
+                </div>
               </div>
             </div>
+
             <div className="p-6 bg-slate-900 rounded-2xl text-white shadow-xl space-y-1"><p className="text-[10px] font-black uppercase text-white/40 tracking-[0.2em]">Neto a Pagar</p><p className="text-4xl font-black text-green-400">${totals.netPaid.toLocaleString()}</p></div>
             <Button className="w-full h-14 font-black text-sm uppercase tracking-widest shadow-lg bg-green-600 hover:bg-green-700" onClick={handleGeneratePayroll} disabled={isProcessing || (pendingInterventions.length === 0 && pendingAdvances.length === 0)}>{isProcessing ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Save className="h-5 w-5 mr-2" />} FINALIZAR Y LIQUIDAR</Button>
           </CardContent>

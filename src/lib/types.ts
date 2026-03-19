@@ -111,6 +111,7 @@ export interface PayrollRecord {
   netPaid: number;         // El 50% + ajuste
   adjustmentAmount: number;
   adjustmentReason?: string;
+  notes?: string;          // Novedades o notas sobre la nómina
   itemsCount: number;
   processedInterventionIds: string[];
   processedAdvanceIds: string[];
