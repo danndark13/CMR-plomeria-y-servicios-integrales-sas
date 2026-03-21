@@ -1,4 +1,4 @@
-
+﻿
 "use client"
 
 import { useState, useMemo } from "react"
@@ -404,6 +404,21 @@ export default function PayrollHubPage() {
     }
   }
 
+  const handleTogglePaid = async (record: PayrollRecord) => {
+    if (!db) return
+    const nowPaid = !record.isPaid
+    try {
+      const { updateDoc } = await import("firebase/firestore")
+      await updateDoc(doc(db, "payroll_history", record.id), {
+        isPaid: nowPaid,
+        paidAt: nowPaid ? new Date().toISOString() : null
+      })
+      toast({ title: nowPaid ? "Nómina marcada como PAGADA ✅" : "Nómina marcada como PENDIENTE" })
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al actualizar estado" })
+    }
+  }
+
   if (!selectedTechId) {
     return (
       <div className="flex flex-col gap-8">
@@ -485,6 +500,7 @@ export default function PayrollHubPage() {
                     <TableHead className="font-black uppercase text-[10px]">Referencia</TableHead>
                     <TableHead className="font-black uppercase text-[10px]">Técnico</TableHead>
                     <TableHead className="font-black uppercase text-[10px]">Fecha</TableHead>
+                    <TableHead className="font-black uppercase text-[10px]">Estado Pago</TableHead>
                     <TableHead className="text-right font-black uppercase text-[10px]">Neto Pagado</TableHead>
                     <TableHead className="text-right font-black uppercase text-[10px]">Acciones</TableHead>
                   </TableRow></TableHeader>
@@ -506,7 +522,19 @@ export default function PayrollHubPage() {
                         <TableCell><Badge variant="outline" className="font-mono font-black text-primary border-primary/20">{liq.id}</Badge></TableCell>
                         <TableCell><span className="font-bold uppercase text-xs">{(allTechnicians.find(t => t.id === liq.technicianId)?.name || liq.technicianId).toUpperCase()}</span></TableCell>
                         <TableCell><span className="text-[10px] font-bold text-slate-500 uppercase">{new Date(liq.date).toLocaleDateString()}</span></TableCell>
-                        <TableCell className="text-right font-mono font-black text-green-600">${liq.netPaid.toLocaleString()}</TableCell>
+                        <TableCell>
+                          <button
+                            onClick={() => handleTogglePaid(liq)}
+                            title={liq.isPaid ? `Pagado el ${liq.paidAt ? new Date(liq.paidAt).toLocaleDateString() : ""}. Clic para marcar como pendiente` : "Clic para marcar como pagada"}
+                            className="flex items-center gap-1 cursor-pointer"
+                          >
+                            {liq.isPaid
+                              ? <Badge className="bg-green-500 hover:bg-green-600 text-white font-black text-[10px] gap-1"><CheckCircle2 className="h-3 w-3" />PAGADA</Badge>
+                              : <Badge variant="outline" className="text-orange-500 border-orange-400 hover:bg-orange-50 font-black text-[10px] gap-1"><AlertCircle className="h-3 w-3" />PENDIENTE</Badge>
+                            }
+                          </button>
+                        </TableCell>
+                         <TableCell className="text-right font-mono font-black text-green-600">${liq.netPaid.toLocaleString()}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             {isDev && (

@@ -115,6 +115,8 @@ export interface PayrollRecord {
   itemsCount: number;
   processedInterventionIds: string[];
   processedAdvanceIds: string[];
+  isPaid?: boolean;        // Si la nómina ya fue pagada al técnico
+  paidAt?: string;         // Fecha en que se marcó como pagada
 }
 
 export interface ServiceRequest {
