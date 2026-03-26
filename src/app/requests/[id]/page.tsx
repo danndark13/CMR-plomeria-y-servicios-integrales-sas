@@ -67,6 +67,7 @@ import { FirestorePermissionError } from '@/firebase/errors'
 import { cn } from "@/lib/utils"
 
 const UNITS: UnitOfMeasure[] = ['UND', 'KG', 'MTS', 'GL', 'PAR', 'LB', 'PQ', 'VIAJE']
+const VISIT_FEE = 20000
 
 export default function RequestDetailPage() {
   const { id } = useParams()
@@ -784,14 +785,28 @@ export default function RequestDetailPage() {
                 </div>
               </div>
 
-              <div className="pt-4 space-y-2 border-t">
+              <div className="pt-4 space-y-2 border-t font-mono">
                 <p className="text-[10px] font-black uppercase text-muted-foreground text-center">Resumen Financiero del Expediente</p>
                 <div className="p-4 bg-primary text-white rounded-xl shadow-lg space-y-2">
-                  <div className="flex justify-between text-xs font-bold opacity-80 uppercase"><span>Bruto Total:</span><span>${interventions.reduce((s,i) => s + i.reportedValue, 0).toLocaleString()}</span></div>
-                  <div className="flex justify-between text-xs font-bold opacity-80 uppercase"><span>Total Adelantos:</span><span>-${advances.reduce((s,a) => s + a.amount, 0).toLocaleString()}</span></div>
+                  <div className="flex justify-between text-[10px] font-bold opacity-80 uppercase">
+                    <span>Bruto Reportado:</span>
+                    <span>${interventions.reduce((s,i) => s + i.reportedValue, 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-[10px] font-bold opacity-80 uppercase">
+                    <span>Total Visitas:</span>
+                    <span>${(interventions.filter(i => i.isSimpleVisit).length * VISIT_FEE).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-[10px] font-bold opacity-80 uppercase text-orange-200">
+                    <span>Adelantos Téc:</span>
+                    <span>-${advances.reduce((s,a) => s + a.amount, 0).toLocaleString()}</span>
+                  </div>
                   <div className="pt-2 border-t border-white/20 flex justify-between items-center">
                     <span className="text-[10px] font-black uppercase">Por Cobrar:</span>
-                    <span className="text-xl font-black">${(interventions.reduce((s,i) => s + i.reportedValue, 0)).toLocaleString()}</span>
+                    <span className="text-xl font-black">
+                      ${(
+                        interventions.reduce((s,i) => s + i.reportedValue + (i.isSimpleVisit ? VISIT_FEE : 0), 0)
+                      ).toLocaleString()}
+                    </span>
                   </div>
                 </div>
               </div>

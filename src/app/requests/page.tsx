@@ -52,10 +52,13 @@ import { FirestorePermissionError } from '@/firebase/errors'
 import { ServiceRequest, ServiceStatus } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
+const FINISHED_STATUSES = new Set(["completed", "cancelled"])
+
 export default function RequestsPage() {
   const router = useRouter()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCompanyFilter, setSelectedCompanyFilter] = useState<string>("ALL")
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("ALL")
   const [isCreating, setIsCreating] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   
@@ -130,9 +133,17 @@ export default function RequestsPage() {
         (req.insuredName || "").toLowerCase().includes(searchTerm.toLowerCase())
       )
       const matchesCompany = selectedCompanyFilter === "ALL" || req.companyId === selectedCompanyFilter
-      return matchesSearch && matchesCompany
-    }).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
-  }, [allRequests, searchTerm, selectedCompanyFilter])
+      const matchesStatus = selectedStatusFilter === "ALL" || req.status === selectedStatusFilter
+      return matchesSearch && matchesCompany && matchesStatus
+    }).sort((a, b) => {
+      const aFinished = FINISHED_STATUSES.has(a.status)
+      const bFinished = FINISHED_STATUSES.has(b.status)
+      // Active records first; finished records last
+      if (aFinished !== bFinished) return aFinished ? 1 : -1
+      // Within the same group: newest first
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    })
+  }, [allRequests, searchTerm, selectedCompanyFilter, selectedStatusFilter])
 
   const allCompanies = useMemo(() => {
     const combined = [...(firestoreCompanies || [])]
@@ -306,7 +317,7 @@ export default function RequestsPage() {
             </div>
             
             {!isTech && (
-              <div className="flex items-center gap-3 w-full lg:w-auto">
+              <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
                 <span className="text-[10px] font-black uppercase text-muted-foreground shrink-0"><Filter className="h-3 w-3 inline mr-1" /> Empresa:</span>
                 <Select value={selectedCompanyFilter} onValueChange={setSelectedCompanyFilter}>
                   <SelectTrigger className="h-10 w-full lg:w-[220px] font-bold uppercase text-[11px] border-primary/20">
@@ -317,6 +328,22 @@ export default function RequestsPage() {
                     {allCompanies.map(c => (
                       <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+
+                <span className="text-[10px] font-black uppercase text-muted-foreground shrink-0">Estado:</span>
+                <Select value={selectedStatusFilter} onValueChange={setSelectedStatusFilter}>
+                  <SelectTrigger className="h-10 w-full lg:w-[180px] font-bold uppercase text-[11px] border-primary/20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">TODOS LOS ESTADOS</SelectItem>
+                    <SelectItem value="pending">Pendiente</SelectItem>
+                    <SelectItem value="assigned">Programado</SelectItem>
+                    <SelectItem value="in_progress">En Proceso</SelectItem>
+                    <SelectItem value="completed">Finalizado</SelectItem>
+                    <SelectItem value="cancelled">Cancelado</SelectItem>
+                    <SelectItem value="warranty">Garantía</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

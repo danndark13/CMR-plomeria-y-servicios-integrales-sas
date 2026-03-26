@@ -144,4 +144,5 @@ export interface ServiceRequest {
   billingConsecutive?: string;
   createdAt: string;
   updatedAt: string;
+  createdBy?: string;
 }

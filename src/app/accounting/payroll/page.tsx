@@ -237,7 +237,7 @@ export default function PayrollHubPage() {
           tableRows.push([
             req.claimNumber,
             `${i.type}${i.isSimpleVisit ? ' (VISITA)' : ''}`,
-            `$${i.reportedValue.toLocaleString()}`,
+            `$${(i.reportedValue - internalFee).toLocaleString()}`,
             `-$${(matCost + rentals).toLocaleString()}`,
             `$${techNet.toLocaleString()}`
           ])
@@ -625,7 +625,7 @@ export default function PayrollHubPage() {
                     return (
                       <TableRow key={item.id} className={cn(item.isSimpleVisit && "bg-orange-50/30")}>
                         <TableCell><div className="flex flex-col"><span className="font-mono font-black text-primary text-xs">{item.request.claimNumber}</span><span className="text-[8px] font-bold text-slate-400 uppercase">{item.type} {item.isSimpleVisit && '(VISITA)'}</span></div></TableCell>
-                        <TableCell className="text-right font-mono font-bold text-slate-700">${(item.reportedValue || 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono font-bold text-slate-700">${(() => { const sub = (item.reportedValue||0) - (materialExpenses+rentals); const f = sub > 0 ? sub*0.10 : 0; return ((item.reportedValue||0) - f).toLocaleString() })()}</TableCell>
                         <TableCell className="text-right font-mono text-xs text-destructive">-${totalCosts.toLocaleString()}</TableCell>
                         <TableCell className="text-right font-mono font-black text-primary">${techNet.toLocaleString()}</TableCell>
                       </TableRow>
