@@ -343,11 +343,13 @@ export default function QuotesPage() {
                       <span className="text-[9px] text-muted-foreground">{quote.clientEmail || 'Sin email'}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-xs font-medium">{new Date(quote.date).toLocaleDateString()}</TableCell>
-                  <TableCell className="text-right font-mono font-black text-slate-800">${quote.total.toLocaleString()}</TableCell>
+                  <TableCell className="text-xs font-medium">
+                    {quote.date ? new Date(quote.date).toLocaleDateString() : 'N/A'}
+                  </TableCell>
+                  <TableCell className="text-right font-mono font-black text-slate-800">${(quote.total || 0).toLocaleString()}</TableCell>
                   <TableCell className="text-center">
                     <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-[9px] font-black uppercase">
-                      {quote.status}
+                      {quote.status || 'draft'}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">

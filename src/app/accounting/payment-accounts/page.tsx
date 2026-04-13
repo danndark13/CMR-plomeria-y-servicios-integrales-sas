@@ -355,8 +355,10 @@ export default function PaymentAccountsPage() {
                   </TableCell>
                   <TableCell><span className="font-mono font-black text-primary">{acc.reference || '---'}</span></TableCell>
                   <TableCell><span className="font-bold text-sm uppercase">{acc.clientName}</span></TableCell>
-                  <TableCell className="text-xs">{new Date(acc.date).toLocaleDateString()}</TableCell>
-                  <TableCell className="text-right font-mono font-black text-slate-800">${acc.total.toLocaleString()}</TableCell>
+                  <TableCell className="text-xs">
+                    {acc.date ? new Date(acc.date).toLocaleDateString() : 'N/A'}
+                  </TableCell>
+                  <TableCell className="text-right font-mono font-black text-slate-800">${(acc.total || 0).toLocaleString()}</TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:bg-blue-50">
                       <Printer className="h-4 w-4" />
