@@ -3,10 +3,27 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Receipt, Wallet, ArrowRight, DollarSign, Calculator, BarChart3, TrendingUp } from "lucide-react"
-import Link from "next/link"
+import { Receipt, Wallet, ArrowRight, DollarSign, Calculator, BarChart3, TrendingUp, FileText } from "lucide-react"
+import { useFirestore, useDoc, useMemoFirebase, useUser } from "@/firebase"
+import { doc } from "firebase/firestore"
+import { Loader2 } from "lucide-react"
 
 export default function AccountingHubPage() {
+  const db = useFirestore()
+  const { user, isUserLoading } = useUser()
+
+  const profileRef = useMemoFirebase(() => {
+    if (!db || !user) return null
+    return doc(db, "user_profiles", user.uid)
+  }, [db, user])
+
+  const { data: profile, isLoading: isProfileLoading } = useDoc(profileRef)
+
+  const role = profile?.roleId || "Sin Rol"
+  const isAdmin = role === 'Administrador' || role === 'Gerente' || role === 'Desarrollador'
+  const isAccounting = role === 'Contabilidad' || isAdmin
+  const isService = role === 'Servicio al Cliente'
+
   const modules = [
     {
       title: "Balance General",
@@ -14,7 +31,8 @@ export default function AccountingHubPage() {
       icon: BarChart3,
       href: "/accounting/balance",
       color: "text-primary",
-      bgColor: "bg-primary/10"
+      bgColor: "bg-primary/10",
+      show: isAccounting
     },
     {
       title: "Facturación y Conciliación",
@@ -22,7 +40,8 @@ export default function AccountingHubPage() {
       icon: Receipt,
       href: "/accounting/billing",
       color: "text-blue-600",
-      bgColor: "bg-blue-50"
+      bgColor: "bg-blue-50",
+      show: isAccounting
     },
     {
       title: "Nómina y Liquidación",
@@ -30,9 +49,39 @@ export default function AccountingHubPage() {
       icon: Wallet,
       href: "/accounting/payroll",
       color: "text-green-600",
-      bgColor: "bg-green-50"
+      bgColor: "bg-green-50",
+      show: isAccounting
+    },
+    {
+      title: "Cotizaciones",
+      description: "Genera propuestas comerciales para clientes nuevos o existentes con referencias únicas.",
+      icon: Calculator,
+      href: "/accounting/quotes",
+      color: "text-orange-600",
+      bgColor: "bg-orange-50",
+      show: isAccounting || isService
+    },
+    {
+      title: "Cuentas de Cobro",
+      description: "Crea documentos de cobro para personas naturales o empresas con conversión a letras automática.",
+      icon: FileText,
+      href: "/accounting/payment-accounts",
+      color: "text-purple-600",
+      bgColor: "bg-purple-50",
+      show: isAccounting || isService
     }
   ]
+
+  const visibleModules = modules.filter(m => m.show)
+
+  if (isUserLoading || isProfileLoading) {
+    return (
+      <div className="h-60 flex flex-col items-center justify-center gap-4 bg-white rounded-xl border border-dashed">
+        <Loader2 className="h-8 w-8 animate-spin text-primary opacity-20" />
+        <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Verificando permisos...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-8">
@@ -41,8 +90,8 @@ export default function AccountingHubPage() {
         <p className="text-muted-foreground font-medium">Gestión financiera centralizada para administradores y contadores.</p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        {modules.map((module) => (
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {visibleModules.map((module) => (
           <Card key={module.href} className="hover:shadow-xl transition-all group overflow-hidden border-l-4 border-l-primary flex flex-col">
             <CardHeader className="pb-4 flex-1">
               <div className="flex items-center gap-4">

@@ -78,7 +78,8 @@ export function CRMSidebar() {
   const isDev = role === 'Desarrollador'
   const isAdmin = role === 'Administrador' || role === 'Gerente' || isDev
   const isTech = role === 'Técnico'
-  const isAccounting = role === 'Contabilidad' || isAdmin
+  const isService = role === 'Servicio al Cliente'
+  const isAccounting = role === 'Contabilidad' || isAdmin || isService
 
   const navigationItems = [
     { title: "Panel Principal", icon: LayoutDashboard, href: "/", show: true },

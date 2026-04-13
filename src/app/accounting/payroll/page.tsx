@@ -115,6 +115,19 @@ export default function PayrollHubPage() {
     )
   }, [allRequests, selectedTechId])
 
+  const interventionsToApprove = useMemo(() => {
+    return (allRequests || []).flatMap((req: ServiceRequest) => 
+      (req.interventions || [])
+        .filter((i: any) => {
+          const notProcessed = i.payrollStatus !== 'processed'
+          const notApproved = !i.isReadyForPayroll
+          const notValidated = req.billingStatus !== 'validated'
+          return notProcessed && notApproved && notValidated
+        })
+        .map((i: any) => ({ ...i, request: req }))
+    )
+  }, [allRequests])
+
   const pendingAdvances = useMemo(() => {
     return (allRequests || []).flatMap((req: ServiceRequest) => 
       (req.advances || [])
@@ -367,6 +380,31 @@ export default function PayrollHubPage() {
     }
   }
 
+  const handleApproveIntervention = async (reqId: string, interventionId: string) => {
+    if (!db) return
+    setIsProcessing(true)
+    try {
+      const req = (allRequests || []).find(r => r.id === reqId)
+      if (!req) return
+      
+      const updatedInterventions = req.interventions.map((i: any) => {
+        if (i.id === interventionId) return { ...i, isReadyForPayroll: true }
+        return i
+      })
+      
+      await updateDoc(doc(db, "service_requests", reqId), { 
+        interventions: updatedInterventions, 
+        updatedAt: new Date().toISOString() 
+      })
+      
+      toast({ title: "Servicio Aprobado", description: "El servicio ya puede ser liquidado en nómina." })
+    } catch (error) {
+      toast({ variant: "destructive", title: "Error al aprobar" })
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
   const handleDeletePayroll = async (record: PayrollRecord) => {
     if (!db || !isDev) return
     setIsProcessing(true)
@@ -428,8 +466,11 @@ export default function PayrollHubPage() {
         </div>
 
         <Tabs defaultValue="liquidar" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 max-w-[400px] mb-8 h-12 bg-slate-100 p-1">
+          <TabsList className="grid w-full grid-cols-3 max-w-[600px] mb-8 h-12 bg-slate-100 p-1">
             <TabsTrigger value="liquidar" className="font-black uppercase text-[10px] tracking-widest data-[state=active]:bg-primary data-[state=active]:text-white transition-all">LIQUIDAR TÉCNICOS</TabsTrigger>
+            <TabsTrigger value="por-aprobar" className="font-black uppercase text-[10px] tracking-widest data-[state=active]:bg-orange-600 data-[state=active]:text-white transition-all">
+              POR APROBAR {interventionsToApprove.length > 0 && <Badge className="ml-2 bg-white text-orange-600 h-4 px-1 text-[8px] animate-pulse">{interventionsToApprove.length}</Badge>}
+            </TabsTrigger>
             <TabsTrigger value="historial" className="font-black uppercase text-[10px] tracking-widest data-[state=active]:bg-primary data-[state=active]:text-white transition-all">HISTORIAL DE PAGOS</TabsTrigger>
           </TabsList>
 
@@ -471,6 +512,59 @@ export default function PayrollHubPage() {
                 </div>
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="por-aprobar">
+            <Card className="shadow-xl border-t-4 border-t-orange-500">
+              <CardHeader className="bg-slate-50/80 border-b">
+                <CardTitle className="text-sm font-black flex items-center gap-2 uppercase tracking-wider text-orange-700">
+                  <Calculator className="h-4 w-4" /> Servicios Pendientes de Autorización
+                </CardTitle>
+                <CardDescription className="text-[10px] font-bold uppercase">Habilite servicios de expedientes no validados para incluirlos en el pago de nómina.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/30">
+                      <TableHead className="font-black uppercase text-[10px]">Técnico</TableHead>
+                      <TableHead className="font-black uppercase text-[10px]">Expediente</TableHead>
+                      <TableHead className="font-black uppercase text-[10px]">Servicio</TableHead>
+                      <TableHead className="text-right font-black uppercase text-[10px]">Valor Reportado</TableHead>
+                      <TableHead className="text-right font-black uppercase text-[10px]">Acción</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isRequestsLoading ? (
+                      <TableRow><TableCell colSpan={5} className="h-40 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary opacity-20" /></TableCell></TableRow>
+                    ) : interventionsToApprove.length === 0 ? (
+                      <TableRow><TableCell colSpan={5} className="h-40 text-center italic text-muted-foreground">No hay servicios pendientes de aprobación.</TableCell></TableRow>
+                    ) : interventionsToApprove.map((i: any) => (
+                      <TableRow key={i.id} className="hover:bg-primary/5">
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                             <Avatar className="h-6 w-6"><AvatarImage src={`https://picsum.photos/seed/${i.technicianId}/50/50`} /><AvatarFallback>{i.technicianId.substring(0,2)}</AvatarFallback></Avatar>
+                             <span className="font-black text-[10px] uppercase truncate max-w-[100px]">{i.technicianId}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell><span className="font-mono font-black text-primary text-xs">{i.request.claimNumber}</span></TableCell>
+                        <TableCell><span className="text-[10px] font-bold uppercase">{i.type}</span></TableCell>
+                        <TableCell className="text-right font-mono font-bold text-slate-600">${i.reportedValue?.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">
+                          <Button 
+                            size="sm" 
+                            className="bg-orange-600 hover:bg-orange-700 font-black text-[9px] uppercase h-8 px-4"
+                            onClick={() => handleApproveIntervention(i.request.id, i.id)}
+                            disabled={isProcessing}
+                          >
+                            AUTORIZAR PAGO
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="historial">

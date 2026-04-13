@@ -146,3 +146,50 @@ export interface ServiceRequest {
   updatedAt: string;
   createdBy?: string;
 }
+
+export interface QuoteItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+export interface Quote {
+  id: string;
+  reference: string;
+  clientName: string;
+  clientId?: string; // Optional reference to AssistanceCompany
+  clientEmail?: string;
+  clientPhone?: string;
+  date: string;
+  items: QuoteItem[];
+  subtotal: number;
+  tax: number; // IVA
+  total: number;
+  notes?: string;
+  status: 'draft' | 'sent' | 'accepted' | 'rejected';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentAccount {
+  id: string;
+  type: 'natural' | 'company';
+  issuerName: string;
+  issuerId: string; // NIT or CC
+  issuerPhone?: string;
+  issuerAddress?: string;
+  bankName?: string;
+  accountType?: 'ahorros' | 'corriente';
+  accountNumber?: string;
+  clientName: string;
+  clientDetails?: string;
+  date: string;
+  items: QuoteItem[];
+  total: number;
+  totalInWords: string;
+  reference?: string;
+  createdAt: string;
+  updatedAt: string;
+}
