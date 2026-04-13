@@ -118,7 +118,7 @@ export default function RequestsPage() {
 
     if (isTech && profile) {
       return combined.filter(req => 
-        req.interventions?.some(i => i.technicianId === profile.username) ||
+        req.interventions?.some((i: any) => i.technicianId === profile.username) ||
         req.scheduledVisit?.technicianId === profile.username
       );
     }

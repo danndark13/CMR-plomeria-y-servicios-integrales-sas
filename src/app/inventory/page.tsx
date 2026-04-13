@@ -86,9 +86,9 @@ export default function InventoryPage() {
   const getFieldStockForTech = (techId: string) => {
     const unusedExpenses: Expense[] = []
     allRequests.forEach((req: ServiceRequest) => {
-      (req.interventions || []).forEach(interv => {
+      (req.interventions || []).forEach((interv: any) => {
         if (interv.technicianId === techId) {
-          (interv.detailedExpenses || []).forEach(exp => {
+          (interv.detailedExpenses || []).forEach((exp: any) => {
             if (exp.isUnused === true && !exp.isReturned) {
               unusedExpenses.push(exp)
             }
@@ -97,7 +97,7 @@ export default function InventoryPage() {
       })
     })
 
-    const grouped = unusedExpenses.reduce((acc, exp) => {
+    const grouped = unusedExpenses.reduce((acc: Record<string, { description: string, quantity: number, unit: string, unitValue: number }>, exp: Expense) => {
       const key = exp.description.toUpperCase().trim()
       if (!acc[key]) {
         acc[key] = { description: key, quantity: 0, unit: exp.unit || 'UND', unitValue: exp.unitValue || 0 }
@@ -119,9 +119,16 @@ export default function InventoryPage() {
 
       for (const req of allRequests) {
         if (remainingToProcess <= 0) break
-        const updatedInterventions = (req.interventions || []).map(interv => {
+        const totalExpenses = (allRequests || []).reduce((acc: number, req: ServiceRequest) => {
+          const expenses = (req.interventions || []).reduce((s: number, interv: any) => {
+            const materialCosts = (interv.detailedExpenses || []).filter((exp: any) => !exp.isUnused).reduce((sum: number, exp: any) => sum + (exp.amount || 0), 0)
+            return s + materialCosts
+          }, 0)
+          return acc + expenses
+        }, 0)
+        const updatedInterventions = (req.interventions || []).map((interv: any) => {
           if (interv.technicianId !== techId) return interv
-          const updatedExpenses = (interv.detailedExpenses || []).map(exp => {
+          const updatedExpenses = (interv.detailedExpenses || []).map((exp: any) => {
             if (remainingToProcess > 0 && exp.description.toUpperCase().trim() === itemDescription.toUpperCase().trim() && exp.isUnused && !exp.isReturned) {
               const returningFromThis = Math.min(remainingToProcess, exp.quantity || 1)
               remainingToProcess -= returningFromThis

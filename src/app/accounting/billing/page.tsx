@@ -198,7 +198,7 @@ export default function BillingReportPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">{selectedCompany.name}</h1>
+            <h1 className="text-3xl font-black tracking-tighter text-primary uppercase">{selectedCompany?.name || 'Facturación'}</h1>
             <p className="text-muted-foreground font-medium">Gestión de cartera independiente.</p>
           </div>
         </div>
@@ -332,8 +332,9 @@ export default function BillingReportPage() {
                 <p className="text-lg font-bold">Sin facturas generadas para esta empresa</p>
               </Card>
             ) : Object.entries(groupedByInvoice).sort((a,b) => b[0].localeCompare(a[0])).map(([invoiceNum, requests]) => {
-              const totalFactura = requests.reduce((sum, r) => sum + (r.approvedAmount || 0), 0)
-              const firstReq = requests[0]
+              const typedRequests = requests as ServiceRequest[]
+              const totalFactura = typedRequests.reduce((sum: number, r: ServiceRequest) => sum + (r.approvedAmount || 0), 0)
+              const firstReq = typedRequests[0]
               
               return (
                 <Card key={invoiceNum} className="overflow-hidden border-none shadow-lg group">
@@ -349,7 +350,7 @@ export default function BillingReportPage() {
                             CONS: {firstReq.billingConsecutive || '---'}
                           </Badge>
                         </div>
-                        <p className="text-[10px] text-white/60 font-medium uppercase">{requests.length} expedientes asociados</p>
+                        <p className="text-[10px] text-white/60 font-medium uppercase">{typedRequests.length} expedientes asociados</p>
                       </div>
                     </div>
                     <div className="text-right">
@@ -366,7 +367,7 @@ export default function BillingReportPage() {
                         <TableHead></TableHead>
                       </TableRow></TableHeader>
                       <TableBody>
-                        {requests.map((req) => (
+                        {typedRequests.map((req: ServiceRequest) => (
                           <TableRow key={req.id} className="hover:bg-primary/5 transition-colors">
                             <TableCell><span className="font-mono font-black text-primary">{req.claimNumber}</span></TableCell>
                             <TableCell><span className="font-bold text-xs uppercase">{req.insuredName}</span></TableCell>

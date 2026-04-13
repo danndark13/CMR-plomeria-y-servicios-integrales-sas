@@ -35,10 +35,10 @@ export default function CalendarPage() {
   const selectedDateStr = date?.toLocaleDateString() || ""
   
   // Combine historical interventions and scheduled visits for the calendar
-  const eventsForDay = allRequests.flatMap(req => {
+  const eventsForDay = allRequests.flatMap((req: any) => {
     const historicalInterventions = (req.interventions || [])
-      .filter(i => new Date(i.date).toLocaleDateString() === selectedDateStr)
-      .map(i => ({ 
+      .filter((i: any) => new Date(i.date).toLocaleDateString() === selectedDateStr)
+      .map((i: any) => ({ 
         id: i.id,
         date: i.date, 
         type: i.type, 

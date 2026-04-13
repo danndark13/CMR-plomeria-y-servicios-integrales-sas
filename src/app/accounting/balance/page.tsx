@@ -104,9 +104,9 @@ export default function BalanceGeneralPage() {
   const stats = useMemo(() => {
     if (!allRequests || !payrollHistory) return null
 
-    const filteredReqs = allRequests.filter(r => 
-      isInPeriod(r.createdAt || r.updatedAt, period) && 
-      (techFilter === 'ALL' || r.interventions?.some(i => i.technicianId === techFilter))
+    const filteredReqs = (allRequests as ServiceRequest[]).filter(r => 
+      isInPeriod(r.createdAt || r.updatedAt || '', period) && 
+      (techFilter === 'ALL' || r.interventions?.some((i: any) => i.technicianId === techFilter))
     )
 
     const filteredPay = (payrollHistory as PayrollRecord[]).filter(p => 

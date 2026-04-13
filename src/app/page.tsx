@@ -112,7 +112,7 @@ export default function DashboardPage() {
 
     if (isTech && profile) {
       return combined.filter(req => 
-        req.interventions?.some(i => i.technicianId === profile.username) ||
+        req.interventions?.some((i: any) => i.technicianId === profile.username) ||
         req.scheduledVisit?.technicianId === profile.username
       );
     }
@@ -210,10 +210,10 @@ export default function DashboardPage() {
   }
 
   const todayStr = new Date().toLocaleDateString()
-  const todayVisits = allRequests.flatMap(req => 
+  const todayVisits = allRequests.flatMap((req: ServiceRequest) => 
     (req.interventions || [])
-      .filter(i => new Date(i.date).toLocaleDateString() === todayStr && (isTech ? i.technicianId === profile?.username : true))
-      .map(i => ({ ...i, request: req }))
+      .filter((i: any) => new Date(i.date).toLocaleDateString() === todayStr && (isTech ? i.technicianId === profile?.username : true))
+      .map((i: any) => ({ ...i, request: req }))
   ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
   const canCreate = isAdmin || profile?.roleId === 'Servicio al Cliente'

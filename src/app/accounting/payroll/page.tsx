@@ -1,4 +1,4 @@
-﻿
+
 "use client"
 
 import { useState, useMemo } from "react"
@@ -102,24 +102,24 @@ export default function PayrollHubPage() {
   const selectedTech = allTechnicians.find(t => t.id === selectedTechId)
 
   const pendingInterventions = useMemo(() => {
-    return (allRequests || []).flatMap(req => 
+    return (allRequests || []).flatMap((req: ServiceRequest) => 
       (req.interventions || [])
-        .filter(i => {
+        .filter((i: any) => {
           const isCorrectTech = i.technicianId === selectedTechId
           const notProcessed = i.payrollStatus !== 'processed'
           const caseValidated = req.billingStatus === 'validated'
           const earlyApproved = i.isReadyForPayroll === true
           return isCorrectTech && notProcessed && (caseValidated || earlyApproved)
         })
-        .map(i => ({ ...i, request: req }))
+        .map((i: any) => ({ ...i, request: req }))
     )
   }, [allRequests, selectedTechId])
 
   const pendingAdvances = useMemo(() => {
-    return (allRequests || []).flatMap(req => 
+    return (allRequests || []).flatMap((req: ServiceRequest) => 
       (req.advances || [])
-        .filter(a => a.technicianId === selectedTechId && !a.isPaidInPayroll)
-        .map(a => ({ ...a, request: req }))
+        .filter((a: any) => a.technicianId === selectedTechId && !a.isPaidInPayroll)
+        .map((a: any) => ({ ...a, request: req }))
     )
   }, [allRequests, selectedTechId])
 
@@ -131,9 +131,9 @@ export default function PayrollHubPage() {
     let accumulatedToSplit = 0
     let totalSimpleVisitBonus = 0 
 
-    pendingInterventions.forEach(i => {
+    pendingInterventions.forEach((i: any) => {
       const gross = i.reportedValue || 0
-      const materialExpenses = (i.detailedExpenses || []).filter(e => !e.isUnused).reduce((s, e) => s + (e.amount || 0), 0)
+      const materialExpenses = (i.detailedExpenses || []).filter((e: any) => !e.isUnused).reduce((s: number, e: any) => s + (e.amount || 0), 0)
       
       let rentals = 0
       if (i.usedRotomartillo) rentals += 80000
@@ -212,14 +212,14 @@ export default function PayrollHubPage() {
       // ITEMS TABLE
       const tableRows: any[] = []
       
-      const relatedRequests = (allRequests || []).filter(r => 
-        r.interventions?.some(i => i.payrollId === record.id)
+      const relatedRequests = (allRequests || []).filter((r: ServiceRequest) => 
+        r.interventions?.some((i: any) => i.payrollId === record.id)
       )
 
-      relatedRequests.forEach(req => {
-        const myIntervs = req.interventions.filter(i => i.payrollId === record.id)
-        myIntervs.forEach(i => {
-          const matCost = i.detailedExpenses?.filter(e => !e.isUnused).reduce((s, e) => s + (e.amount || 0), 0) || 0
+      relatedRequests.forEach((req: ServiceRequest) => {
+        const myIntervs = req.interventions.filter((i: any) => i.payrollId === record.id)
+        myIntervs.forEach((i: any) => {
+          const matCost = i.detailedExpenses?.filter((e: any) => !e.isUnused).reduce((s: number, e: any) => s + (e.amount || 0), 0) || 0
           let rentals = 0
           if (i.usedRotomartillo) rentals += 80000
           if (i.usedGeofono) rentals += 120000
@@ -249,7 +249,7 @@ export default function PayrollHubPage() {
         head: [['EXPEDIENTE', 'TIPO SERVICIO', 'VALOR BRUTO', 'DEDUCCIONES', 'PAGO NETO (50%)']],
         body: tableRows,
         theme: 'striped',
-        headStyles: { fillStyle: 'fill', fillColor: [31, 91, 204], textColor: [255, 255, 255], fontStyle: 'bold' },
+        headStyles: { fillColor: [31, 91, 204], textColor: [255, 255, 255], fontStyle: 'bold' },
         styles: { fontSize: 9, cellPadding: 3 },
         columnStyles: {
           2: { halign: 'right' },
@@ -341,14 +341,14 @@ export default function PayrollHubPage() {
       const req = (allRequests || []).find(r => r.id === reqId)
       if (!req) return
       
-      const updatedInterventions = req.interventions.map(i => {
-        const isTarget = pendingInterventions.some(pi => pi.id === i.id && pi.request.id === reqId)
+      const updatedInterventions = req.interventions.map((i: any) => {
+        const isTarget = pendingInterventions.some((pi: any) => pi.id === i.id && pi.request.id === reqId)
         if (isTarget) return { ...i, payrollStatus: 'processed' as const, payrollId, isReadyForPayroll: false }
         return i
       })
       
-      const updatedAdvances = (req.advances || []).map(a => {
-        const isTarget = pendingAdvances.some(pa => pa.id === a.id && pa.request.id === reqId)
+      const updatedAdvances = (req.advances || []).map((a: any) => {
+        const isTarget = pendingAdvances.some((pa: any) => pa.id === a.id && pa.request.id === reqId)
         if (isTarget) return { ...a, isPaidInPayroll: true, payrollId }
         return a
       })
@@ -373,19 +373,19 @@ export default function PayrollHubPage() {
     
     try {
       const batch = writeBatch(db)
-      const requestsToUpdate = (allRequests || []).filter(req => 
-        req.interventions?.some(i => i.payrollId === record.id) ||
-        req.advances?.some(a => a.payrollId === record.id)
+      const requestsToUpdate = (allRequests || []).filter((req: ServiceRequest) => 
+        req.interventions?.some((i: any) => i.payrollId === record.id) ||
+        req.advances?.some((a: any) => a.payrollId === record.id)
       )
 
-      requestsToUpdate.forEach(req => {
-        const updatedInterventions = req.interventions.map(i => {
+      requestsToUpdate.forEach((req: ServiceRequest) => {
+        const updatedInterventions = req.interventions.map((i: any) => {
           if (i.payrollId === record.id) {
             return { ...i, payrollStatus: 'pending' as const, payrollId: undefined }
           }
           return i
         })
-        const updatedAdvances = (req.advances || []).map(a => {
+        const updatedAdvances = (req.advances || []).map((a: any) => {
           if (a.payrollId === record.id) {
             return { ...a, isPaidInPayroll: false, payrollId: undefined }
           }
@@ -603,8 +603,8 @@ export default function PayrollHubPage() {
                       <TableCell className="text-right font-mono font-black text-destructive">-${adv.amount.toLocaleString()}</TableCell>
                     </TableRow>
                   ))}
-                  {pendingInterventions.map((item) => {
-                    const materialExpenses = (item.detailedExpenses || []).filter(e => !e.isUnused).reduce((s, e) => s + (e.amount || 0), 0)
+                  {pendingInterventions.map((item: any) => {
+                    const materialExpenses = (item.detailedExpenses || []).filter((e: any) => !e.isUnused).reduce((s: number, e: any) => s + (e.amount || 0), 0)
                     let rentals = 0
                     if (item.usedRotomartillo) rentals += 80000
                     if (item.usedGeofono) rentals += 120000

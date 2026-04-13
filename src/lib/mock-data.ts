@@ -1,5 +1,4 @@
-
-import { AssistanceCompany, Technician, ServiceRequest, Reminder } from './types';
+import { AssistanceCompany, Technician, ServiceRequest, PayrollRecord } from './types';
 
 /**
  * LISTADO DE EMPRESAS Y CUENTAS
@@ -30,7 +29,6 @@ export const MOCK_COMPANIES: AssistanceCompany[] = [
       'HDI (AL) GENERALES ADMINISTRATIVOS', 
       'HDI (AL) LIVIANOS', 
       'POPULAR CUENTAHABIENTES PLUS', 
-      'BANCO POPULAR VITAL',
       'COOMEVA'
     ] 
   },
@@ -73,7 +71,7 @@ export const MOCK_TECHNICIANS: Technician[] = [
   { id: 'NORVEY', name: 'NORVEY MARIN', specialties: ['Electricidad', 'Plomería'], activeTasks: 0 },
   { id: 'ANDRES', name: 'ANDRES CARRASCAL', specialties: ['Cerrajería', 'Instalación'], activeTasks: 0 },
   { id: 'NEIDER', name: 'NEIDER VANEGAS', specialties: ['Plomería', 'Destaponamiento'], activeTasks: 0 },
-  { id: 'JHOAN', name: 'JHOAN BUITRAGO', specialties: ['Plomería', 'Reparación'], activeTasks: 0 },
+  { id: 'JHOAN', name: 'JHOAN BUITRAGO', specialties: ['Plomería', 'Instalación'], activeTasks: 0 },
   { id: 'HECTOR', name: 'HECTOR', specialties: ['Vidriería', 'Cerrajería'], activeTasks: 0 },
   { id: 'URBEY', name: 'URBEY OCAMPO', specialties: ['Plomería', 'Trabajo en Alturas'], activeTasks: 0 },
   { id: 'JORGE', name: 'JORGE LOPEZ', specialties: ['Plomería', 'Instalación'], activeTasks: 0 },
@@ -87,4 +85,4 @@ export const MOCK_REQUESTS: ServiceRequest[] = [];
 /**
  * ALERTAS DE PRUEBA
  */
-export const MOCK_REMINDERS: Reminder[] = [];
+export const MOCK_REMINDERS: any[] = [];
