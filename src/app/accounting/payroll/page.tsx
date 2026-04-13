@@ -38,7 +38,7 @@ import {
 import { MOCK_TECHNICIANS } from "@/lib/mock-data"
 import { toast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from "@/firebase"
-import { collection, doc, writeBatch, deleteDoc, query, where, orderBy } from "firebase/firestore"
+import { collection, doc, writeBatch, deleteDoc, query, where, orderBy, updateDoc } from "firebase/firestore"
 import { TechnicianIntervention, ServiceRequest, PayrollRecord, Advance } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { jsPDF } from "jspdf"
