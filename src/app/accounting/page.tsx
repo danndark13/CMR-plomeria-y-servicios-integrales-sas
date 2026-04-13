@@ -7,6 +7,7 @@ import { Receipt, Wallet, ArrowRight, DollarSign, Calculator, BarChart3, Trendin
 import { useFirestore, useDoc, useMemoFirebase, useUser } from "@/firebase"
 import { doc } from "firebase/firestore"
 import { Loader2 } from "lucide-react"
+import Link from "next/link"
 
 export default function AccountingHubPage() {
   const db = useFirestore()
