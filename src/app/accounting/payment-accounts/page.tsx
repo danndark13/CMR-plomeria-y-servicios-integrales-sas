@@ -39,6 +39,11 @@ export default function PaymentAccountsPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [isSaving, setIsSaving] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Form State
   const [formData, setFormData] = useState({
@@ -147,6 +152,8 @@ export default function PaymentAccountsPage() {
     (a.reference || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
     (a.clientName || "").toLowerCase().includes(searchTerm.toLowerCase())
   )
+
+  if (!mounted) return null
 
   return (
     <div className="flex flex-col gap-8 animate-in fade-in slide-in-from-right-4">
