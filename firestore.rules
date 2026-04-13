@@ -100,5 +100,19 @@ service cloud.firestore {
     match /chats/{chatId}/messages/{messageId} {
       allow read, write: if isSignedIn();
     }
+
+    match /quotes/{quoteId} {
+      allow get, list: if isSignedIn() && (isAdmin() || isAccounting() || hasRole('Servicio al Cliente'));
+      allow create: if isSignedIn() && (isAdmin() || isAccounting() || hasRole('Servicio al Cliente'));
+      allow update: if isSignedIn() && (isAdmin() || isAccounting());
+      allow delete: if isDev();
+    }
+
+    match /payment_accounts/{accountId} {
+      allow get, list: if isSignedIn() && (isAdmin() || isAccounting() || hasRole('Servicio al Cliente'));
+      allow create: if isSignedIn() && (isAdmin() || isAccounting() || hasRole('Servicio al Cliente'));
+      allow update: if isSignedIn() && (isAdmin() || isAccounting());
+      allow delete: if isDev();
+    }
   }
 }

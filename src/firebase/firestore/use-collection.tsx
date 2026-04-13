@@ -87,10 +87,14 @@ export function useCollection<T = any>(
       (err: FirestoreError) => {
         // Only propagate permission-denied errors to the global listener
         if (err.code === 'permission-denied') {
-          const path: string =
-            memoizedTargetRefOrQuery.type === 'collection'
+          let path = 'Unknown'
+          try {
+            path = memoizedTargetRefOrQuery.type === 'collection'
               ? (memoizedTargetRefOrQuery as CollectionReference).path
-              : (memoizedTargetRefOrQuery as unknown as InternalQuery)._query.path.canonicalString()
+              : (memoizedTargetRefOrQuery as any)._query?.path?.canonicalString() || 'Query'
+          } catch (e) {
+            console.warn("[useCollection] Failed to extract path for permission error", e)
+          }
 
           const contextualError = new FirestorePermissionError({
             operation: 'list',

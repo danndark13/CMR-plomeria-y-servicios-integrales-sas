@@ -21,7 +21,8 @@ import {
   Loader2,
   ChevronRight,
   Clock,
-  CheckCircle2
+  CheckCircle2,
+  AlertTriangle
 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useUser, useMemoFirebase } from "@/firebase"
@@ -59,7 +60,7 @@ export default function QuotesPage() {
     if (!db || !user) return null
     return query(collection(db, "quotes"), orderBy("createdAt", "desc"))
   }, [db, user])
-  const { data: quotes, isLoading } = useCollection(quotesQuery)
+  const { data: quotes, isLoading, error } = useCollection(quotesQuery)
 
   useEffect(() => {
     setFormData(prev => ({
@@ -155,6 +156,12 @@ export default function QuotesPage() {
 
   return (
     <div className="flex flex-col gap-8 animate-in fade-in slide-in-from-right-4">
+      {error && (
+        <div className="bg-destructive/10 border border-destructive/20 text-destructive p-4 rounded-xl flex items-center gap-3">
+          <AlertTriangle className="h-5 w-5" />
+          <p className="text-xs font-bold uppercase tracking-wide">Error de acceso: {error.message || 'No tiene permisos para ver esta sección.'}</p>
+        </div>
+      )}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Link href="/accounting">
