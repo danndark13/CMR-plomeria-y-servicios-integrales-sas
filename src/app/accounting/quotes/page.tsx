@@ -51,10 +51,18 @@ export default function QuotesPage() {
 
   // Firestore Data
   const quotesQuery = useMemoFirebase(() => {
-    if (!db) return null
+    if (!db || !user) return null
     return query(collection(db, "quotes"), orderBy("createdAt", "desc"))
-  }, [db])
+  }, [db, user])
   const { data: quotes, isLoading } = useCollection(quotesQuery)
+
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      reference: `COT-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000) + 1000}`
+    }))
+    setItems([{ id: Math.random().toString(), description: "", quantity: 1, unitPrice: 0, total: 0 }])
+  }, [])
 
   const addItem = () => {
     setItems([...items, { id: Math.random().toString(), description: "", quantity: 1, unitPrice: 0, total: 0 }])
@@ -134,8 +142,8 @@ export default function QuotesPage() {
   }
 
   const filteredQuotes = (quotes || []).filter(q => 
-    q.reference.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    q.clientName.toLowerCase().includes(searchTerm.toLowerCase())
+    (q.reference || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (q.clientName || "").toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   return (

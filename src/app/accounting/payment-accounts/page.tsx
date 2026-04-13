@@ -61,10 +61,18 @@ export default function PaymentAccountsPage() {
 
   // Firestore Data
   const accountsQuery = useMemoFirebase(() => {
-    if (!db) return null
+    if (!db || !user) return null
     return query(collection(db, "payment_accounts"), orderBy("createdAt", "desc"))
-  }, [db])
+  }, [db, user])
   const { data: accounts, isLoading } = useCollection(accountsQuery)
+
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      reference: `CC-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000) + 1000}`
+    }))
+    setItems([{ id: Math.random().toString(), description: "", quantity: 1, unitPrice: 0, total: 0 }])
+  }, [])
 
   const addItem = () => {
     setItems([...items, { id: Math.random().toString(), description: "", quantity: 1, unitPrice: 0, total: 0 }])
@@ -137,7 +145,7 @@ export default function PaymentAccountsPage() {
 
   const filteredAccounts = (accounts || []).filter(a => 
     (a.reference || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
-    a.clientName.toLowerCase().includes(searchTerm.toLowerCase())
+    (a.clientName || "").toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   return (
