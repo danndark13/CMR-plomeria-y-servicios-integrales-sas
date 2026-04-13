@@ -28,7 +28,7 @@ import {
 import { toast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useUser, useMemoFirebase } from "@/firebase"
 import { collection, addDoc, query, orderBy, serverTimestamp } from "firebase/firestore"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
 import { PaymentAccount, QuoteItem } from "@/lib/types"
 import { convertNumberToSpanishWords } from "@/lib/numbers-to-words"
 import Link from "next/link"

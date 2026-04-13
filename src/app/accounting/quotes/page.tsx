@@ -26,7 +26,7 @@ import {
 import { toast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useUser, useMemoFirebase } from "@/firebase"
 import { collection, doc, addDoc, updateDoc, query, orderBy, serverTimestamp } from "firebase/firestore"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
 import { Quote, QuoteItem } from "@/lib/types"
 import Link from "next/link"
 
