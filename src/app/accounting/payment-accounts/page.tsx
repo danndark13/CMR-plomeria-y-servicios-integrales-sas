@@ -26,7 +26,7 @@ import {
   CreditCard
 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
-import { useFirestore, useCollection, useUser } from "@/firebase"
+import { useFirestore, useCollection, useUser, useMemoFirebase } from "@/firebase"
 import { collection, addDoc, query, orderBy, serverTimestamp } from "firebase/firestore"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
 import { PaymentAccount, QuoteItem } from "@/lib/types"
@@ -60,7 +60,10 @@ export default function PaymentAccountsPage() {
   ])
 
   // Firestore Data
-  const accountsQuery = db ? query(collection(db, "payment_accounts"), orderBy("createdAt", "desc")) : null
+  const accountsQuery = useMemoFirebase(() => {
+    if (!db) return null
+    return query(collection(db, "payment_accounts"), orderBy("createdAt", "desc"))
+  }, [db])
   const { data: accounts, isLoading } = useCollection(accountsQuery)
 
   const addItem = () => {

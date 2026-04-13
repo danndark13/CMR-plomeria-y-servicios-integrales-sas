@@ -24,7 +24,7 @@ import {
   CheckCircle2
 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
-import { useFirestore, useCollection, useUser } from "@/firebase"
+import { useFirestore, useCollection, useUser, useMemoFirebase } from "@/firebase"
 import { collection, doc, addDoc, updateDoc, query, orderBy, serverTimestamp } from "firebase/firestore"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
 import { Quote, QuoteItem } from "@/lib/types"
@@ -50,7 +50,10 @@ export default function QuotesPage() {
   ])
 
   // Firestore Data
-  const quotesQuery = db ? query(collection(db, "quotes"), orderBy("createdAt", "desc")) : null
+  const quotesQuery = useMemoFirebase(() => {
+    if (!db) return null
+    return query(collection(db, "quotes"), orderBy("createdAt", "desc"))
+  }, [db])
   const { data: quotes, isLoading } = useCollection(quotesQuery)
 
   const addItem = () => {
