@@ -74,6 +74,16 @@ import { cn } from "@/lib/utils"
 const UNITS: UnitOfMeasure[] = ['UND', 'KG', 'MTS', 'GL', 'PAR', 'LB', 'PQ', 'VIAJE', 'GAL', 'BASE', 'LT', 'CM', 'M2', 'M3', 'ROLLO', 'CAJA', 'BOLSA']
 const VISIT_FEE = 20000
 
+const omitUndefinedFields = <T,>(value: T): T => {
+  if (Array.isArray(value)) return value.map(omitUndefinedFields) as T
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).filter(([, item]) => item !== undefined).map(([key, item]) => [key, omitUndefinedFields(item)])
+    ) as T
+  }
+  return value
+}
+
 export default function RequestDetailPage() {
   const { id } = useParams()
   const router = useRouter()
@@ -188,6 +198,9 @@ export default function RequestDetailPage() {
   
   const canModifyHistory = isGerente || isDev
   const canEdit = isAdmin || (isCustomerService && !isCompleted) || (isTech && !isCompleted)
+  const editingBulkReference = localStateRequest?.interventions?.find(item =>
+    item.id === editingInterventionId && item.isPayrollExcluded && item.authorName === "CARGA MASIVA"
+  )
 
   const handleUpdateStatus = (newStatus: ServiceStatus) => {
     if (!db || !requestRef) return
@@ -469,6 +482,11 @@ export default function RequestDetailPage() {
       payrollStatus: 'pending',
       authorizedByAdvisor: newIntervention.authorizedByAdvisor?.toUpperCase() || ''
     }
+    const activatesBulkReportForPayroll = !!editingBulkReference &&
+      !!targetTechId &&
+      Number(newIntervention.reportedValue) > 0 &&
+      (newIntervention.costLines || []).length > 0
+    if (activatesBulkReportForPayroll) intervention.isPayrollExcluded = false
 
     const updatedInterventions = editingInterventionId
       ? (localStateRequest.interventions || []).map(item => item.id === editingInterventionId ? {
@@ -485,12 +503,12 @@ export default function RequestDetailPage() {
     )
     const latestScheduled = scheduledVisits.find(visit => visit.id === localStateRequest.scheduledVisit?.id)
     try {
-      await updateDoc(requestRef, {
+      await updateDoc(requestRef, omitUndefinedFields({
         interventions: updatedInterventions,
         scheduledVisits,
         ...(latestScheduled ? { scheduledVisit: latestScheduled } : {}),
         updatedAt: new Date().toISOString()
-      })
+      }))
       toast({ title: "Reporte Añadido" })
       setShowAddEntry(false)
       setEditingInterventionId(null)
@@ -882,6 +900,11 @@ export default function RequestDetailPage() {
                     {!isTech && (
                       <div className="space-y-2">
                         <Label className="text-[10px] font-black uppercase">Técnico Responsable</Label>
+                        {editingBulkReference && (
+                          <p className="text-xs text-muted-foreground">
+                            Técnico de referencia en carga masiva: {editingBulkReference.technicianId || "No indicado"}. Selecciona quién realizó este servicio.
+                          </p>
+                        )}
                         <Select 
                           value={isAddingNewTech ? "NEW" : newIntervention.technicianId} 
                           onValueChange={(v) => {
@@ -1166,7 +1189,10 @@ export default function RequestDetailPage() {
                         <Button variant="outline" size="sm" className="h-7" onClick={() => void copyTicket(item)}><FileText className="mr-2 h-3.5 w-3.5" />Copiar ticket</Button>
                         {canEdit && item.payrollStatus !== 'processed' && <Button variant="outline" size="sm" className="h-7" onClick={() => {
                           setEditingInterventionId(item.id)
-                          setNewIntervention({ ...item })
+                          setNewIntervention({
+                            ...item,
+                            ...(item.isPayrollExcluded && item.authorName === "CARGA MASIVA" ? { technicianId: "" } : {})
+                          })
                           setIsAddingNewTech(false)
                           setShowAddEntry(true)
                         }}>Editar ticket</Button>}

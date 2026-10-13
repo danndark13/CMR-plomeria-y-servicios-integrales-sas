@@ -54,6 +54,13 @@ export default function PayrollHubPage() {
   const { user } = useUser()
   const [cityFilter, setCityFilter] = useState("")
   const [citySearchInput, setCitySearchInput] = useState("")
+  const cityQueryValues = useMemo(() => {
+    if (!cityFilter) return []
+    const city = cityFilter.trim().replace(/\s+/g, " ")
+    const lowercaseCity = city.toLocaleLowerCase("es-CO")
+    const titleCaseCity = lowercaseCity.replace(/(^|\s)\p{L}/gu, letter => letter.toLocaleUpperCase("es-CO"))
+    return Array.from(new Set([city, lowercaseCity, titleCaseCity]))
+  }, [cityFilter])
   const [visibleCityServiceCount, setVisibleCityServiceCount] = useState(50)
   const [selectedTechId, setSelectedTechId] = useState<string | null>(null)
   const [selectedOfficeId, setSelectedOfficeId] = useState<string | null>(null)
@@ -103,9 +110,9 @@ export default function PayrollHubPage() {
   const isDev = profile?.roleId === 'Desarrollador'
 
   const requestsQuery = useMemoFirebase(() => {
-    if (!db || !user || !cityFilter) return null
-    return query(collection(db, "service_requests"), where("city", "==", cityFilter))
-  }, [db, user, cityFilter])
+    if (!db || !user || cityQueryValues.length === 0) return null
+    return query(collection(db, "service_requests"), where("city", "in", cityQueryValues))
+  }, [db, user, cityQueryValues])
   const { data: requestsForCity, isLoading: isRequestsLoading } = useCollection(requestsQuery)
   const allRequests = cityFilter ? requestsForCity : null
 
@@ -372,7 +379,9 @@ export default function PayrollHubPage() {
   const paidRequestsWithoutTechnician = useMemo(
     () => (allRequests || []).filter(request =>
       (request.billingStatus === "validated" || request.billingStatus === "paid") &&
-      !(request.interventions || []).some((intervention: TechnicianIntervention) => intervention.technicianId?.trim())
+      !(request.interventions || []).some((intervention: TechnicianIntervention) =>
+        intervention.technicianId?.trim() && !intervention.isPayrollExcluded
+      )
     ),
     [allRequests]
   )
@@ -1438,13 +1447,17 @@ export default function PayrollHubPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <FileText className="h-4 w-4 text-orange-600" /> Expedientes validados sin técnico
-                  <Badge variant="secondary">{paidRequestsWithoutTechnician.length}</Badge>
+                  <Badge variant="secondary">{!cityFilter || isRequestsLoading ? "—" : paidRequestsWithoutTechnician.length}</Badge>
                 </CardTitle>
-                <CardDescription>Los expedientes validados se activan para nómina. Asigna el técnico y crea el reporte; el servicio aparecerá en su liquidación.</CardDescription>
+                <CardDescription>
+                  Los reportes de carga masiva cuentan como referencias, no como asignación real de nómina, aunque tengan un nombre de técnico. Busca una ciudad para consultar y asignar cada servicio.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 {!cityFilter ? (
                   <p className="text-sm text-muted-foreground">Busca una ciudad arriba para consultar los expedientes.</p>
+                ) : isRequestsLoading ? (
+                  <div className="flex h-16 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
                 ) : paidRequestsWithoutTechnician.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No hay expedientes validados pendientes de reporte y asignación.</p>
                 ) : (
