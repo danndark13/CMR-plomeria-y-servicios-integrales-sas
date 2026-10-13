@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useMemo, useEffect, useCallback } from "react"
+import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -39,15 +39,20 @@ import {
 import { MOCK_TECHNICIANS } from "@/lib/mock-data"
 import { toast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from "@/firebase"
-import { collection, doc, writeBatch, deleteDoc, query, orderBy, updateDoc, setDoc } from "firebase/firestore"
+import { collection, doc, writeBatch, deleteDoc, query, orderBy, updateDoc, setDoc, runTransaction, where, limit, startAfter, getDocs, onSnapshot, QueryDocumentSnapshot, DocumentData } from "firebase/firestore"
 import { TechnicianIntervention, ServiceRequest, PayrollRecord, Advance, TechnicianPayrollSettings, Expense, PayrollDeductionTicket } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 
+const normalizePayrollCity = (city?: string) =>
+  city?.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").toUpperCase() || ""
+
 export default function PayrollHubPage() {
   const db = useFirestore()
   const { user } = useUser()
+  const [cityFilter, setCityFilter] = useState("")
+  const [visibleCityServiceCount, setVisibleCityServiceCount] = useState(50)
   const [selectedTechId, setSelectedTechId] = useState<string | null>(null)
   const [selectedOfficeId, setSelectedOfficeId] = useState<string | null>(null)
   const [officeHours, setOfficeHours] = useState("")
@@ -56,6 +61,13 @@ export default function PayrollHubPage() {
   const [officeTicketAmounts, setOfficeTicketAmounts] = useState<Record<string, string>>({})
   const [isProcessing, setIsProcessing] = useState(false)
   const [selectedHistoryItems, setSelectedHistoryItems] = useState<string[]>([])
+  const [firstHistoryPage, setFirstHistoryPage] = useState<PayrollRecord[] | null>(null)
+  const [olderHistory, setOlderHistory] = useState<PayrollRecord[]>([])
+  const [historyCursor, setHistoryCursor] = useState<QueryDocumentSnapshot<DocumentData> | null>(null)
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false)
+  const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState(false)
+  const [hasMoreHistory, setHasMoreHistory] = useState(false)
+  const historyPageIds = useRef("")
   
   const [adjustmentAmount, setAdjustmentAmount] = useState(0)
   const [adjustmentReason, setAdjustmentReason] = useState("")
@@ -96,15 +108,86 @@ export default function PayrollHubPage() {
 
   const payrollQuery = useMemoFirebase(() => {
     if (!db || !user) return null
-    return query(collection(db, "payroll_history"), orderBy("date", "desc"))
+    return query(collection(db, "payroll_history"), orderBy("date", "desc"), limit(50))
   }, [db, user])
-  const { data: payrollHistory, isLoading: isHistoryLoading } = useCollection(payrollQuery)
+  useEffect(() => {
+    if (!payrollQuery) {
+      setFirstHistoryPage(null)
+      setOlderHistory([])
+      setHistoryCursor(null)
+      setHasMoreHistory(false)
+      setIsHistoryLoading(false)
+      historyPageIds.current = ""
+      return
+    }
+    setIsHistoryLoading(true)
+    const unsubscribe = onSnapshot(
+      payrollQuery,
+      snapshot => {
+        const pageIds = JSON.stringify(snapshot.docs.map(payrollDoc => payrollDoc.id))
+        if (historyPageIds.current && historyPageIds.current !== pageIds) {
+          setOlderHistory([])
+          setSelectedHistoryItems([])
+        }
+        historyPageIds.current = pageIds
+        setFirstHistoryPage(snapshot.docs.map(payrollDoc => ({ ...payrollDoc.data(), id: payrollDoc.id } as PayrollRecord)))
+        setHistoryCursor(snapshot.docs.at(-1) || null)
+        setHasMoreHistory(snapshot.docs.length === 50)
+        setIsHistoryLoading(false)
+      },
+      error => {
+        console.error("Loading payroll history failed:", error)
+        setIsHistoryLoading(false)
+        toast({ variant: "destructive", title: "No se pudo cargar el historial", description: error.message })
+      }
+    )
+    return unsubscribe
+  }, [payrollQuery])
+
+  const payrollHistory = useMemo(() => {
+    const records = new Map<string, PayrollRecord>()
+    for (const record of [...(firstHistoryPage || []), ...olderHistory]) records.set(record.id, record)
+    return Array.from(records.values()).sort((a, b) => b.date.localeCompare(a.date))
+  }, [firstHistoryPage, olderHistory])
+
+  const loadMoreHistory = async () => {
+    if (!db || !historyCursor || isLoadingMoreHistory) return
+    setIsLoadingMoreHistory(true)
+    const currentPageIds = historyPageIds.current
+    try {
+      const snapshot = await getDocs(query(
+        collection(db, "payroll_history"),
+        orderBy("date", "desc"),
+        startAfter(historyCursor),
+        limit(50)
+      ))
+      if (historyPageIds.current !== currentPageIds) return
+      const page = snapshot.docs.map(payrollDoc => ({ ...payrollDoc.data(), id: payrollDoc.id } as PayrollRecord))
+      setOlderHistory(current => [...current, ...page])
+      setHistoryCursor(snapshot.docs.at(-1) || historyCursor)
+      setHasMoreHistory(snapshot.docs.length === 50)
+    } catch (error) {
+      console.error("Loading older payroll history failed:", error)
+      toast({
+        variant: "destructive",
+        title: "No se pudo cargar más historial",
+        description: error instanceof Error ? error.message : "Verifica la conexión con Firestore."
+      })
+    } finally {
+      setIsLoadingMoreHistory(false)
+    }
+  }
 
   const usersQuery = useMemoFirebase(() => {
     if (!db || !user) return null
     return collection(db, "user_profiles")
   }, [db, user])
   const { data: allUsers } = useCollection(usersQuery)
+  const officePayrollQuery = useMemoFirebase(() => {
+    if (!db || !user) return null
+    return query(collection(db, "payroll_history"), where("employeeType", "==", "office"))
+  }, [db, user])
+  const { data: officePayrollHistory } = useCollection<PayrollRecord>(officePayrollQuery)
   const payrollSettingsQuery = useMemoFirebase(() => {
     if (!db || !user) return null
     return collection(db, "technician_payroll_settings")
@@ -146,7 +229,8 @@ export default function PayrollHubPage() {
       allUsers.filter(u => u.roleId === 'Técnico').forEach(u => {
         const uname = (u.username || u.id).toUpperCase().trim()
         if (!uniqueMap.has(uname)) {
-          uniqueMap.set(uname, { id: uname, name: `${u.firstName} ${u.lastName || ''}`.trim(), specialties: ['Técnico'] })
+          const name = `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.displayName || u.name || u.username
+          uniqueMap.set(uname, { id: uname, name: name || `TÉCNICO SIN PERFIL · ${uname.slice(-6)}`, specialties: ['Técnico'] })
         }
       })
     }
@@ -161,7 +245,7 @@ export default function PayrollHubPage() {
         .filter((technicianId): technicianId is string => !!technicianId?.trim())
         .forEach(technicianId => {
           const id = canonicalTechnicianId(technicianId)
-          if (!uniqueMap.has(id)) uniqueMap.set(id, { id, name: technicianId.trim(), specialties: ["Técnico"] })
+          if (!uniqueMap.has(id)) uniqueMap.set(id, { id, name: `TÉCNICO SIN PERFIL · ${id.slice(-6)}`, specialties: ["Técnico"] })
         })
     })
     return Array.from(uniqueMap.values()).sort((a, b) => a.name.localeCompare(b.name))
@@ -178,10 +262,18 @@ export default function PayrollHubPage() {
     .sort((a, b) => a.name.localeCompare(b.name))
   const selectedOfficeStaff = officeStaff.find(person => person.id === selectedOfficeId)
   const getPayrollPersonName = (id: string) =>
-    allTechnicians.find(person => person.id === id)?.name ||
+    allTechnicians.find(person => canonicalTechnicianId(person.id) === canonicalTechnicianId(id))?.name ||
     officeStaff.find(person => person.id === id)?.name ||
-    (allUsers || []).find(person => person.id === id || person.username === id)?.firstName ||
-    id
+    (() => {
+      const normalizedId = canonicalTechnicianId(id)
+      const person = (allUsers || []).find(userProfile =>
+        userProfile.id === id || canonicalTechnicianId(userProfile.username) === normalizedId
+      )
+      return person
+        ? `${person.firstName || ""} ${person.lastName || ""}`.trim() || person.displayName || person.name || person.username
+        : null
+    })() ||
+    (id ? `TÉCNICO SIN PERFIL · ${id.slice(-6)}` : "PERSONAL SIN NOMBRE")
   const officeOpenTickets = (deductionTickets || []).filter(ticket =>
     ticket.personType === "office" && ticket.personId === selectedOfficeId && ticket.remainingAmount > 0
   )
@@ -198,12 +290,92 @@ export default function PayrollHubPage() {
   }, [])
   const officeTotalDeductions = officeAppliedTickets.reduce((sum, item) => sum + item.amount, 0)
   const officeCurrentBalance = Math.max(0, officeGross - officeTotalDeductions)
-  const previousOfficeBalance = (payrollHistory || [])
-    .filter(record => record.employeeType === "office" && record.technicianId === selectedOfficeId)
+  const previousOfficeBalance = (officePayrollHistory || [])
+    .filter(record => record.technicianId === selectedOfficeId)
     .reduce((sum, record) => sum + Math.max(0, record.pendingPaymentAmount || 0), 0)
   const officeTotalDue = officeCurrentBalance + previousOfficeBalance
-  const canPayIntervention = (request: ServiceRequest, intervention: TechnicianIntervention) =>
-    request.billingStatus === "validated" || request.billingStatus === "paid" || request.status === "completed" || intervention.isReadyForPayroll === true
+  const canPayIntervention = useCallback((request: ServiceRequest, intervention: TechnicianIntervention) =>
+    request.billingStatus === "validated" || request.billingStatus === "paid" || request.status === "completed" || intervention.isReadyForPayroll === true,
+  [])
+
+  const availableCities = useMemo(() => {
+    const cities = new Map<string, string>()
+    for (const request of allRequests || []) {
+      const city = request.city?.trim()
+      const key = normalizePayrollCity(city)
+      if (key && !cities.has(key)) cities.set(key, city)
+    }
+    return Array.from(cities, ([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [allRequests])
+
+  const pendingByTechnician = useMemo(() => {
+    type PendingItems = {
+      interventions: Array<{ intervention: TechnicianIntervention; request: ServiceRequest }>
+      advances: Array<{ advance: Advance; request: ServiceRequest }>
+      tickets: PayrollDeductionTicket[]
+    }
+    const byTechnician = new Map<string, PendingItems>()
+    const getItems = (technicianId: string) => {
+      let items = byTechnician.get(technicianId)
+      if (!items) {
+        items = { interventions: [], advances: [], tickets: [] }
+        byTechnician.set(technicianId, items)
+      }
+      return items
+    }
+
+    for (const request of allRequests || []) {
+      if (cityFilter && normalizePayrollCity(request.city) !== cityFilter) continue
+      for (const intervention of request.interventions || []) {
+        const technicianId = canonicalTechnicianId(intervention.technicianId)
+        if (!technicianId || intervention.isPayrollExcluded || intervention.payrollStatus === "processed") continue
+        getItems(technicianId).interventions.push({ intervention, request })
+      }
+      for (const advance of request.advances || []) {
+        const technicianId = canonicalTechnicianId(advance.technicianId)
+        if (!technicianId || advance.isPaidInPayroll) continue
+        getItems(technicianId).advances.push({ advance, request })
+      }
+    }
+
+    for (const ticket of deductionTickets || []) {
+      const technicianId = canonicalTechnicianId(ticket.personId)
+      if (!cityFilter && ticket.personType === "technician" && technicianId && ticket.remainingAmount > 0) {
+        getItems(technicianId).tickets.push(ticket)
+      }
+    }
+    return byTechnician
+  }, [allRequests, deductionTickets, canonicalTechnicianId, cityFilter])
+
+  const visibleTechnicians = useMemo(
+    () => allTechnicians.filter(technician => {
+      const pending = pendingByTechnician.get(technician.id)
+      return !!pending && (
+        pending.interventions.length > 0 ||
+        pending.advances.length > 0 ||
+        (!cityFilter && pending.tickets.length > 0)
+      )
+    }),
+    [allTechnicians, pendingByTechnician, cityFilter]
+  )
+
+  const cityServiceRows = useMemo(() => {
+    if (!cityFilter) return []
+    const rows: Array<{ request: ServiceRequest; intervention: TechnicianIntervention | null; technicianId: string }> = []
+    for (const request of allRequests || []) {
+      if (normalizePayrollCity(request.city) !== cityFilter) continue
+      const interventions = request.interventions || []
+      if (interventions.length === 0) {
+        rows.push({ request, intervention: null, technicianId: "" })
+        continue
+      }
+      for (const intervention of interventions) {
+        rows.push({ request, intervention, technicianId: intervention.technicianId?.trim() || "" })
+      }
+    }
+    return rows
+  }, [allRequests, cityFilter])
 
   const paidRequestsWithoutTechnician = useMemo(
     () => (allRequests || []).filter(request =>
@@ -252,13 +424,12 @@ export default function PayrollHubPage() {
           if (i.isPayrollExcluded) return false
           const isCorrectTech = canonicalTechnicianId(i.technicianId) === selectedTechId
           const notProcessed = i.payrollStatus !== 'processed'
-          const caseValidated = req.billingStatus === 'validated' || req.status === 'completed'
-          const earlyApproved = i.isReadyForPayroll === true
-          return isCorrectTech && notProcessed && (caseValidated || earlyApproved)
+          const matchesCity = !cityFilter || normalizePayrollCity(req.city) === cityFilter
+          return isCorrectTech && notProcessed && matchesCity
         })
         .map((i: any) => ({ ...i, request: req }))
     )
-  }, [allRequests, selectedTechId, canonicalTechnicianId])
+  }, [allRequests, selectedTechId, canonicalTechnicianId, canPayIntervention, cityFilter])
 
   const interventionsToApprove = useMemo(() => {
     return (allRequests || []).flatMap((req: ServiceRequest) => 
@@ -268,23 +439,28 @@ export default function PayrollHubPage() {
           const notProcessed = i.payrollStatus !== 'processed'
           const notApproved = !i.isReadyForPayroll
           const notValidated = req.billingStatus !== 'validated' && req.status !== 'completed'
-          return notProcessed && notApproved && notValidated
+          const matchesCity = !cityFilter || normalizePayrollCity(req.city) === cityFilter
+          return notProcessed && notApproved && notValidated && matchesCity
         })
         .map((i: any) => ({ ...i, request: req }))
     )
-  }, [allRequests])
+  }, [allRequests, cityFilter])
 
   const pendingAdvances = useMemo(() => {
     return (allRequests || []).flatMap((req: ServiceRequest) => 
       (req.advances || [])
-        .filter((a: any) => canonicalTechnicianId(a.technicianId) === selectedTechId && !a.isPaidInPayroll)
+        .filter((a: any) =>
+          canonicalTechnicianId(a.technicianId) === selectedTechId &&
+          !a.isPaidInPayroll &&
+          (!cityFilter || normalizePayrollCity(req.city) === cityFilter)
+        )
         .map((a: any) => ({ ...a, request: req }))
     )
-  }, [allRequests, selectedTechId, canonicalTechnicianId])
+  }, [allRequests, selectedTechId, canonicalTechnicianId, cityFilter])
 
   const selectedInterventions = useMemo(
-    () => pendingInterventions.filter(item => !excludedInterventionIds.includes(item.id)),
-    [pendingInterventions, excludedInterventionIds]
+    () => pendingInterventions.filter(item => canPayIntervention(item.request, item) && !excludedInterventionIds.includes(item.id)),
+    [pendingInterventions, excludedInterventionIds, canPayIntervention]
   )
   const selectedAdvances = useMemo(
     () => pendingAdvances.filter(item => !excludedAdvanceIds.includes(item.id)),
@@ -760,8 +936,7 @@ export default function PayrollHubPage() {
     }
     
     setIsProcessing(true)
-    const batch = writeBatch(db)
-    const payrollId = `LIQ-${Math.random().toString(36).substring(7).toUpperCase()}`
+    const payrollId = `LIQ-${crypto.randomUUID().toUpperCase()}`
     
     const payrollRecord: PayrollRecord = {
       id: payrollId,
@@ -827,41 +1002,107 @@ export default function PayrollHubPage() {
       ]
     }
     
-    batch.set(doc(db, "payroll_history", payrollId), payrollRecord)
-    ticketDeductions.forEach(({ ticket, amount }) => {
-      batch.update(doc(db, "payroll_deduction_tickets", ticket.id), {
-        remainingAmount: ticket.remainingAmount - amount,
-        updatedAt: new Date().toISOString(),
-        lastPayrollId: payrollId
-      })
-    })
-
-    const requestIds = new Set([...selectedInterventions.map(i => i.request.id), ...selectedAdvances.map(a => a.request.id)])
-    requestIds.forEach(reqId => {
-      const req = (allRequests || []).find(r => r.id === reqId)
-      if (!req) return
-      
-      const updatedInterventions = req.interventions.map((i: any) => {
-        const isTarget = selectedInterventions.some((pi: any) => pi.id === i.id && pi.request.id === reqId)
-        if (isTarget) return { ...i, payrollStatus: 'processed' as const, payrollId, isReadyForPayroll: false }
-        return i
-      })
-      
-      const updatedAdvances = (req.advances || []).map((a: any) => {
-        const isTarget = selectedAdvances.some((pa: any) => pa.id === a.id && pa.request.id === reqId)
-        if (isTarget) return { ...a, isPaidInPayroll: true, payrollId }
-        return a
-      })
-
-      batch.update(doc(db, "service_requests", reqId), { interventions: updatedInterventions, advances: updatedAdvances, updatedAt: new Date().toISOString() })
-    })
-
     try {
-      await batch.commit()
+      const selectedInterventionsByRequest = new Map<string, Set<string>>()
+      selectedInterventions.forEach(item => {
+        const ids = selectedInterventionsByRequest.get(item.request.id) || new Set<string>()
+        ids.add(item.id)
+        selectedInterventionsByRequest.set(item.request.id, ids)
+      })
+      const selectedAdvancesByRequest = new Map<string, Set<string>>()
+      selectedAdvances.forEach(item => {
+        const ids = selectedAdvancesByRequest.get(item.request.id) || new Set<string>()
+        ids.add(item.id)
+        selectedAdvancesByRequest.set(item.request.id, ids)
+      })
+      const requestIds = new Set([...selectedInterventionsByRequest.keys(), ...selectedAdvancesByRequest.keys()])
+      const requestRefs = Array.from(requestIds, id => doc(db, "service_requests", id))
+      const ticketRefs = ticketDeductions.map(({ ticket }) => doc(db, "payroll_deduction_tickets", ticket.id))
+      const payrollRef = doc(db, "payroll_history", payrollId)
+
+      await runTransaction(db, async transaction => {
+        const [requestSnapshots, ticketSnapshots, existingPayroll] = await Promise.all([
+          Promise.all(requestRefs.map(ref => transaction.get(ref))),
+          Promise.all(ticketRefs.map(ref => transaction.get(ref))),
+          transaction.get(payrollRef)
+        ])
+        if (existingPayroll.exists()) throw new Error("Se detectó una referencia de nómina repetida. Intenta guardar de nuevo.")
+
+        const requests = new Map<string, ServiceRequest>()
+        requestSnapshots.forEach(snapshot => {
+          if (!snapshot.exists()) throw new Error("Un expediente seleccionado ya no existe. Actualiza la pantalla antes de liquidar.")
+          requests.set(snapshot.id, { ...snapshot.data(), id: snapshot.id } as ServiceRequest)
+        })
+        for (const item of selectedInterventions) {
+          const current = (requests.get(item.request.id)?.interventions || []).find(intervention => intervention.id === item.id)
+          const payrollInputs = (intervention: TechnicianIntervention) => JSON.stringify([
+            intervention.reportedValue || 0,
+            (intervention.detailedExpenses || [])
+              .map(expense => [expense.id, expense.amount || 0, expense.isUnused === true])
+              .sort((left, right) => String(left[0]).localeCompare(String(right[0]))),
+            intervention.usedRotomartillo === true,
+            intervention.usedGeofono === true,
+            intervention.usedPlanchaTermofusion === true,
+            intervention.payrollDeductionAmount || 0
+          ])
+          if (!current || current.payrollStatus === "processed" || current.isPayrollExcluded ||
+            canonicalTechnicianId(current.technicianId) !== selectedTechId || !canPayIntervention(requests.get(item.request.id)!, current)) {
+            throw new Error("Uno de los servicios seleccionados ya fue liquidado o dejó de estar disponible. Actualiza la pantalla; no se creó otro pago.")
+          }
+          if (payrollInputs(current) !== payrollInputs(item)) {
+            throw new Error("Los valores de un servicio cambiaron durante la liquidación. Actualiza la pantalla y revisa el cálculo.")
+          }
+        }
+        for (const item of selectedAdvances) {
+          const current = (requests.get(item.request.id)?.advances || []).find(advance => advance.id === item.id)
+          if (!current || current.isPaidInPayroll || canonicalTechnicianId(current.technicianId) !== selectedTechId ||
+            current.amount !== item.amount) {
+            throw new Error("Uno de los adelantos seleccionados ya fue aplicado o cambió. Actualiza la pantalla; no se creó otro pago.")
+          }
+        }
+        ticketDeductions.forEach(({ ticket, amount }, index) => {
+          const snapshot = ticketSnapshots[index]
+          const current = snapshot.exists() ? snapshot.data() as PayrollDeductionTicket : null
+          if (!current || current.personType !== "technician" ||
+            canonicalTechnicianId(current.personId) !== selectedTechId || current.remainingAmount < amount) {
+            throw new Error("El saldo de un descuento cambió y ya no alcanza para este cálculo. Actualiza la pantalla y revisa la nómina.")
+          }
+        })
+
+        transaction.set(payrollRef, payrollRecord)
+        requests.forEach((request, requestId) => {
+          const interventionIds = selectedInterventionsByRequest.get(requestId) || new Set<string>()
+          const advanceIds = selectedAdvancesByRequest.get(requestId) || new Set<string>()
+          transaction.update(doc(db, "service_requests", requestId), {
+            interventions: (request.interventions || []).map(intervention =>
+              interventionIds.has(intervention.id)
+                ? { ...intervention, payrollStatus: "processed", payrollId, isReadyForPayroll: false }
+                : intervention
+            ),
+            advances: (request.advances || []).map(advance =>
+              advanceIds.has(advance.id) ? { ...advance, isPaidInPayroll: true, payrollId } : advance
+            ),
+            updatedAt: new Date().toISOString()
+          })
+        })
+        ticketDeductions.forEach(({ ticket, amount }, index) => {
+          const current = ticketSnapshots[index].data() as PayrollDeductionTicket
+          transaction.update(ticketRefs[index], {
+            remainingAmount: current.remainingAmount - amount,
+            updatedAt: new Date().toISOString(),
+            lastPayrollId: payrollId
+          })
+        })
+      })
       toast({ title: "Nómina Liquidada" })
       setAdjustmentAmount(0); setAdjustmentReason(""); setPayrollNotes(""); setPaymentMethod("Transferencia"); setPaymentReference(""); setExcludedInterventionIds([]); setExcludedAdvanceIds([]); setExcludedDeductionTicketIds([]); setDeductionTicketAmounts({}); setManualPayrollAmounts({}); setSelectedTechId(null)
     } catch (error) {
-      toast({ variant: "destructive", title: "Error" })
+      console.error("Saving technician payroll failed:", error)
+      toast({
+        variant: "destructive",
+        title: "No se pudo guardar la nómina",
+        description: error instanceof Error ? error.message : "Verifica permisos y conexión con Firestore."
+      })
     } finally {
       setIsProcessing(false)
     }
@@ -944,6 +1185,13 @@ export default function PayrollHubPage() {
 
       batch.delete(doc(db, "payroll_history", record.id))
       await batch.commit()
+      const carriedRecords = new Map((record.carriedPayments || []).map(item => [item.payrollId, item.amount]))
+      const restoreCarriedPayment = (item: PayrollRecord) => {
+        const amount = carriedRecords.get(item.id)
+        return amount === undefined ? item : { ...item, pendingPaymentAmount: amount, carriedToPayrollId: undefined }
+      }
+      setFirstHistoryPage(current => current?.filter(item => item.id !== record.id).map(restoreCarriedPayment) || current)
+      setOlderHistory(current => current.filter(item => item.id !== record.id).map(restoreCarriedPayment))
       toast({ title: "Registro Eliminado" })
     } catch (e) {
       toast({ variant: "destructive", title: "Error al eliminar" })
@@ -955,17 +1203,24 @@ export default function PayrollHubPage() {
   const handleTogglePaid = async (record: PayrollRecord) => {
     if (!db) return
     const nowPaid = !record.isPaid
+    const paidAt = nowPaid ? new Date().toISOString() : null
+    const pendingPaymentAmount = record.employeeType === "office"
+      ? nowPaid
+        ? 0
+        : record.pendingPaymentAmount || Math.max(0, (record.grossSalary || record.totalGross) - record.totalAdvances + (record.adjustmentAmount || 0)) + (record.carriedPayments || []).reduce((sum, item) => sum + item.amount, 0)
+      : undefined
     try {
       const { updateDoc } = await import("firebase/firestore")
       await updateDoc(doc(db, "payroll_history", record.id), {
         isPaid: nowPaid,
-        paidAt: nowPaid ? new Date().toISOString() : null,
-        ...(record.employeeType === "office" ? {
-          pendingPaymentAmount: nowPaid
-            ? 0
-            : record.pendingPaymentAmount || Math.max(0, (record.grossSalary || record.totalGross) - record.totalAdvances + (record.adjustmentAmount || 0)) + (record.carriedPayments || []).reduce((sum, item) => sum + item.amount, 0)
-        } : {})
+        paidAt,
+        ...(pendingPaymentAmount !== undefined ? { pendingPaymentAmount } : {})
       })
+      const updateRecord = (item: PayrollRecord) => item.id === record.id
+        ? { ...item, isPaid: nowPaid, paidAt: paidAt || undefined, ...(pendingPaymentAmount !== undefined ? { pendingPaymentAmount } : {}) }
+        : item
+      setFirstHistoryPage(current => current?.map(updateRecord) || current)
+      setOlderHistory(current => current.map(updateRecord))
       toast({ title: nowPaid ? "Nómina marcada como PAGADA ✅" : "Nómina marcada como PENDIENTE" })
     } catch (e) {
       toast({ variant: "destructive", title: "Error al actualizar estado" })
@@ -993,8 +1248,8 @@ export default function PayrollHubPage() {
     const now = new Date().toISOString()
     const payrollId = `NOM-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
     const pendingPayment = officeTotalDue - paidToday
-    const previousPendingRecords = (payrollHistory || []).filter(record =>
-      record.employeeType === "office" && record.technicianId === selectedOfficeStaff.id && (record.pendingPaymentAmount || 0) > 0
+    const previousPendingRecords = (officePayrollHistory || []).filter(record =>
+      record.technicianId === selectedOfficeStaff.id && (record.pendingPaymentAmount || 0) > 0
     )
     const ticketDeductions = officeAppliedTickets.filter(item => item.amount > 0)
     const payrollRecord: PayrollRecord = {
@@ -1246,49 +1501,154 @@ export default function PayrollHubPage() {
               </DialogContent>
             </Dialog>
 
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-              {allTechnicians.map((tech) => {
-                const techPending = (allRequests || []).flatMap(r => r.interventions || [])
-                    .filter(i => {
-                      if (i.isPayrollExcluded) return false
-                      const request = allRequests?.find(item => item.interventions?.some((intervention: TechnicianIntervention) => intervention.id === i.id))
-                      return canonicalTechnicianId(i.technicianId) === tech.id && i.payrollStatus !== 'processed' && !!request && canPayIntervention(request, i)
-                    })
-                const advPending = (allRequests || []).flatMap(r => r.advances || []).filter(a => canonicalTechnicianId(a.technicianId) === tech.id && !a.isPaidInPayroll)
-                const ticketPending = (deductionTickets || []).filter(ticket => ticket.personType === "technician" && canonicalTechnicianId(ticket.personId) === tech.id && ticket.remainingAmount > 0)
-                
-                if (techPending.length === 0 && advPending.length === 0 && ticketPending.length === 0) return null;
+            <div className="mb-6 flex flex-col gap-2 sm:max-w-sm">
+              <Label htmlFor="payroll-city-filter">Filtrar servicios por ciudad / municipio</Label>
+              <select
+                id="payroll-city-filter"
+                value={cityFilter}
+                onChange={event => {
+                  setCityFilter(event.target.value)
+                  setVisibleCityServiceCount(50)
+                }}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Todas las ciudades</option>
+                {availableCities.map(city => <option key={city.value} value={city.value}>{city.label}</option>)}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                La ciudad solo filtra expedientes; no determina el técnico. Revisa el técnico que aparece en cada servicio antes de abrir su nómina.
+              </p>
+            </div>
 
+            {cityFilter && (
+              <Card className="mb-6">
+                <CardHeader>
+                  <CardTitle className="text-base">Expedientes y servicios de {availableCities.find(city => city.value === cityFilter)?.label || cityFilter}</CardTitle>
+                  <CardDescription>
+                    {cityServiceRows.length} registros encontrados. El técnico mostrado es el guardado en el reporte, no se asigna por ciudad.
+                    Los reportes de carga masiva son informativos y no generan pagos por sí solos.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Expediente</TableHead>
+                          <TableHead>Técnico indicado</TableHead>
+                          <TableHead>Servicio / reporte</TableHead>
+                          <TableHead>Estado expediente</TableHead>
+                          <TableHead className="text-right">Valor reportado</TableHead>
+                          <TableHead>Disponibilidad</TableHead>
+                          <TableHead></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {isRequestsLoading ? (
+                          <TableRow><TableCell colSpan={7} className="h-24 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary opacity-40" /></TableCell></TableRow>
+                        ) : cityServiceRows.length === 0 ? (
+                          <TableRow><TableCell colSpan={7} className="h-24 text-center text-muted-foreground">No hay expedientes en esta ciudad.</TableCell></TableRow>
+                        ) : cityServiceRows.slice(0, visibleCityServiceCount).map(({ request, intervention }, index) => {
+                          const technicianId = intervention?.technicianId?.trim() || ""
+                          const isPayable = !!intervention && !intervention.isPayrollExcluded &&
+                            intervention.payrollStatus !== "processed" && canPayIntervention(request, intervention)
+                          return (
+                            <TableRow key={`${request.id}-${intervention?.id || "sin-reporte"}-${index}`}>
+                              <TableCell className="font-mono font-bold">{request.claimNumber}</TableCell>
+                              <TableCell className="font-semibold">
+                                {technicianId ? getPayrollPersonName(technicianId) : "Sin técnico en el reporte"}
+                              </TableCell>
+                              <TableCell className="max-w-xs">
+                                <span className="block text-xs font-semibold">{intervention?.title || intervention?.subservice || request.serviceSubservice || request.category}</span>
+                                <span className="block truncate text-xs text-muted-foreground" title={intervention?.notes || request.description}>
+                                  {intervention?.notes || request.description || "Sin descripción"}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-xs uppercase">
+                                {request.status} · {request.billingStatus}
+                              </TableCell>
+                              <TableCell className="text-right font-mono">
+                                ${(intervention?.reportedValue || 0).toLocaleString("es-CO")}
+                              </TableCell>
+                              <TableCell>
+                                {intervention?.isPayrollExcluded ? (
+                                  <Badge variant="outline">Solo referencia · no pagable</Badge>
+                                ) : intervention?.payrollStatus === "processed" ? (
+                                  <Badge variant="secondary">Ya liquidado</Badge>
+                                ) : isPayable ? (
+                                  <Badge className="bg-green-700">Listo para liquidar</Badge>
+                                ) : (
+                                  <Badge variant="outline" className="border-orange-500 text-orange-700">Requiere autorización o cierre</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {technicianId && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setSelectedOfficeId(null)
+                                      setSelectedTechId(canonicalTechnicianId(technicianId))
+                                      setExcludedInterventionIds([])
+                                      setExcludedAdvanceIds([])
+                                      setExcludedDeductionTicketIds([])
+                                      setDeductionTicketAmounts({})
+                                    }}
+                                  >
+                                    Ver técnico
+                                  </Button>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {cityServiceRows.length > visibleCityServiceCount && (
+                    <div className="flex justify-center border-t p-4">
+                      <Button variant="outline" onClick={() => setVisibleCityServiceCount(count => count + 50)}>
+                        Mostrar 50 registros más
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+              {visibleTechnicians.map((tech) => {
+                const pending = pendingByTechnician.get(tech.id)!
+                const payableServices = pending.interventions.filter(item => canPayIntervention(item.request, item.intervention)).length
+                const servicesNeedingApproval = pending.interventions.length - payableServices
                 return (
                   <Card key={tech.id} className="hover:shadow-md transition-shadow cursor-pointer group border-l-4 border-l-primary" onClick={() => { setSelectedOfficeId(null); setSelectedTechId(tech.id); setExcludedInterventionIds([]); setExcludedAdvanceIds([]); setExcludedDeductionTicketIds([]); setDeductionTicketAmounts({}) }}>
                     <CardHeader className="pb-4">
                       <Avatar className="h-12 w-12 mb-2"><AvatarImage src={`https://picsum.photos/seed/${tech.id}/100/100`} /><AvatarFallback>{tech.name.substring(0,2)}</AvatarFallback></Avatar>
                       <CardTitle className="text-lg font-black uppercase">{tech.name}</CardTitle>
-                      <CardDescription className="text-[10px] font-bold uppercase">{tech.specialties.join(" • ")}</CardDescription>
+                      <CardDescription className="text-[10px] font-bold uppercase" title={tech.id}>
+                        {tech.specialties.join(" • ")}{tech.name.startsWith("TÉCNICO SIN PERFIL") ? ` · ID: ${tech.id.slice(-6)}` : ""}
+                      </CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="flex justify-between items-center">
                         <Button variant="ghost" className="text-xs font-bold p-0 group-hover:text-primary">Ver Liquidación <ChevronRight className="h-4 w-4" /></Button>
                         <div className="flex gap-1">
-                          {techPending.length > 0 && <Badge className="bg-orange-500">{techPending.length}</Badge>}
-                          {advPending.length > 0 && <Badge className="bg-destructive" title="Adelantos">${advPending.reduce((s,a) => s + a.amount, 0).toLocaleString()}</Badge>}
-                          {ticketPending.length > 0 && <Badge variant="outline" title="Tickets de descuento">-${ticketPending.reduce((sum, ticket) => sum + ticket.remainingAmount, 0).toLocaleString("es-CO")}</Badge>}
+                          {pending.interventions.length > 0 && (
+                            <Badge className="bg-orange-500" title={`${payableServices} listos para liquidar; ${servicesNeedingApproval} requieren autorización o cierre`}>
+                              {payableServices} listos{servicesNeedingApproval > 0 ? ` · ${servicesNeedingApproval} por autorizar` : ""}
+                            </Badge>
+                          )}
+                          {pending.advances.length > 0 && <Badge className="bg-destructive" title="Adelantos">${pending.advances.reduce((sum, item) => sum + (item.advance.amount || 0), 0).toLocaleString()}</Badge>}
+                          {pending.tickets.length > 0 && <Badge variant="outline" title="Tickets de descuento">-${pending.tickets.reduce((sum, ticket) => sum + ticket.remainingAmount, 0).toLocaleString("es-CO")}</Badge>}
                         </div>
                       </div>
                     </CardContent>
                   </Card>
                 )
               })}
-              {allTechnicians.filter(t => {
-                const tp = (allRequests || []).flatMap(r => r.interventions || []).filter(i => {
-                  if (i.isPayrollExcluded) return false
-                  const request = allRequests?.find(item => item.interventions?.some((intervention: TechnicianIntervention) => intervention.id === i.id))
-                  return canonicalTechnicianId(i.technicianId) === t.id && i.payrollStatus !== 'processed' && !!request && canPayIntervention(request, i)
-                })
-                const ap = (allRequests || []).flatMap(r => r.advances || []).filter(a => canonicalTechnicianId(a.technicianId) === t.id && !a.isPaidInPayroll)
-                const tickets = (deductionTickets || []).filter(ticket => ticket.personType === "technician" && canonicalTechnicianId(ticket.personId) === t.id && ticket.remainingAmount > 0)
-                return tp.length > 0 || ap.length > 0 || tickets.length > 0
-              }).length === 0 && (
+              {visibleTechnicians.length === 0 && (
                 <div className="col-span-full py-20 text-center text-muted-foreground italic border-2 border-dashed rounded-xl bg-slate-50">
                   No hay técnicos con servicios, adelantos o descuentos pendientes de liquidar.
                 </div>
@@ -1305,8 +1665,8 @@ export default function PayrollHubPage() {
                     const pendingAmount = (deductionTickets || [])
                       .filter(ticket => ticket.personType === "office" && ticket.personId === person.id && ticket.remainingAmount > 0)
                       .reduce((sum, ticket) => sum + ticket.remainingAmount, 0)
-                    const pendingPay = (payrollHistory || [])
-                      .filter(record => record.employeeType === "office" && record.technicianId === person.id)
+                    const pendingPay = (officePayrollHistory || [])
+                      .filter(record => record.technicianId === person.id)
                       .reduce((sum, record) => sum + Math.max(0, record.pendingPaymentAmount || 0), 0)
                     return (
                       <button key={person.id} type="button" onClick={() => {
@@ -1339,7 +1699,10 @@ export default function PayrollHubPage() {
                 <CardTitle className="text-sm font-black flex items-center gap-2 uppercase tracking-wider text-orange-700">
                   <Calculator className="h-4 w-4" /> Servicios Pendientes de Autorización
                 </CardTitle>
-                <CardDescription className="text-[10px] font-bold uppercase">Habilite servicios de expedientes no validados para incluirlos en el pago de nómina.</CardDescription>
+                <CardDescription className="text-[10px] font-bold uppercase">
+                  {cityFilter ? `Servicios de ${availableCities.find(city => city.value === cityFilter)?.label || cityFilter}. ` : ""}
+                  Autoriza un servicio solo después de revisarlo; entonces quedará disponible para liquidación.
+                </CardDescription>
               </CardHeader>
               <CardContent className="p-0">
                 <Table>
@@ -1347,6 +1710,7 @@ export default function PayrollHubPage() {
                     <TableRow className="bg-muted/30">
                       <TableHead className="font-black uppercase text-[10px]">Técnico / Personal</TableHead>
                       <TableHead className="font-black uppercase text-[10px]">Expediente</TableHead>
+                      <TableHead className="font-black uppercase text-[10px]">Ciudad</TableHead>
                       <TableHead className="font-black uppercase text-[10px]">Servicio</TableHead>
                       <TableHead className="text-right font-black uppercase text-[10px]">Valor Reportado</TableHead>
                       <TableHead className="text-right font-black uppercase text-[10px]">Acción</TableHead>
@@ -1354,18 +1718,19 @@ export default function PayrollHubPage() {
                   </TableHeader>
                   <TableBody>
                     {isRequestsLoading ? (
-                      <TableRow><TableCell colSpan={5} className="h-40 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary opacity-20" /></TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} className="h-40 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary opacity-20" /></TableCell></TableRow>
                     ) : interventionsToApprove.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="h-40 text-center italic text-muted-foreground">No hay servicios pendientes de aprobación.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} className="h-40 text-center italic text-muted-foreground">No hay servicios pendientes de aprobación.</TableCell></TableRow>
                     ) : interventionsToApprove.map((i: any) => (
                       <TableRow key={i.id} className="hover:bg-primary/5">
                         <TableCell>
                           <div className="flex items-center gap-2">
                              <Avatar className="h-6 w-6"><AvatarImage src={`https://picsum.photos/seed/${i.technicianId}/50/50`} /><AvatarFallback>{i.technicianId.substring(0,2)}</AvatarFallback></Avatar>
-                             <span className="font-black text-[10px] uppercase truncate max-w-[100px]">{i.technicianId}</span>
+                             <span className="font-black text-[10px] uppercase truncate max-w-[140px]" title={`${getPayrollPersonName(i.technicianId)} · ${i.technicianId}`}>{getPayrollPersonName(i.technicianId)}</span>
                           </div>
                         </TableCell>
                         <TableCell><span className="font-mono font-black text-primary text-xs">{i.request.claimNumber}</span></TableCell>
+                        <TableCell className="text-xs font-semibold">{i.request.city || "Sin ciudad"}</TableCell>
                         <TableCell><span className="text-[10px] font-bold uppercase">{i.type}</span></TableCell>
                         <TableCell className="text-right font-mono font-bold text-slate-600">${i.reportedValue?.toLocaleString()}</TableCell>
                         <TableCell className="text-right">
@@ -1422,7 +1787,7 @@ export default function PayrollHubPage() {
                       <TableRow><TableCell colSpan={6} className="h-40 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary opacity-20" /></TableCell></TableRow>
                     ) : payrollHistory?.length === 0 ? (
                       <TableRow><TableCell colSpan={6} className="h-40 text-center italic text-muted-foreground">No se han realizado liquidaciones todavía.</TableCell></TableRow>
-                    ) : (payrollHistory || []).map((liq) => (
+                    ) : payrollHistory.map((liq) => (
                       <TableRow key={liq.id} className="hover:bg-slate-50 transition-colors">
                         <TableCell>
                           <Checkbox 
@@ -1433,7 +1798,7 @@ export default function PayrollHubPage() {
                           />
                         </TableCell>
                         <TableCell><Badge variant="outline" className="font-mono font-black text-primary border-primary/20">{liq.id}</Badge></TableCell>
-                        <TableCell><span className="font-bold uppercase text-xs">{getPayrollPersonName(liq.technicianId).toUpperCase()} {liq.employeeType === "office" && <Badge variant="outline">OFICINA</Badge>}</span>{(liq.pendingPaymentAmount || 0) > 0 && <span className="block text-[10px] text-destructive">Saldo pendiente: ${liq.pendingPaymentAmount.toLocaleString("es-CO")}</span>}</TableCell>
+                        <TableCell><span className="font-bold uppercase text-xs">{getPayrollPersonName(liq.technicianId).toUpperCase()} {liq.employeeType === "office" && <Badge variant="outline">OFICINA</Badge>}</span>{(liq.pendingPaymentAmount || 0) > 0 && <span className="block text-[10px] text-destructive">Saldo pendiente: ${(liq.pendingPaymentAmount || 0).toLocaleString("es-CO")}</span>}</TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
                             <span className="text-[10px] font-bold text-slate-500 uppercase">{new Date(liq.date).toLocaleDateString()}</span>
@@ -1476,6 +1841,14 @@ export default function PayrollHubPage() {
                     ))}
                   </TableBody>
                 </Table>
+                {hasMoreHistory && (
+                  <div className="flex justify-center border-t p-4">
+                    <Button variant="outline" onClick={loadMoreHistory} disabled={isLoadingMoreHistory}>
+                      {isLoadingMoreHistory && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Cargar 50 liquidaciones más
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -1508,13 +1881,21 @@ export default function PayrollHubPage() {
 
           <Card className="shadow-sm overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between">
-              <div><CardTitle className="text-base font-semibold">Desglose de servicios y descuentos</CardTitle><CardDescription>Selecciona los conceptos y los tickets que se incluirán en esta liquidación.</CardDescription></div>
-              <Badge variant="secondary">{selectedInterventions.length + selectedAdvances.length + selectedTechnicianTickets.length} de {pendingInterventions.length + pendingAdvances.length + pendingTechnicianTickets.length} seleccionados</Badge>
+              <div>
+                <CardTitle className="text-base font-semibold">Desglose de servicios y descuentos</CardTitle>
+                <CardDescription>
+                  {cityFilter ? `Servicios de ${availableCities.find(city => city.value === cityFilter)?.label || cityFilter}. ` : ""}
+                  Los servicios sin autorización se muestran, pero no se incluyen en los importes.
+                </CardDescription>
+              </div>
+              <Badge variant="secondary">
+                {selectedInterventions.length + selectedAdvances.length + selectedTechnicianTickets.length} seleccionados · {pendingInterventions.filter(item => canPayIntervention(item.request, item)).length} servicios listos
+              </Badge>
             </CardHeader>
             <CardContent className="p-0">
               <div className="flex flex-wrap justify-end gap-2 px-4 pb-3">
                 <Button type="button" variant="outline" size="sm" onClick={() => { setExcludedInterventionIds(pendingInterventions.map(item => item.id)); setExcludedAdvanceIds(pendingAdvances.map(item => item.id)); setExcludedDeductionTicketIds(pendingTechnicianTickets.map(item => item.id)) }}>Quitar selección</Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => { setExcludedInterventionIds([]); setExcludedAdvanceIds([]); setExcludedDeductionTicketIds([]) }}>Seleccionar todos</Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => { setExcludedInterventionIds([]); setExcludedAdvanceIds([]); setExcludedDeductionTicketIds([]) }}>Seleccionar conceptos autorizados</Button>
                 <Button type="button" variant="outline" size="sm" onClick={exportPayrollCSV} disabled={!selectedInterventions.length && !selectedAdvances.length}><FileSpreadsheet className="mr-2 h-4 w-4" />Exportar CSV</Button>
               </div>
               <Table>
@@ -1550,6 +1931,8 @@ export default function PayrollHubPage() {
                   ))}
                   {pendingInterventions.map((item: any) => {
                     const materialExpenses = (item.detailedExpenses || []).filter((e: any) => !e.isUnused).reduce((s: number, e: any) => s + (e.amount || 0), 0)
+                    const isPayable = canPayIntervention(item.request, item)
+                    const isExcluded = excludedInterventionIds.includes(item.id)
                     let rentals = 0
                     if (item.usedRotomartillo) rentals += 80000
                     if (item.usedGeofono) rentals += 120000
@@ -1557,9 +1940,18 @@ export default function PayrollHubPage() {
                     const totalCosts = materialExpenses + rentals + (item.payrollDeductionAmount || 0)
                     const techNet = getPayrollAmount(item)
                     return (
-                      <TableRow key={item.id} className={cn(excludedInterventionIds.includes(item.id) && "opacity-50", !excludedInterventionIds.includes(item.id) && item.isSimpleVisit && "bg-primary/5")}>
-                        <TableCell><Checkbox aria-label={`Incluir servicio ${item.request.claimNumber}`} checked={!excludedInterventionIds.includes(item.id)} onCheckedChange={(checked) => setExcludedInterventionIds(ids => checked ? ids.filter(id => id !== item.id) : [...ids, item.id])} /></TableCell>
-                        <TableCell><div className="flex flex-col"><span className="font-mono font-black text-primary text-xs">{item.request.claimNumber}</span><span className="text-[10px] font-semibold">{item.request.category} · {item.subservice || item.request.serviceSubservice || item.type}</span><span className="text-[8px] font-bold text-slate-400 uppercase">{item.isSimpleVisit ? "Visita" : item.type}</span></div></TableCell>
+                      <TableRow key={item.id} className={cn((isExcluded || !isPayable) && "opacity-60", !isExcluded && isPayable && item.isSimpleVisit && "bg-primary/5")}>
+                        <TableCell><Checkbox aria-label={`Incluir servicio ${item.request.claimNumber}`} checked={isPayable && !isExcluded} disabled={!isPayable} onCheckedChange={(checked) => setExcludedInterventionIds(ids => checked ? ids.filter(id => id !== item.id) : [...ids, item.id])} /></TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-mono font-black text-primary text-xs">{item.request.claimNumber}</span>
+                            <span className="text-[10px] font-semibold">{item.request.category} · {item.subservice || item.request.serviceSubservice || item.type}</span>
+                            <span className="text-[8px] font-bold text-slate-400 uppercase">{item.isSimpleVisit ? "Visita" : item.type} · {item.request.city || "Sin ciudad"}</span>
+                            <span className={cn("mt-1 text-[9px] font-black uppercase", isPayable ? "text-green-700" : "text-orange-700")}>
+                              {isPayable ? "Listo para liquidar" : "Pendiente de autorización o cierre"}
+                            </span>
+                          </div>
+                        </TableCell>
                         <TableCell className="text-right font-mono font-bold text-slate-700">${(item.reportedValue || 0).toLocaleString()}</TableCell>
                         <TableCell className="text-right font-mono text-xs text-destructive">
                           -${totalCosts.toLocaleString()}
