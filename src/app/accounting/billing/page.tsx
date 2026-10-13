@@ -55,13 +55,13 @@ export default function BillingReportPage() {
     return collection(db, "service_requests")
   }, [db, user])
 
-  const { data: firestoreRequests, isLoading: isRequestsLoading } = useCollection(requestsQuery)
+  const { data: firestoreRequests, isLoading: isRequestsLoading, error: requestsError } = useCollection(requestsQuery)
 
   const companiesQuery = useMemoFirebase(() => {
     if (!db || !user) return null
     return collection(db, "assistance_companies")
   }, [db, user])
-  const { data: firestoreCompanies } = useCollection(companiesQuery)
+  const { data: firestoreCompanies, isLoading: isCompaniesLoading, error: companiesError } = useCollection(companiesQuery)
   const allCompanies = useMemo(() => {
     const companies = [...(firestoreCompanies || [])]
     MOCK_COMPANIES.forEach(mock => {
@@ -73,9 +73,16 @@ export default function BillingReportPage() {
   const allRequests = firestoreRequests ? [...firestoreRequests, ...MOCK_REQUESTS.filter(mr => !firestoreRequests.find(fr => fr.claimNumber === mr.claimNumber))] : MOCK_REQUESTS
 
   const selectedCompany = allCompanies.find(c => c.id === selectedCompanyId)
+  const normalizeCompanyReference = (value?: string) =>
+    value?.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").toUpperCase() || ""
+  const selectedCompanyReferences = selectedCompany
+    ? new Set([normalizeCompanyReference(selectedCompany.id), normalizeCompanyReference(selectedCompany.name)])
+    : new Set<string>()
 
   const filteredRequests = allRequests.filter(req => {
-    const matchesCompany = !selectedCompanyId || req.companyId === selectedCompanyId
+    const matchesCompany = !selectedCompanyId ||
+      req.companyId === selectedCompanyId ||
+      selectedCompanyReferences.has(normalizeCompanyReference(req.companyId))
     const matchesSearch = (req.claimNumber || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
                           (req.insuredName || "").toLowerCase().includes(searchTerm.toLowerCase())
     const isCompleted = req.status === 'completed'
@@ -352,6 +359,7 @@ export default function BillingReportPage() {
   }
 
   const isLoadingTotal = isUserLoading || isRequestsLoading
+  const dataLoadError = requestsError || companiesError
 
   if (!selectedCompanyId) {
     return (
@@ -361,10 +369,30 @@ export default function BillingReportPage() {
           <p className="text-muted-foreground font-medium">Seleccione una aseguradora para procesar conciliaciones y facturas de forma independiente.</p>
         </div>
 
+        {dataLoadError ? (
+          <Card role="alert" className="border-destructive/40">
+            <CardContent className="p-6 text-sm text-destructive">
+              No se pudieron cargar las asistencias o expedientes de Firestore: {dataLoadError.message}
+            </CardContent>
+          </Card>
+        ) : isUserLoading || isRequestsLoading || isCompaniesLoading ? (
+          <div className="flex min-h-40 items-center justify-center gap-3 text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            Cargando asistencias y expedientes...
+          </div>
+        ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {MOCK_COMPANIES.map((company) => {
-            const companyRequests = allRequests.filter(r => r.companyId === company.id && r.status === 'completed')
-            const pendingCount = companyRequests.filter(r => r.billingStatus !== 'validated').length
+          {allCompanies.map((company) => {
+            const companyReferences = new Set([
+              normalizeCompanyReference(company.id),
+              normalizeCompanyReference(company.name)
+            ])
+            const companyRequests = allRequests.filter(r =>
+              companyReferences.has(normalizeCompanyReference(r.companyId)) && r.status === 'completed'
+            )
+            const pendingCount = companyRequests.filter(r =>
+              !r.billingStatus || r.billingStatus === 'pending' || r.billingStatus === 'pre_validated'
+            ).length
             
             return (
               <Card 
@@ -390,6 +418,7 @@ export default function BillingReportPage() {
             )
           })}
         </div>
+        )}
       </div>
     )
   }
@@ -410,6 +439,14 @@ export default function BillingReportPage() {
           <FileSpreadsheet className="h-5 w-5" /> Exportar Excel Prevalidado
         </Button>
       </div>
+
+      {dataLoadError && (
+        <Card role="alert" className="border-destructive/40">
+          <CardContent className="p-6 text-sm text-destructive">
+            No se pudieron cargar las asistencias o expedientes de Firestore: {dataLoadError.message}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
