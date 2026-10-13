@@ -327,9 +327,12 @@ export default function RequestDetailPage() {
       toast({ variant: "destructive", title: "La cantidad debe ser mayor que cero" })
       return
     }
+    const costCode = !isOutOfTariff
+      ? costSheetItems?.find(cost => cost.id === item.id)?.code
+      : undefined
     const line: TicketCostLine = {
       id: crypto.randomUUID(),
-      costCode: isOutOfTariff ? undefined : costSheetItems?.find(cost => cost.id === item.id)?.code,
+      ...(costCode ? { costCode } : {}),
       description: item.description,
       kind: item.kind,
       unit: item.unit,
@@ -337,7 +340,7 @@ export default function RequestDetailPage() {
       unitValue: item.value,
       total: quantity * item.value,
       authorizationStatus: costAuthorizationStatus,
-      costSheetItemId: isOutOfTariff ? undefined : item.id,
+      ...(!isOutOfTariff ? { costSheetItemId: item.id } : {}),
       isOutOfTariff
     }
     setNewIntervention(previous => {
