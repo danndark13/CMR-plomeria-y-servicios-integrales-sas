@@ -44,6 +44,7 @@ import { TechnicianIntervention, ServiceRequest, PayrollRecord, Advance, Technic
 import { cn } from "@/lib/utils"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
+import * as XLSX from "xlsx"
 
 const normalizePayrollCity = (city?: string) =>
   city?.trim().replace(/\s+/g, " ").toUpperCase() || ""
@@ -869,6 +870,49 @@ export default function PayrollHubPage() {
     toast({ title: "Cuenta de cobro generada" })
   }
 
+  const exportCityServicesExcel = () => {
+    if (!cityFilter || !cityServiceRows.length) return
+
+    const rows = cityServiceRows.map(({ request, intervention }) => {
+      const technicianId = intervention?.technicianId?.trim() || ""
+      const availability = !intervention
+        ? "Sin servicio reportado"
+        : intervention.isPayrollExcluded
+          ? "Solo referencia · no pagable"
+          : intervention.payrollStatus === "processed"
+            ? "Ya liquidado"
+            : canPayIntervention(request, intervention)
+              ? "Listo para liquidar"
+              : "Requiere autorización o cierre"
+
+      return {
+        Expediente: request.claimNumber,
+        "Técnico indicado": technicianId ? getPayrollPersonName(technicianId) : "Sin técnico en el reporte",
+        "Servicio / reporte": intervention?.title || intervention?.subservice || request.serviceSubservice || request.category,
+        "Descripción del servicio": intervention?.notes || request.description || "Sin descripción",
+        "Estado expediente": `${request.status} · ${request.billingStatus}`,
+        "Valor reportado": intervention?.reportedValue || 0,
+        Disponibilidad: availability,
+      }
+    })
+
+    const worksheet = XLSX.utils.json_to_sheet(rows)
+    worksheet["!cols"] = [
+      { wch: 16 },
+      { wch: 30 },
+      { wch: 32 },
+      { wch: 60 },
+      { wch: 28 },
+      { wch: 20 },
+      { wch: 36 },
+    ]
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Servicios por ciudad")
+    const cityFileName = cityFilter.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9]+/gi, "_")
+    XLSX.writeFile(workbook, `Servicios_${cityFileName}_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    toast({ title: "Excel descargado", description: `Se exportaron ${rows.length} registros de ${cityFilter}.` })
+  }
+
   const exportPayrollCSV = () => {
     if (!selectedInterventions.length && !selectedAdvances.length) return
 
@@ -1520,12 +1564,18 @@ export default function PayrollHubPage() {
 
             {cityFilter && (
               <Card className="mb-6">
-                <CardHeader>
-                  <CardTitle className="text-base">Expedientes y servicios de {cityFilter}</CardTitle>
-                  <CardDescription>
-                    {cityServiceRows.length} registros encontrados. El técnico mostrado es el guardado en el reporte, no se asigna por ciudad.
-                    Los reportes de carga masiva son informativos y no generan pagos por sí solos.
-                  </CardDescription>
+                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="space-y-2">
+                    <CardTitle className="text-base">Expedientes y servicios de {cityFilter}</CardTitle>
+                    <CardDescription>
+                      {cityServiceRows.length} registros encontrados. El técnico mostrado es el guardado en el reporte, no se asigna por ciudad.
+                      Los reportes de carga masiva son informativos y no generan pagos por sí solos.
+                    </CardDescription>
+                  </div>
+                  <Button type="button" variant="outline" onClick={exportCityServicesExcel} disabled={isRequestsLoading || cityServiceRows.length === 0}>
+                    <FileSpreadsheet className="mr-2 h-4 w-4" />
+                    Descargar Excel
+                  </Button>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="overflow-x-auto">
