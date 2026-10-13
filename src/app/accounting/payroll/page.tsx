@@ -54,13 +54,6 @@ export default function PayrollHubPage() {
   const { user } = useUser()
   const [cityFilter, setCityFilter] = useState("")
   const [citySearchInput, setCitySearchInput] = useState("")
-  const cityQueryValues = useMemo(() => {
-    if (!cityFilter) return []
-    const city = cityFilter.trim().replace(/\s+/g, " ")
-    const lowercaseCity = city.toLocaleLowerCase("es-CO")
-    const titleCaseCity = lowercaseCity.replace(/(^|\s)\p{L}/gu, letter => letter.toLocaleUpperCase("es-CO"))
-    return Array.from(new Set([city, lowercaseCity, titleCaseCity]))
-  }, [cityFilter])
   const [visibleCityServiceCount, setVisibleCityServiceCount] = useState(50)
   const [selectedTechId, setSelectedTechId] = useState<string | null>(null)
   const [selectedOfficeId, setSelectedOfficeId] = useState<string | null>(null)
@@ -110,11 +103,11 @@ export default function PayrollHubPage() {
   const isDev = profile?.roleId === 'Desarrollador'
 
   const requestsQuery = useMemoFirebase(() => {
-    if (!db || !user || cityQueryValues.length === 0) return null
-    return query(collection(db, "service_requests"), where("city", "in", cityQueryValues))
-  }, [db, user, cityQueryValues])
+    if (!db || !user) return null
+    return collection(db, "service_requests")
+  }, [db, user])
   const { data: requestsForCity, isLoading: isRequestsLoading } = useCollection(requestsQuery)
-  const allRequests = cityFilter ? requestsForCity : null
+  const allRequests = requestsForCity
 
   const payrollQuery = useMemoFirebase(() => {
     if (!db || !user) return null
@@ -378,12 +371,13 @@ export default function PayrollHubPage() {
 
   const paidRequestsWithoutTechnician = useMemo(
     () => (allRequests || []).filter(request =>
+      (!cityFilter || normalizePayrollCity(request.city) === cityFilter) &&
       (request.billingStatus === "validated" || request.billingStatus === "paid") &&
       !(request.interventions || []).some((intervention: TechnicianIntervention) =>
         intervention.technicianId?.trim() && !intervention.isPayrollExcluded
       )
     ),
-    [allRequests]
+    [allRequests, cityFilter]
   )
 
   useEffect(() => {
@@ -1711,12 +1705,13 @@ export default function PayrollHubPage() {
                   </Card>
                 )
               })}
-              {!cityFilter ? (
-                <div className="col-span-full py-12 text-center text-muted-foreground italic border-2 border-dashed rounded-xl bg-slate-50">
-                  Busca una ciudad para consultar expedientes y técnicos sin cargar toda la base de servicios.
+              {isRequestsLoading ? (
+                <div className="col-span-full flex h-24 items-center justify-center rounded-xl border-2 border-dashed bg-slate-50">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  <span className="ml-2 text-sm text-muted-foreground">Cargando técnicos y expedientes pendientes...</span>
                 </div>
-              ) : visibleTechnicians.length === 0 && !isRequestsLoading ? (
-                <div className="col-span-full py-20 text-center text-muted-foreground italic border-2 border-dashed rounded-xl bg-slate-50">
+              ) : visibleTechnicians.length === 0 ? (
+                <div className="col-span-full py-12 text-center text-muted-foreground italic border-2 border-dashed rounded-xl bg-slate-50">
                   No hay técnicos con servicios, adelantos o descuentos pendientes de liquidar.
                 </div>
               ) : null}
