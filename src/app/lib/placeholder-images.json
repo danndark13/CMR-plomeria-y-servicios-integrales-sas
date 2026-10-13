@@ -1,0 +1,16 @@
+{
+  "placeholderImages": [
+    {
+      "id": "avatar-tech",
+      "description": "Technician Profile Avatar",
+      "imageUrl": "https://picsum.photos/seed/tech1/100/100",
+      "imageHint": "technician professional"
+    },
+    {
+      "id": "hero-dashboard",
+      "description": "Dashboard overview background",
+      "imageUrl": "https://picsum.photos/seed/dashboard/1200/400",
+      "imageHint": "office business"
+    }
+  ]
+}

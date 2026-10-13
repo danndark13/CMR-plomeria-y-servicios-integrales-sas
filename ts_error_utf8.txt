@@ -1,0 +1,50 @@
+﻿
+> nextn@0.1.0 typecheck
+> tsc --noEmit
+
+src/app/accounting/balance/page.tsx(109,54): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/accounting/billing/page.tsx(201,90): error TS18048: 'selectedCompany' is possibly 'undefined'.
+src/app/accounting/billing/page.tsx(335,36): error TS18046: 'requests' is of type 'unknown'.
+src/app/accounting/billing/page.tsx(335,53): error TS7006: Parameter 'sum' implicitly has an 'any' type.
+src/app/accounting/billing/page.tsx(335,58): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/app/accounting/billing/page.tsx(336,32): error TS18046: 'requests' is of type 'unknown'.
+src/app/accounting/billing/page.tsx(352,89): error TS18046: 'requests' is of type 'unknown'.
+src/app/accounting/billing/page.tsx(369,26): error TS18046: 'requests' is of type 'unknown'.
+src/app/accounting/billing/page.tsx(369,40): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(107,17): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(114,14): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(121,17): error TS7006: Parameter 'a' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(122,14): error TS7006: Parameter 'a' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(136,66): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(136,92): error TS7006: Parameter 's' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(136,95): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(216,31): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(220,52): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(221,27): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(222,54): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(222,80): error TS7006: Parameter 's' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(222,83): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(252,23): error TS2353: Object literal may only specify known properties, and 'fillStyle' does not exist in type 'Partial<Styles>'.
+src/app/accounting/payroll/page.tsx(344,58): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(350,56): error TS7006: Parameter 'a' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(377,33): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(378,28): error TS7006: Parameter 'a' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(382,60): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(388,58): error TS7006: Parameter 'a' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(579,83): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(579,109): error TS7006: Parameter 's' implicitly has an 'any' type.
+src/app/accounting/payroll/page.tsx(579,112): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/app/calendar/page.tsx(40,15): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/calendar/page.tsx(41,12): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/inventory/page.tsx(122,68): error TS7006: Parameter 'interv' implicitly has an 'any' type.
+src/app/inventory/page.tsx(124,71): error TS7006: Parameter 'exp' implicitly has an 'any' type.
+src/app/page.tsx(115,33): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/page.tsx(215,15): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/page.tsx(216,12): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/requests/[id]/page.tsx(453,59): error TS2339: Property 'createdBy' does not exist on type 'ServiceRequest'.
+src/app/requests/page.tsx(118,33): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/components/ui/calendar.tsx(57,9): error TS2353: Object literal may only specify known properties, and 'IconLeft' does not exist in type 'Partial<CustomComponents>'.
+src/components/ui/calendar.tsx(57,22): error TS7031: Binding element 'className' implicitly has an 'any' type.
+src/components/ui/calendar.tsx(60,23): error TS7031: Binding element 'className' implicitly has an 'any' type.
+src/lib/mock-data.ts(2,57): error TS2305: Module '"./types"' has no exported member 'Reminder'.
+src/lib/mock-data.ts(76,68): error TS2322: Type '"Reparaci├│n"' is not assignable to type 'ServiceCategory'.

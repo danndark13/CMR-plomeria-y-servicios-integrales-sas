@@ -1,0 +1,146 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * ASISTENCIAPRO CRM SECURITY RULES
+     */
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getProfile() {
+      return exists(/databases/$(database)/documents/user_profiles/$(request.auth.uid)) 
+        ? get(/databases/$(database)/documents/user_profiles/$(request.auth.uid)).data 
+        : null;
+    }
+
+    function hasRole(roleId) {
+      let profile = getProfile();
+      return isSignedIn() && profile != null && profile.isActive == true && profile.roleId == roleId;
+    }
+
+    function isDev() {
+      let profile = getProfile();
+      return isSignedIn() && profile != null && profile.isActive == true && profile.roleId == 'Desarrollador';
+    }
+
+    function isAdmin() {
+      let profile = getProfile();
+      return isSignedIn() && profile != null && profile.isActive == true && (profile.roleId == 'Administrador' || profile.roleId == 'Gerente' || profile.roleId == 'Desarrollador');
+    }
+
+    function isAccounting() {
+      return hasRole('Contabilidad') || isAdmin();
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /roles/{roleId} {
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /user_profiles/{userProfileId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if (isAdmin() || isOwner(userProfileId)) && resource != null;
+      allow delete: if isAdmin();
+    }
+
+    match /assistance_companies/{companyId} {
+      allow get, list: if isSignedIn();
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    match /client_accounts/{clientAccountId} {
+      allow get, list: if isSignedIn();
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    match /service_categories/{categoryId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn() && (isAdmin() || hasRole('Servicio al Cliente'));
+      allow delete: if isAdmin();
+    }
+
+    match /service_requests/{serviceRequestId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && (isAdmin() || hasRole('Servicio al Cliente'));
+      allow update: if isSignedIn();
+      allow delete: if isDev();
+    }
+
+    match /service_requests/{serviceRequestId}/service_notes/{serviceNoteId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    match /inventory/{itemId} {
+      allow get, list, create, update, delete: if isSignedIn();
+    }
+
+    match /cost_sheet_items/{itemId} {
+      allow get, list: if isSignedIn() && (isAdmin() || isAccounting());
+      allow create, update, delete: if isDev() || isAccounting();
+    }
+
+    match /technician_payroll_settings/{technicianId} {
+      allow get, list: if isAccounting();
+      allow create, update: if isAccounting();
+      allow delete: if isAdmin();
+    }
+
+    match /payroll_history/{payrollId} {
+      allow get, list: if isSignedIn() && (
+        isAdmin() || 
+        isAccounting() || 
+        (getProfile() != null && resource.data.technicianId == getProfile().username)
+      );
+      allow create, update: if isSignedIn() && (isAdmin() || isAccounting());
+      allow delete: if isDev();
+    }
+
+    match /payroll_deduction_tickets/{ticketId} {
+      allow get, list, update: if isAccounting();
+      allow create: if isAdmin();
+      allow delete: if isDev();
+    }
+
+    match /chats/{chatId} {
+      allow read, write: if isSignedIn();
+      allow create: if isSignedIn();
+    }
+
+    match /chats/{chatId}/messages/{messageId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /quotes/{quoteId} {
+      allow get, list: if isSignedIn() && (isAdmin() || isAccounting() || hasRole('Servicio al Cliente'));
+      allow create: if isSignedIn() && (isAdmin() || isAccounting() || hasRole('Servicio al Cliente'));
+      allow update: if isSignedIn() && (isAdmin() || isAccounting());
+      allow delete: if isDev();
+    }
+
+    match /payment_accounts/{accountId} {
+      allow get, list: if isSignedIn() && (isAdmin() || isAccounting() || hasRole('Servicio al Cliente'));
+      allow create: if isSignedIn() && (isAdmin() || isAccounting() || hasRole('Servicio al Cliente'));
+      allow update: if isSignedIn() && (isAdmin() || isAccounting());
+      allow delete: if isDev();
+    }
+
+    // The active developer role has full access, including future collections.
+    match /{document=**} {
+      allow read, write: if isDev();
+    }
+  }
+}
