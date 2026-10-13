@@ -46,12 +46,13 @@ import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 
 const normalizePayrollCity = (city?: string) =>
-  city?.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").toUpperCase() || ""
+  city?.trim().replace(/\s+/g, " ").toUpperCase() || ""
 
 export default function PayrollHubPage() {
   const db = useFirestore()
   const { user } = useUser()
   const [cityFilter, setCityFilter] = useState("")
+  const [citySearchInput, setCitySearchInput] = useState("")
   const [visibleCityServiceCount, setVisibleCityServiceCount] = useState(50)
   const [selectedTechId, setSelectedTechId] = useState<string | null>(null)
   const [selectedOfficeId, setSelectedOfficeId] = useState<string | null>(null)
@@ -101,10 +102,11 @@ export default function PayrollHubPage() {
   const isDev = profile?.roleId === 'Desarrollador'
 
   const requestsQuery = useMemoFirebase(() => {
-    if (!db || !user) return null
-    return collection(db, "service_requests")
-  }, [db, user])
-  const { data: allRequests, isLoading: isRequestsLoading } = useCollection(requestsQuery)
+    if (!db || !user || !cityFilter) return null
+    return query(collection(db, "service_requests"), where("city", "==", cityFilter))
+  }, [db, user, cityFilter])
+  const { data: requestsForCity, isLoading: isRequestsLoading } = useCollection(requestsQuery)
+  const allRequests = cityFilter ? requestsForCity : null
 
   const payrollQuery = useMemoFirebase(() => {
     if (!db || !user) return null
@@ -297,17 +299,6 @@ export default function PayrollHubPage() {
   const canPayIntervention = useCallback((request: ServiceRequest, intervention: TechnicianIntervention) =>
     request.billingStatus === "validated" || request.billingStatus === "paid" || request.status === "completed" || intervention.isReadyForPayroll === true,
   [])
-
-  const availableCities = useMemo(() => {
-    const cities = new Map<string, string>()
-    for (const request of allRequests || []) {
-      const city = request.city?.trim()
-      const key = normalizePayrollCity(city)
-      if (key && !cities.has(key)) cities.set(key, city)
-    }
-    return Array.from(cities, ([value, label]) => ({ value, label }))
-      .sort((a, b) => a.label.localeCompare(b.label))
-  }, [allRequests])
 
   const pendingByTechnician = useMemo(() => {
     type PendingItems = {
@@ -1408,7 +1399,9 @@ export default function PayrollHubPage() {
                 <CardDescription>Los expedientes validados se activan para nómina. Asigna el técnico y crea el reporte; el servicio aparecerá en su liquidación.</CardDescription>
               </CardHeader>
               <CardContent>
-                {paidRequestsWithoutTechnician.length === 0 ? (
+                {!cityFilter ? (
+                  <p className="text-sm text-muted-foreground">Busca una ciudad arriba para consultar los expedientes.</p>
+                ) : paidRequestsWithoutTechnician.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No hay expedientes validados pendientes de reporte y asignación.</p>
                 ) : (
                   <div className="overflow-x-auto rounded-md border">
@@ -1501,29 +1494,34 @@ export default function PayrollHubPage() {
               </DialogContent>
             </Dialog>
 
-            <div className="mb-6 flex flex-col gap-2 sm:max-w-sm">
-              <Label htmlFor="payroll-city-filter">Filtrar servicios por ciudad / municipio</Label>
-              <select
-                id="payroll-city-filter"
-                value={cityFilter}
-                onChange={event => {
-                  setCityFilter(event.target.value)
-                  setVisibleCityServiceCount(50)
-                }}
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="">Todas las ciudades</option>
-                {availableCities.map(city => <option key={city.value} value={city.value}>{city.label}</option>)}
-              </select>
+            <form
+              className="mb-6 flex flex-col gap-2 sm:max-w-md"
+              onSubmit={event => {
+                event.preventDefault()
+                setCityFilter(normalizePayrollCity(citySearchInput))
+                setVisibleCityServiceCount(50)
+              }}
+            >
+              <Label htmlFor="payroll-city-filter">Buscar expedientes por ciudad / municipio</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="payroll-city-filter"
+                  value={citySearchInput}
+                  onChange={event => setCitySearchInput(event.target.value)}
+                  placeholder="Ejemplo: Pereira"
+                  autoComplete="address-level2"
+                />
+                <Button type="submit" disabled={!citySearchInput.trim()}>Buscar</Button>
+              </div>
               <p className="text-xs text-muted-foreground">
-                La ciudad solo filtra expedientes; no determina el técnico. Revisa el técnico que aparece en cada servicio antes de abrir su nómina.
+                Escribe la ciudad como aparece en los expedientes. Se consultan solo los de esa ciudad; tú verificas quién hizo cada servicio.
               </p>
-            </div>
+            </form>
 
             {cityFilter && (
               <Card className="mb-6">
                 <CardHeader>
-                  <CardTitle className="text-base">Expedientes y servicios de {availableCities.find(city => city.value === cityFilter)?.label || cityFilter}</CardTitle>
+                  <CardTitle className="text-base">Expedientes y servicios de {cityFilter}</CardTitle>
                   <CardDescription>
                     {cityServiceRows.length} registros encontrados. El técnico mostrado es el guardado en el reporte, no se asigna por ciudad.
                     Los reportes de carga masiva son informativos y no generan pagos por sí solos.
@@ -1546,6 +1544,8 @@ export default function PayrollHubPage() {
                       <TableBody>
                         {isRequestsLoading ? (
                           <TableRow><TableCell colSpan={7} className="h-24 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary opacity-40" /></TableCell></TableRow>
+                        ) : !allRequests ? (
+                          <TableRow><TableCell colSpan={7} className="h-24 text-center text-muted-foreground">Escribe una ciudad para consultar sus expedientes.</TableCell></TableRow>
                         ) : cityServiceRows.length === 0 ? (
                           <TableRow><TableCell colSpan={7} className="h-24 text-center text-muted-foreground">No hay expedientes en esta ciudad.</TableCell></TableRow>
                         ) : cityServiceRows.slice(0, visibleCityServiceCount).map(({ request, intervention }, index) => {
@@ -1648,11 +1648,15 @@ export default function PayrollHubPage() {
                   </Card>
                 )
               })}
-              {visibleTechnicians.length === 0 && (
+              {!cityFilter ? (
+                <div className="col-span-full py-12 text-center text-muted-foreground italic border-2 border-dashed rounded-xl bg-slate-50">
+                  Busca una ciudad para consultar expedientes y técnicos sin cargar toda la base de servicios.
+                </div>
+              ) : visibleTechnicians.length === 0 && !isRequestsLoading ? (
                 <div className="col-span-full py-20 text-center text-muted-foreground italic border-2 border-dashed rounded-xl bg-slate-50">
                   No hay técnicos con servicios, adelantos o descuentos pendientes de liquidar.
                 </div>
-              )}
+              ) : null}
             </div>
             <Card className="mt-8 border-t-4 border-t-blue-500">
               <CardHeader>
@@ -1700,7 +1704,7 @@ export default function PayrollHubPage() {
                   <Calculator className="h-4 w-4" /> Servicios Pendientes de Autorización
                 </CardTitle>
                 <CardDescription className="text-[10px] font-bold uppercase">
-                  {cityFilter ? `Servicios de ${availableCities.find(city => city.value === cityFilter)?.label || cityFilter}. ` : ""}
+                  {cityFilter ? `Servicios de ${cityFilter}. ` : ""}
                   Autoriza un servicio solo después de revisarlo; entonces quedará disponible para liquidación.
                 </CardDescription>
               </CardHeader>
@@ -1719,6 +1723,8 @@ export default function PayrollHubPage() {
                   <TableBody>
                     {isRequestsLoading ? (
                       <TableRow><TableCell colSpan={6} className="h-40 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary opacity-20" /></TableCell></TableRow>
+                    ) : !cityFilter ? (
+                      <TableRow><TableCell colSpan={6} className="h-40 text-center italic text-muted-foreground">Busca una ciudad en la pestaña “Liquidar técnicos” para revisar sus servicios.</TableCell></TableRow>
                     ) : interventionsToApprove.length === 0 ? (
                       <TableRow><TableCell colSpan={6} className="h-40 text-center italic text-muted-foreground">No hay servicios pendientes de aprobación.</TableCell></TableRow>
                     ) : interventionsToApprove.map((i: any) => (
@@ -1884,7 +1890,7 @@ export default function PayrollHubPage() {
               <div>
                 <CardTitle className="text-base font-semibold">Desglose de servicios y descuentos</CardTitle>
                 <CardDescription>
-                  {cityFilter ? `Servicios de ${availableCities.find(city => city.value === cityFilter)?.label || cityFilter}. ` : ""}
+                  {cityFilter ? `Servicios de ${cityFilter}. ` : ""}
                   Los servicios sin autorización se muestran, pero no se incluyen en los importes.
                 </CardDescription>
               </div>
