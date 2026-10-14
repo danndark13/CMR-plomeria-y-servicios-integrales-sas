@@ -49,6 +49,9 @@ import * as XLSX from "xlsx"
 const normalizePayrollCity = (city?: string) =>
   city?.trim().replace(/\s+/g, " ").toUpperCase() || ""
 
+const isExcludedFromPayroll = (intervention: TechnicianIntervention) =>
+  intervention.isPayrollExcluded === true && intervention.isReadyForPayroll !== true
+
 export default function PayrollHubPage() {
   const db = useFirestore()
   const { user } = useUser()
@@ -321,7 +324,7 @@ export default function PayrollHubPage() {
       if (cityFilter && normalizePayrollCity(request.city) !== cityFilter) continue
       for (const intervention of request.interventions || []) {
         const technicianId = canonicalTechnicianId(intervention.technicianId)
-        if (!technicianId || intervention.isPayrollExcluded || intervention.payrollStatus === "processed") continue
+        if (!technicianId || isExcludedFromPayroll(intervention) || intervention.payrollStatus === "processed") continue
         getItems(technicianId).interventions.push({ intervention, request })
       }
       for (const advance of request.advances || []) {
@@ -374,7 +377,7 @@ export default function PayrollHubPage() {
       (!cityFilter || normalizePayrollCity(request.city) === cityFilter) &&
       (request.billingStatus === "validated" || request.billingStatus === "paid") &&
       !(request.interventions || []).some((intervention: TechnicianIntervention) =>
-        intervention.technicianId?.trim() && !intervention.isPayrollExcluded
+        intervention.technicianId?.trim() && !isExcludedFromPayroll(intervention)
       )
     ),
     [allRequests, cityFilter]
@@ -416,7 +419,7 @@ export default function PayrollHubPage() {
     return (allRequests || []).flatMap((req: ServiceRequest) => 
       (req.interventions || [])
         .filter((i: any) => {
-          if (i.isPayrollExcluded) return false
+          if (isExcludedFromPayroll(i)) return false
           const isCorrectTech = canonicalTechnicianId(i.technicianId) === selectedTechId
           const notProcessed = i.payrollStatus !== 'processed'
           const matchesCity = !cityFilter || normalizePayrollCity(req.city) === cityFilter
@@ -430,7 +433,7 @@ export default function PayrollHubPage() {
     return (allRequests || []).flatMap((req: ServiceRequest) => 
       (req.interventions || [])
         .filter((i: any) => {
-          if (i.isPayrollExcluded) return false
+          if (isExcludedFromPayroll(i)) return false
           const notProcessed = i.payrollStatus !== 'processed'
           const notApproved = !i.isReadyForPayroll
           const notValidated = req.billingStatus !== 'validated' && req.status !== 'completed'
@@ -880,12 +883,12 @@ export default function PayrollHubPage() {
       const technicianId = intervention?.technicianId?.trim() || ""
       const availability = !intervention
         ? "Sin servicio reportado"
-        : intervention.isPayrollExcluded
-          ? "Solo referencia · no pagable"
-          : intervention.payrollStatus === "processed"
-            ? "Ya liquidado"
+        : intervention.payrollStatus === "processed"
+          ? "Ya liquidado"
+          : isExcludedFromPayroll(intervention)
+            ? "Solo referencia · no pagable"
             : canPayIntervention(request, intervention)
-              ? "Listo para liquidar"
+              ? intervention.isReadyForPayroll ? "Habilitado · listo para liquidar" : "Listo para liquidar"
               : "Requiere autorización o cierre"
 
       return {
@@ -1083,7 +1086,7 @@ export default function PayrollHubPage() {
             intervention.usedPlanchaTermofusion === true,
             intervention.payrollDeductionAmount || 0
           ])
-          if (!current || current.payrollStatus === "processed" || current.isPayrollExcluded ||
+          if (!current || current.payrollStatus === "processed" || isExcludedFromPayroll(current) ||
             canonicalTechnicianId(current.technicianId) !== selectedTechId || !canPayIntervention(requests.get(item.request.id)!, current)) {
             throw new Error("Uno de los servicios seleccionados ya fue liquidado o dejó de estar disponible. Actualiza la pantalla; no se creó otro pago.")
           }
@@ -1607,7 +1610,7 @@ export default function PayrollHubPage() {
                           <TableRow><TableCell colSpan={7} className="h-24 text-center text-muted-foreground">No hay expedientes en esta ciudad.</TableCell></TableRow>
                         ) : cityServiceRows.slice(0, visibleCityServiceCount).map(({ request, intervention }, index) => {
                           const technicianId = intervention?.technicianId?.trim() || ""
-                          const isPayable = !!intervention && !intervention.isPayrollExcluded &&
+                          const isPayable = !!intervention && !isExcludedFromPayroll(intervention) &&
                             intervention.payrollStatus !== "processed" && canPayIntervention(request, intervention)
                           return (
                             <TableRow key={`${request.id}-${intervention?.id || "sin-reporte"}-${index}`}>
@@ -1628,12 +1631,12 @@ export default function PayrollHubPage() {
                                 ${(intervention?.reportedValue || 0).toLocaleString("es-CO")}
                               </TableCell>
                               <TableCell>
-                                {intervention?.isPayrollExcluded ? (
-                                  <Badge variant="outline">Solo referencia · no pagable</Badge>
-                                ) : intervention?.payrollStatus === "processed" ? (
+                                {intervention?.payrollStatus === "processed" ? (
                                   <Badge variant="secondary">Ya liquidado</Badge>
                                 ) : isPayable ? (
-                                  <Badge className="bg-green-700">Listo para liquidar</Badge>
+                                  <Badge className="bg-green-700">{intervention?.isReadyForPayroll ? "Habilitado · listo para liquidar" : "Listo para liquidar"}</Badge>
+                                ) : intervention?.isPayrollExcluded ? (
+                                  <Badge variant="outline">Solo referencia · no pagable</Badge>
                                 ) : (
                                   <Badge variant="outline" className="border-orange-500 text-orange-700">Requiere autorización o cierre</Badge>
                                 )}

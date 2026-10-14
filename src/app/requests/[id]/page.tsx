@@ -1179,7 +1179,7 @@ export default function RequestDetailPage() {
                       <div className="flex items-center gap-2">
                         <Badge className="bg-primary/10 text-primary text-[9px] font-black">{item.type}</Badge>
                         {item.visitType && <Badge variant="outline" className="text-[9px]">{item.visitType}</Badge>}
-                        {item.isPayrollExcluded && <Badge variant="outline" className="text-[9px]">SIN NÓMINA</Badge>}
+                        {item.isPayrollExcluded && !item.isReadyForPayroll && <Badge variant="outline" className="text-[9px]">SIN NÓMINA</Badge>}
                         <span className="text-[10px] font-bold text-slate-500 uppercase">Téc: {item.technicianId || (item.isPayrollExcluded ? "NO APLICA" : "PENDIENTE")}</span>
                         {item.subservice && <span className="text-[10px] font-bold text-slate-500 uppercase">{item.subservice}</span>}
                       </div>
