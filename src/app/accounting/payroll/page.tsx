@@ -31,6 +31,7 @@ import {
   Info,
   Car,
   Trash2,
+  RotateCcw,
   FileSpreadsheet,
   Download,
   FileDown,
@@ -48,6 +49,24 @@ import * as XLSX from "xlsx"
 
 const normalizePayrollCity = (city?: string) =>
   city?.trim().replace(/\s+/g, " ").toUpperCase() || ""
+
+const PLATFORM_MAINTENANCE_RATE = 0.1
+const VISIT_FEE = 20000
+const PDF_ORANGE: [number, number, number] = [243, 111, 61]
+const PDF_BLACK: [number, number, number] = [35, 35, 35]
+const PDF_GRAY: [number, number, number] = [110, 110, 110]
+
+const omitUndefinedFields = <T,>(value: T): T => {
+  if (Array.isArray(value)) return value.map(omitUndefinedFields) as T
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => [key, omitUndefinedFields(item)])
+    ) as T
+  }
+  return value
+}
 
 const isExcludedFromPayroll = (intervention: TechnicianIntervention) =>
   intervention.isPayrollExcluded === true && intervention.isReadyForPayroll !== true
@@ -280,6 +299,13 @@ export default function PayrollHubPage() {
         : null
     })() ||
     (id ? `TÉCNICO SIN PERFIL · ${id.slice(-6)}` : "PERSONAL SIN NOMBRE")
+  const getPayrollPersonCedula = (id: string) => {
+    const normalizedId = canonicalTechnicianId(id)
+    const person = (allUsers || []).find(userProfile =>
+      userProfile.id === id || canonicalTechnicianId(userProfile.username) === normalizedId
+    ) as any
+    return person?.cedula || person?.documentId || person?.identification || ""
+  }
   const officeOpenTickets = (deductionTickets || []).filter(ticket =>
     ticket.personType === "office" && ticket.personId === selectedOfficeId && ticket.remainingAmount > 0
   )
@@ -301,7 +327,8 @@ export default function PayrollHubPage() {
     .reduce((sum, record) => sum + Math.max(0, record.pendingPaymentAmount || 0), 0)
   const officeTotalDue = officeCurrentBalance + previousOfficeBalance
   const canPayIntervention = useCallback((request: ServiceRequest, intervention: TechnicianIntervention) =>
-    request.billingStatus === "validated" || request.billingStatus === "paid" || request.status === "completed" || intervention.isReadyForPayroll === true,
+    !intervention.requiresCostValidation &&
+      (intervention.isSimpleVisit === true || request.billingStatus === "validated" || request.billingStatus === "paid" || request.status === "completed" || intervention.isReadyForPayroll === true),
   [])
 
   const pendingByTechnician = useMemo(() => {
@@ -438,7 +465,7 @@ export default function PayrollHubPage() {
           const notApproved = !i.isReadyForPayroll
           const notValidated = req.billingStatus !== 'validated' && req.status !== 'completed'
           const matchesCity = !cityFilter || normalizePayrollCity(req.city) === cityFilter
-          return notProcessed && notApproved && notValidated && matchesCity
+          return notProcessed && notApproved && (notValidated || i.requiresCostValidation === true) && matchesCity
         })
         .map((i: any) => ({ ...i, request: req }))
     )
@@ -479,8 +506,10 @@ export default function PayrollHubPage() {
       + (intervention.usedGeofono ? 120000 : 0)
       + (intervention.usedPlanchaTermofusion ? 70000 : 0)
     const valueAfterCosts = Math.max(0, (intervention.reportedValue || 0) - materialExpenses - rentals - (intervention.payrollDeductionAmount || 0))
+    const platformFee = intervention.isSimpleVisit ? 0 : valueAfterCosts * PLATFORM_MAINTENANCE_RATE
     const percentage = intervention.isSimpleVisit ? visitPercentage : servicePercentage
-    return valueAfterCosts * percentage / 100
+    const visitAmount = intervention.isSimpleVisit ? VISIT_FEE : 0
+    return (valueAfterCosts - platformFee + visitAmount) * percentage / 100
   }
 
   const technicianAmountBeforeTickets =
@@ -515,11 +544,14 @@ export default function PayrollHubPage() {
       if (i.usedRotomartillo) rentals += 80000
       if (i.usedGeofono) rentals += 120000
       if (i.usedPlanchaTermofusion) rentals += 70000
-      totalGross += gross
+      const visitAmount = i.isSimpleVisit ? VISIT_FEE : 0
+      totalGross += gross + visitAmount
       totalExpenses += materialExpenses
       totalRentals += rentals
       totalPreSplitDeductions += i.payrollDeductionAmount || 0
 
+      const splitBase = Math.max(0, gross - materialExpenses - rentals - (i.payrollDeductionAmount || 0)) + visitAmount
+      if (!i.isSimpleVisit) totalFee += splitBase * PLATFORM_MAINTENANCE_RATE
       accumulatedToSplit += getPayrollAmount(i)
     })
 
@@ -630,19 +662,19 @@ export default function PayrollHubPage() {
 
       // HEADER
       doc.setFontSize(18)
-      doc.setTextColor(31, 91, 204)
+      doc.setTextColor(...PDF_ORANGE)
       doc.text("PLOMERÍA Y SERVICIOS RYS SAS", 105, 20, { align: 'center' })
       
       doc.setFontSize(10)
-      doc.setTextColor(100)
+      doc.setTextColor(...PDF_GRAY)
       doc.text(`Nit: 901.601.017 | Comprobante de Nómina ${record.employeeType === "office" ? "Oficina" : "Técnico"}`, 105, 26, { align: 'center' })
       
-      doc.setDrawColor(200)
+      doc.setDrawColor(...PDF_ORANGE)
       doc.line(20, 32, 190, 32)
 
       // INFO SECTION
       doc.setFontSize(11)
-      doc.setTextColor(0)
+      doc.setTextColor(...PDF_BLACK)
       doc.setFont("helvetica", "bold")
       doc.text(record.employeeType === "office" ? "PERSONAL:" : "TÉCNICO:", 20, 45)
       doc.setFont("helvetica", "normal")
@@ -679,7 +711,7 @@ export default function PayrollHubPage() {
             item.claimNumber,
             item.service,
             item.preSplitDeductionAmount
-              ? `${item.subservice}\nDescuento antes de repartir: $${item.preSplitDeductionAmount.toLocaleString("es-CO")}${item.preSplitDeductionDescription ? ` · ${item.preSplitDeductionDescription}` : ""}`
+              ? `${              item.isSimpleVisit ? `${item.subservice} · Visita $${VISIT_FEE.toLocaleString("es-CO")}` : item.subservice}\nDescuento antes de repartir: $${item.preSplitDeductionAmount.toLocaleString("es-CO")}${item.preSplitDeductionDescription ? ` · ${item.preSplitDeductionDescription}` : ""}`
               : item.subservice,
             `$${item.technicianAmount.toLocaleString("es-CO")}`
           ])
@@ -689,9 +721,11 @@ export default function PayrollHubPage() {
               const materials = (intervention.detailedExpenses || []).filter((expense: Expense) => !expense.isUnused).reduce((sum: number, expense: Expense) => sum + (expense.amount || 0), 0)
               const rentals = (intervention.usedRotomartillo ? 80000 : 0) + (intervention.usedGeofono ? 120000 : 0) + (intervention.usedPlanchaTermofusion ? 70000 : 0)
               const oldSubtotal = intervention.reportedValue - materials - rentals
-              const oldFee = oldSubtotal > 0 ? oldSubtotal * 0.1 : 0
+              const oldFee = intervention.isSimpleVisit
+                ? 0
+                : oldSubtotal > 0 ? oldSubtotal * PLATFORM_MAINTENANCE_RATE : 0
               const oldNet = intervention.isSimpleVisit
-                ? (20000 / 2) + ((Math.max(0, intervention.reportedValue - 20000 - materials - rentals) - oldFee) / 2)
+                ? ((VISIT_FEE + Math.max(0, intervention.reportedValue - materials - rentals - (intervention.payrollDeductionAmount || 0))) * (record.visitPercentage ?? 50) / 100)
                 : (oldSubtotal - oldFee) / 2
               return [
                 request.claimNumber,
@@ -706,8 +740,11 @@ export default function PayrollHubPage() {
         head: [['EXPEDIENTE', 'SERVICIO', 'SUBSERVICIO', 'TOTAL']],
         body: tableRows,
         theme: 'striped',
-        headStyles: { fillColor: [31, 91, 204], textColor: [255, 255, 255], fontStyle: 'bold' },
-        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: PDF_BLACK, textColor: [255, 255, 255], fontStyle: 'bold' },
+        styles: { fontSize: 9, cellPadding: 3, overflow: "linebreak", lineColor: [210, 210, 210] },
+        margin: { left: 20, right: 20, top: 20, bottom: 20 },
+        alternateRowStyles: { fillColor: [255, 244, 238] },
+        rowPageBreak: "auto",
         columnStyles: {
           3: { halign: 'right', fontStyle: 'bold' }
         }
@@ -731,9 +768,12 @@ export default function PayrollHubPage() {
             `-$${item.amount.toLocaleString("es-CO")}`
           ]),
           theme: "striped",
-          headStyles: { fillColor: [31, 91, 204], textColor: [255, 255, 255], fontStyle: "bold" },
-          styles: { fontSize: 8, cellPadding: 2 },
-          columnStyles: { 3: { halign: "right", textColor: [180, 40, 40] } },
+          headStyles: { fillColor: PDF_BLACK, textColor: [255, 255, 255], fontStyle: "bold" },
+          styles: { fontSize: 8, cellPadding: 2, overflow: "linebreak", lineColor: [210, 210, 210] },
+          margin: { left: 20, right: 20, top: 20, bottom: 20 },
+          alternateRowStyles: { fillColor: [245, 245, 245] },
+          rowPageBreak: "auto",
+          columnStyles: { 3: { halign: "right", textColor: PDF_ORANGE } },
           didDrawPage: () => undefined
         })
         currentY = (doc as any).lastAutoTable.finalY + 8
@@ -743,21 +783,39 @@ export default function PayrollHubPage() {
       if (record.notes) {
         doc.setFontSize(10)
         doc.setFont("helvetica", "bold")
+        if (currentY + 12 > 272) {
+          doc.addPage()
+          currentY = 25
+        }
         doc.text("NOVEDADES / NOTAS:", 20, currentY)
         doc.setFont("helvetica", "normal")
         doc.setFontSize(9)
         const splitNotes = doc.splitTextToSize(record.notes, 170)
-        doc.text(splitNotes, 20, currentY + 6)
-        currentY += (splitNotes.length * 5) + 15
+        let noteOffset = 0
+        while (noteOffset < splitNotes.length) {
+          const availableLines = Math.max(1, Math.floor((272 - currentY - 10) / 5))
+          const lines = splitNotes.slice(noteOffset, noteOffset + availableLines)
+          doc.text(lines, 20, currentY + 6, { maxWidth: 170 })
+          noteOffset += lines.length
+          currentY += lines.length * 5 + 10
+          if (noteOffset < splitNotes.length) {
+            doc.addPage()
+            currentY = 25
+          }
+        }
       }
 
       // FINALS SECTION
-      doc.setDrawColor(230)
+      if (currentY + 45 > 272) {
+        doc.addPage()
+        currentY = 25
+      }
+      doc.setDrawColor(...PDF_GRAY)
       doc.setFillColor(245, 245, 245)
       doc.rect(120, currentY, 70, 40, 'F')
 
       doc.setFontSize(10)
-      doc.setTextColor(80)
+      doc.setTextColor(...PDF_GRAY)
       const serviceSubtotal = record.serviceSubtotal ?? record.netPaid + record.totalAdvances - (record.adjustmentAmount || 0)
       const deductionsTotal = deductions.reduce((sum, item) => sum + item.amount, 0) || record.totalAdvances
       doc.text("SUBTOTAL:", 125, currentY + 9)
@@ -772,22 +830,22 @@ export default function PayrollHubPage() {
       }
 
       doc.setFontSize(12)
-      doc.setTextColor(31, 91, 204)
+      doc.setTextColor(...PDF_ORANGE)
       doc.setFont("helvetica", "bold")
       doc.text("GRAN TOTAL:", 125, currentY + 35)
       doc.text(`$${record.netPaid.toLocaleString("es-CO")}`, 185, currentY + 35, { align: 'right' })
 
-      // FOOTER
-      doc.setFontSize(8)
-      doc.setTextColor(150)
-      doc.setFont("helvetica", "italic")
-      doc.text("Nota: Materiales, alquileres y descuentos pre-reparto se restan antes de aplicar el porcentaje del técnico.", 20, 280)
-      if (record.totalPreSplitDeductions) {
-        doc.text(`Descuentos antes de repartir: $${record.totalPreSplitDeductions.toLocaleString("es-CO")}`, 20, 275)
-      }
-      doc.text("Este documento es un soporte interno de liquidación corporativa.", 20, 285)
     })
 
+    for (let page = 1; page <= doc.getNumberOfPages(); page++) {
+      doc.setPage(page)
+      const pageHeight = doc.internal.pageSize.getHeight()
+      doc.setFontSize(7)
+      doc.setTextColor(...PDF_GRAY)
+      doc.setFont("helvetica", "italic")
+      doc.text("Soporte interno de liquidación · Valores expresados en pesos colombianos", 20, pageHeight - 20)
+      doc.text(`${page} / ${doc.getNumberOfPages()}`, 190, pageHeight - 20, { align: "right" })
+    }
     doc.save(`Nomina_RYS_${new Date().toISOString().split('T')[0]}.pdf`)
     toast({ title: "PDF Generado" })
   }
@@ -795,43 +853,55 @@ export default function PayrollHubPage() {
   const generateCollectionAccountPDF = (record: PayrollRecord) => {
     const pdf = new jsPDF()
     const technicianName = getPayrollPersonName(record.technicianId)
+    const technicianCedula = getPayrollPersonCedula(record.technicianId)
     const serviceSubtotal = record.serviceSubtotal ?? record.netPaid + record.totalAdvances - (record.adjustmentAmount || 0)
     const deductions = record.deductions || []
+    const serviceCount = record.employeeType === "office"
+      ? 0
+      : record.processedItems?.length || record.processedInterventionIds?.length || record.itemsCount || 0
 
     pdf.setFontSize(17)
-    pdf.setTextColor(31, 91, 204)
+    pdf.setTextColor(...PDF_ORANGE)
     pdf.text("CUENTA DE COBRO", 105, 20, { align: "center" })
     pdf.setFontSize(10)
-    pdf.setTextColor(80)
+    pdf.setTextColor(...PDF_GRAY)
     pdf.text("PLOMERÍA Y SERVICIOS RYS SAS · NIT 901.601.017", 105, 28, { align: "center" })
-    pdf.text(`Proveedor: ${technicianName}`, 20, 42)
+    pdf.setFont("helvetica", "bold")
+    pdf.setTextColor(...PDF_BLACK)
+    pdf.text(`Proveedor: ${technicianName}`, 20, 42, { maxWidth: 170 })
+    pdf.setFont("helvetica", "normal")
     pdf.text(`Fecha: ${new Date(record.date).toLocaleDateString("es-CO")}`, 20, 50)
-    pdf.text(`Liquidación: ${record.id}`, 20, 58)
+    pdf.text(`Liquidación: ${record.id}`, 20, 58, { maxWidth: 170 })
+    pdf.text(`Total de servicios liquidados: ${serviceCount}`, 20, 66)
 
-    pdf.setFillColor(235, 242, 255)
-    pdf.roundedRect(20, 66, 170, 30, 3, 3, "F")
+    pdf.setFillColor(255, 243, 236)
+    pdf.roundedRect(20, 72, 170, 29, 3, 3, "F")
     pdf.setFont("helvetica", "bold")
     pdf.setFontSize(10)
-    pdf.text("VALOR DEL SOPORTE CONTABLE (SUBTOTAL DE SERVICIOS)", 26, 77)
+    pdf.text("VALOR DEL SOPORTE CONTABLE (SUBTOTAL DE SERVICIOS)", 26, 82)
     pdf.setFontSize(19)
-    pdf.setTextColor(31, 91, 204)
-    pdf.text(`$${serviceSubtotal.toLocaleString("es-CO")}`, 26, 89)
+    pdf.setTextColor(...PDF_ORANGE)
+    pdf.text(`$${serviceSubtotal.toLocaleString("es-CO")}`, 26, 95)
 
     autoTable(pdf, {
-      startY: 105,
+      startY: 108,
       head: [["RESUMEN", "VALOR"]],
       body: [
+        ["Total de servicios liquidados", String(serviceCount)],
         ["Subtotal de servicios (valor de la cuenta de cobro)", `$${serviceSubtotal.toLocaleString("es-CO")}`],
         ["Adelantos / descuentos aplicados", `-$${record.totalAdvances.toLocaleString("es-CO")}`],
         ["Valor pendiente de pago", `$${record.netPaid.toLocaleString("es-CO")}`]
       ],
       theme: "grid",
-      headStyles: { fillColor: [31, 91, 204], textColor: [255, 255, 255] },
-      styles: { fontSize: 10, cellPadding: 4 },
+      headStyles: { fillColor: PDF_BLACK, textColor: [255, 255, 255] },
+      styles: { fontSize: 10, cellPadding: 4, overflow: "linebreak", lineColor: [210, 210, 210] },
+      margin: { left: 20, right: 20, top: 20, bottom: 20 },
+      alternateRowStyles: { fillColor: [245, 245, 245] },
+      rowPageBreak: "auto",
       columnStyles: { 1: { halign: "right", fontStyle: "bold" } }
     })
 
-    const tableEnd = (pdf as any).lastAutoTable.finalY + 8
+    let tableEnd = (pdf as any).lastAutoTable.finalY + 8
     if (deductions.length) {
       autoTable(pdf, {
         startY: tableEnd,
@@ -843,19 +913,23 @@ export default function PayrollHubPage() {
           `-$${item.amount.toLocaleString("es-CO")}`
         ]),
         theme: "striped",
-        headStyles: { fillColor: [31, 91, 204], textColor: [255, 255, 255] },
-        styles: { fontSize: 8, cellPadding: 3 }
+        headStyles: { fillColor: PDF_BLACK, textColor: [255, 255, 255] },
+        styles: { fontSize: 8, cellPadding: 3, overflow: "linebreak", lineColor: [210, 210, 210] },
+        margin: { left: 20, right: 20, top: 20, bottom: 20 },
+        alternateRowStyles: { fillColor: [255, 244, 238] },
+        rowPageBreak: "auto"
       })
+      tableEnd = (pdf as any).lastAutoTable.finalY + 10
     }
 
-    let y = deductions.length ? (pdf as any).lastAutoTable.finalY + 10 : tableEnd
-    if (y > 208) {
+    let y = tableEnd
+    if (y + 62 > 272) {
       pdf.addPage()
-      y = 22
+      y = 25
     }
     pdf.setFont("helvetica", "bold")
     pdf.setFontSize(10)
-    pdf.setTextColor(40)
+    pdf.setTextColor(...PDF_BLACK)
     pdf.text("DECLARACIÓN DEL PROVEEDOR (marcar una opción)", 20, y)
     pdf.setFont("helvetica", "normal")
     pdf.setFontSize(9)
@@ -866,12 +940,33 @@ export default function PayrollHubPage() {
     ]
     questions.forEach((question, index) => pdf.text(question, 20, y + 9 + index * 8))
     pdf.setFontSize(8)
-    pdf.setTextColor(120)
-    pdf.text("El proveedor debe marcar las respuestas. El subtotal de servicios es el valor de la cuenta de cobro; los adelantos reducen el saldo pendiente, no el soporte contable.", 20, y + 39, { maxWidth: 170 })
-    pdf.line(20, 270, 85, 270)
-    pdf.line(120, 270, 190, 270)
-    pdf.text("Firma proveedor", 20, 276)
-    pdf.text("Firma autorizada", 120, 276)
+    pdf.setTextColor(...PDF_GRAY)
+    const declarationLines = pdf.splitTextToSize("El proveedor debe marcar las respuestas. El subtotal de servicios es el valor de la cuenta de cobro; los adelantos reducen el saldo pendiente, no el soporte contable.", 170)
+    pdf.text(declarationLines, 20, y + 34)
+    let signatureY = y + 39 + declarationLines.length * 4
+    if (signatureY + 18 > 272) {
+      pdf.addPage()
+      signatureY = 25
+    }
+    pdf.setDrawColor(...PDF_GRAY)
+    pdf.line(20, signatureY + 4, 105, signatureY + 4)
+    pdf.setFont("helvetica", "bold")
+    pdf.setTextColor(...PDF_BLACK)
+    pdf.text(`Firma del técnico que cobra: ${technicianName}`, 20, signatureY + 10, { maxWidth: 170 })
+    pdf.setFont("helvetica", "normal")
+    pdf.text(`Cédula: ${technicianCedula || "______________________________"}`, 20, signatureY + 17, { maxWidth: 170 })
+
+    const totalPages = pdf.getNumberOfPages()
+    for (let page = 1; page <= totalPages; page++) {
+      pdf.setPage(page)
+      const pageHeight = pdf.internal.pageSize.getHeight()
+      pdf.setFontSize(8)
+      pdf.setTextColor(...PDF_GRAY)
+      pdf.setFont("helvetica", "italic")
+      pdf.text("Soporte de cuenta de cobro · Plomería y Servicios RYS SAS", 20, pageHeight - 12)
+      pdf.text(`${page} / ${totalPages}`, 190, pageHeight - 12, { align: "right" })
+    }
+
     pdf.save(`Cuenta_cobro_${record.technicianId}_${record.id}.pdf`)
     toast({ title: "Cuenta de cobro generada" })
   }
@@ -938,10 +1033,11 @@ export default function PayrollHubPage() {
         item.request.category,
         item.request.claimNumber,
         item.subservice || item.request.serviceSubservice || item.type,
-        String(item.reportedValue || 0),
+        String((item.reportedValue || 0) + (item.isSimpleVisit ? VISIT_FEE : 0)),
         String(materials),
         String(item.payrollDeductionAmount || 0),
-        String(Math.max(0, (item.reportedValue || 0) - materials - rentals - (item.payrollDeductionAmount || 0))),
+        String(Math.max(0, (item.reportedValue || 0) - materials - rentals - (item.payrollDeductionAmount || 0)) *
+          (item.isSimpleVisit ? 1 : 1 - PLATFORM_MAINTENANCE_RATE) + (item.isSimpleVisit ? VISIT_FEE : 0)),
         String(rentals),
         String(getPayrollAmount(item))
       ])
@@ -1009,12 +1105,13 @@ export default function PayrollHubPage() {
         claimNumber: item.request.claimNumber,
         service: item.request.category,
         subservice: item.subservice || item.request.serviceSubservice || item.type,
-        visitType: item.visitType,
-        grossValue: item.reportedValue || 0,
+        grossValue: (item.reportedValue || 0) + (item.isSimpleVisit ? VISIT_FEE : 0),
+        isSimpleVisit: item.isSimpleVisit === true,
         technicianAmount: getPayrollAmount(item),
         materialsAmount: (item.detailedExpenses || []).filter((expense: Expense) => !expense.isUnused).reduce((sum: number, expense: Expense) => sum + (expense.amount || 0), 0),
         preSplitDeductionAmount: item.payrollDeductionAmount || 0,
         ...(item.payrollDeductionDescription ? { preSplitDeductionDescription: item.payrollDeductionDescription } : {}),
+        ...(item.visitType ? { visitType: item.visitType } : {}),
         splitBase: Math.max(
           0,
           (item.reportedValue || 0) -
@@ -1023,19 +1120,19 @@ export default function PayrollHubPage() {
             (item.usedGeofono ? 120000 : 0) -
             (item.usedPlanchaTermofusion ? 70000 : 0) -
             (item.payrollDeductionAmount || 0)
-        )
+        ) * (item.isSimpleVisit ? 1 : 1 - PLATFORM_MAINTENANCE_RATE) + (item.isSimpleVisit ? VISIT_FEE : 0)
       })),
       deductions: [
         ...selectedAdvances.map(advance => ({
         advanceId: advance.id,
-        date: advance.date,
+        ...(advance.date ? { date: advance.date } : {}),
         claimNumber: advance.request.claimNumber,
         description: advance.reason,
         amount: advance.amount || 0
         })),
         ...ticketDeductions.map(({ ticket, amount }) => ({
           advanceId: ticket.id,
-          date: ticket.date,
+          ...(ticket.date ? { date: ticket.date } : {}),
           claimNumber: "TICKET",
           description: ticket.description,
           amount
@@ -1084,7 +1181,9 @@ export default function PayrollHubPage() {
             intervention.usedRotomartillo === true,
             intervention.usedGeofono === true,
             intervention.usedPlanchaTermofusion === true,
-            intervention.payrollDeductionAmount || 0
+            intervention.payrollDeductionAmount || 0,
+            intervention.isSimpleVisit === true,
+            intervention.requiresCostValidation === true
           ])
           if (!current || current.payrollStatus === "processed" || isExcludedFromPayroll(current) ||
             canonicalTechnicianId(current.technicianId) !== selectedTechId || !canPayIntervention(requests.get(item.request.id)!, current)) {
@@ -1110,7 +1209,7 @@ export default function PayrollHubPage() {
           }
         })
 
-        transaction.set(payrollRef, payrollRecord)
+        transaction.set(payrollRef, omitUndefinedFields(payrollRecord))
         requests.forEach((request, requestId) => {
           const interventionIds = selectedInterventionsByRequest.get(requestId) || new Set<string>()
           const advanceIds = selectedAdvancesByRequest.get(requestId) || new Set<string>()
@@ -1158,7 +1257,7 @@ export default function PayrollHubPage() {
       if (!req) return
       
       const updatedInterventions = req.interventions.map((i: any) => {
-        if (i.id === interventionId) return { ...i, isReadyForPayroll: true }
+        if (i.id === interventionId) return { ...i, isReadyForPayroll: true, requiresCostValidation: false }
         return i
       })
       
@@ -1170,6 +1269,156 @@ export default function PayrollHubPage() {
       toast({ title: "Servicio Aprobado", description: "El servicio ya puede ser liquidado en nómina." })
     } catch (error) {
       toast({ variant: "destructive", title: "Error al aprobar" })
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const handleReturnPayrollForValidation = async (record: PayrollRecord) => {
+    if (!db || !user || !isDev) return
+    const processedInterventionIds = record.processedInterventionIds || record.processedItems?.map(item => item.interventionId) || []
+    const processedAdvanceIds = record.processedAdvanceIds || []
+    if (record.employeeType === "office" || processedInterventionIds.length === 0) {
+      toast({ variant: "destructive", title: "Esta nómina no contiene servicios para validar" })
+      return
+    }
+    if (record.carriedToPayrollId) {
+      toast({ variant: "destructive", title: "No se puede regresar", description: "Primero debe resolverse la nómina que trasladó este saldo." })
+      return
+    }
+    if (record.isPaid && !window.confirm("Esta nómina figura pagada. El registro original se conservará, pero los servicios volverán a validación y se excluirán del Balance. ¿Continuar?")) return
+    const reason = window.prompt("Escribe el motivo para devolver esta nómina a validación de costos:")
+    if (reason === null) return
+    if (!reason.trim()) {
+      toast({ variant: "destructive", title: "Escribe el motivo de la devolución" })
+      return
+    }
+
+    const interventionLocations = new Map<string, string>()
+    const advanceLocations = new Map<string, string>()
+    for (const request of allRequests || []) {
+      for (const item of request.interventions || []) {
+        if (processedInterventionIds.includes(item.id)) interventionLocations.set(item.id, request.id)
+      }
+      for (const advance of request.advances || []) {
+        if (processedAdvanceIds.includes(advance.id)) advanceLocations.set(advance.id, request.id)
+      }
+    }
+    if (processedInterventionIds.some(id => !interventionLocations.has(id)) ||
+      processedAdvanceIds.some(id => !advanceLocations.has(id))) {
+      toast({ variant: "destructive", title: "No se pudo regresar la nómina", description: "Falta un expediente asociado; no se modificó ningún dato." })
+      return
+    }
+
+    const requestIds = new Set([...interventionLocations.values(), ...advanceLocations.values()])
+    const requestRefs = Array.from(requestIds, id => doc(db, "service_requests", id))
+    const ticketAmounts = new Map<string, number>()
+    const knownTicketIds = new Set(record.deductionTicketIds || [])
+    for (const deduction of record.deductions || []) {
+      if (knownTicketIds.has(deduction.advanceId) || deduction.claimNumber === "TICKET") {
+        knownTicketIds.add(deduction.advanceId)
+        if (!Number.isFinite(deduction.amount) || deduction.amount < 0) {
+          toast({ variant: "destructive", title: "No se puede restaurar un descuento", description: "El valor del ticket no es válido; no se modificó ningún dato." })
+          return
+        }
+        ticketAmounts.set(deduction.advanceId, (ticketAmounts.get(deduction.advanceId) || 0) + deduction.amount)
+      }
+    }
+    if (Array.from(knownTicketIds).some(ticketId => !ticketAmounts.has(ticketId))) {
+      toast({ variant: "destructive", title: "No se puede restaurar un descuento", description: "La nómina no conserva el valor aplicado a uno de sus tickets; no se modificó ningún dato." })
+      return
+    }
+    const ticketRefs = Array.from(ticketAmounts.keys(), id => doc(db, "payroll_deduction_tickets", id))
+    const payrollRef = doc(db, "payroll_history", record.id)
+    const returnedAt = new Date().toISOString()
+
+    setIsProcessing(true)
+    try {
+      await runTransaction(db, async transaction => {
+        const [payrollSnapshot, requestSnapshots, ticketSnapshots] = await Promise.all([
+          transaction.get(payrollRef),
+          Promise.all(requestRefs.map(ref => transaction.get(ref))),
+          Promise.all(ticketRefs.map(ref => transaction.get(ref)))
+        ])
+        if (!payrollSnapshot.exists()) throw new Error("La nómina ya no existe.")
+        const currentPayroll = payrollSnapshot.data() as PayrollRecord
+        if (currentPayroll.returnedToValidationAt) throw new Error("Esta nómina ya fue devuelta a validación.")
+        if (currentPayroll.carriedToPayrollId) throw new Error("El saldo de esta nómina ya fue trasladado.")
+
+        const currentRequests = new Map<string, ServiceRequest>()
+        requestSnapshots.forEach(snapshot => {
+          if (!snapshot.exists()) throw new Error("Un expediente asociado ya no existe; no se modificó ningún dato.")
+          currentRequests.set(snapshot.id, { ...snapshot.data(), id: snapshot.id } as ServiceRequest)
+        })
+        for (const id of processedInterventionIds) {
+          const requestId = interventionLocations.get(id)!
+          const item = currentRequests.get(requestId)?.interventions?.find(intervention => intervention.id === id)
+          if (!item || (item.payrollId ? item.payrollId !== record.id : false) || item.payrollStatus !== "processed") {
+            throw new Error("Un servicio cambió desde la liquidación; no se modificó ningún dato.")
+          }
+        }
+        for (const id of processedAdvanceIds) {
+          const requestId = advanceLocations.get(id)!
+          const advance = currentRequests.get(requestId)?.advances?.find(item => item.id === id)
+          if (!advance || (advance.payrollId ? advance.payrollId !== record.id : false) || !advance.isPaidInPayroll) {
+            throw new Error("Un adelanto cambió desde la liquidación; no se modificó ningún dato.")
+          }
+        }
+        for (const [index, [ticketId, amount]] of Array.from(ticketAmounts.entries()).entries()) {
+          const snapshot = ticketSnapshots[index]
+          if (!snapshot.exists()) throw new Error("Un ticket de descuento asociado ya no existe; no se modificó ningún dato.")
+          const ticket = snapshot.data() as PayrollDeductionTicket
+          if (!Number.isFinite(ticket.remainingAmount) || !Number.isFinite(ticket.amount) ||
+            ticket.remainingAmount + amount > ticket.amount) {
+            throw new Error("El saldo de un ticket ya cambió; no se modificó ningún dato para evitar duplicar descuentos.")
+          }
+          if (ticketId !== snapshot.id) throw new Error("No coincide el ticket de descuento asociado.")
+        }
+
+        for (const [requestId, request] of currentRequests) {
+          const interventionIds = new Set(processedInterventionIds.filter(id => interventionLocations.get(id) === requestId))
+          const advanceIds = new Set(processedAdvanceIds.filter(id => advanceLocations.get(id) === requestId))
+          const interventions = (request.interventions || []).map(item => {
+            if (!interventionIds.has(item.id)) return item
+            const reopened = { ...item }
+            delete reopened.payrollId
+            return {
+              ...reopened,
+              payrollStatus: "pending" as const,
+              isReadyForPayroll: false,
+              requiresCostValidation: true,
+              isPayrollExcluded: false
+            }
+          })
+          const advances = (request.advances || []).map(item => {
+            if (!advanceIds.has(item.id)) return item
+            const reopened = { ...item }
+            delete reopened.payrollId
+            return { ...reopened, isPaidInPayroll: false }
+          })
+          transaction.update(doc(db, "service_requests", requestId), { interventions, advances, updatedAt: returnedAt })
+        }
+        ticketSnapshots.forEach((snapshot, index) => {
+          const ticketId = Array.from(ticketAmounts.keys())[index]
+          transaction.update(doc(db, "payroll_deduction_tickets", ticketId), {
+            remainingAmount: (snapshot.data() as PayrollDeductionTicket).remainingAmount + ticketAmounts.get(ticketId)!,
+            updatedAt: returnedAt
+          })
+        })
+        transaction.update(payrollRef, {
+          returnedToValidationAt: returnedAt,
+          returnedToValidationBy: profile?.username || user.uid,
+          returnToValidationReason: reason.trim()
+        })
+      })
+      toast({ title: "Nómina devuelta a validación", description: "El registro original quedó conservado en el historial." })
+    } catch (error) {
+      console.error("Returning payroll to cost validation failed:", error)
+      toast({
+        variant: "destructive",
+        title: "No se pudo devolver la nómina",
+        description: error instanceof Error ? error.message : "No se modificó ningún dato."
+      })
     } finally {
       setIsProcessing(false)
     }
@@ -1243,6 +1492,10 @@ export default function PayrollHubPage() {
 
   const handleTogglePaid = async (record: PayrollRecord) => {
     if (!db) return
+    if (record.returnedToValidationAt) {
+      toast({ variant: "destructive", title: "Nómina en validación", description: "No se puede cambiar el pago de una nómina devuelta a costos." })
+      return
+    }
     const nowPaid = !record.isPaid
     const paidAt = nowPaid ? new Date().toISOString() : null
     const pendingPaymentAmount = record.employeeType === "office"
@@ -1784,10 +2037,8 @@ export default function PayrollHubPage() {
                   <TableBody>
                     {isRequestsLoading ? (
                       <TableRow><TableCell colSpan={6} className="h-40 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary opacity-20" /></TableCell></TableRow>
-                    ) : !cityFilter ? (
-                      <TableRow><TableCell colSpan={6} className="h-40 text-center italic text-muted-foreground">Busca una ciudad en la pestaña “Liquidar técnicos” para revisar sus servicios.</TableCell></TableRow>
                     ) : interventionsToApprove.length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="h-40 text-center italic text-muted-foreground">No hay servicios pendientes de aprobación.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} className="h-40 text-center italic text-muted-foreground">{cityFilter ? `No hay servicios pendientes de aprobación para ${cityFilter}.` : "No hay servicios pendientes de aprobación."}</TableCell></TableRow>
                     ) : interventionsToApprove.map((i: any) => (
                       <TableRow key={i.id} className="hover:bg-primary/5">
                         <TableCell>
@@ -1799,7 +2050,7 @@ export default function PayrollHubPage() {
                         <TableCell><span className="font-mono font-black text-primary text-xs">{i.request.claimNumber}</span></TableCell>
                         <TableCell className="text-xs font-semibold">{i.request.city || "Sin ciudad"}</TableCell>
                         <TableCell><span className="text-[10px] font-bold uppercase">{i.type}</span></TableCell>
-                        <TableCell className="text-right font-mono font-bold text-slate-600">${i.reportedValue?.toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono font-bold text-slate-600">${((i.reportedValue || 0) + (i.isSimpleVisit ? VISIT_FEE : 0)).toLocaleString()}</TableCell>
                         <TableCell className="text-right">
                           <Button 
                             size="sm" 
@@ -1873,7 +2124,9 @@ export default function PayrollHubPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {liq.carriedToPayrollId ? (
+                          {liq.returnedToValidationAt ? (
+                            <Badge variant="destructive" title={`Devuelta por ${liq.returnedToValidationBy || "Desarrollador"}: ${liq.returnToValidationReason || ""}`}>EN VALIDACIÓN</Badge>
+                          ) : liq.carriedToPayrollId ? (
                             <Badge variant="secondary" title={`Saldo trasladado a ${liq.carriedToPayrollId}`}>TRASLADADA</Badge>
                           ) : (
                             <button
@@ -1891,6 +2144,18 @@ export default function PayrollHubPage() {
                          <TableCell className="text-right font-mono font-black text-green-600">${liq.netPaid.toLocaleString()}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
+                            {isDev && liq.employeeType !== "office" && ((liq.processedInterventionIds || []).length > 0 || (liq.processedItems || []).length > 0) && !liq.returnedToValidationAt && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 gap-1 px-2 text-[10px] text-orange-700 border-orange-300 hover:bg-orange-50"
+                                onClick={() => void handleReturnPayrollForValidation(liq)}
+                                disabled={isProcessing}
+                                title="Conservar esta liquidación y regresar sus servicios a validación de costos"
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" /> Devolver a costos
+                              </Button>
+                            )}
                             {isDev && (
                               <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => handleDeletePayroll(liq)}>
                                 <Trash2 className="h-4 w-4" />
@@ -2015,11 +2280,11 @@ export default function PayrollHubPage() {
                             <span className="text-[10px] font-semibold">{item.request.category} · {item.subservice || item.request.serviceSubservice || item.type}</span>
                             <span className="text-[8px] font-bold text-slate-400 uppercase">{item.isSimpleVisit ? "Visita" : item.type} · {item.request.city || "Sin ciudad"}</span>
                             <span className={cn("mt-1 text-[9px] font-black uppercase", isPayable ? "text-green-700" : "text-orange-700")}>
-                              {isPayable ? "Listo para liquidar" : "Pendiente de autorización o cierre"}
+                              {isPayable ? "Listo para liquidar" : item.requiresCostValidation ? "Requiere validar costos" : "Pendiente de autorización o cierre"}
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-right font-mono font-bold text-slate-700">${(item.reportedValue || 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono font-bold text-slate-700">${((item.reportedValue || 0) + (item.isSimpleVisit ? VISIT_FEE : 0)).toLocaleString()}</TableCell>
                         <TableCell className="text-right font-mono text-xs text-destructive">
                           -${totalCosts.toLocaleString()}
                           {item.payrollDeductionAmount > 0 && <span className="block text-[9px]">Incluye ${item.payrollDeductionAmount.toLocaleString()} antes de repartir</span>}

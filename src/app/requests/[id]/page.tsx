@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS } from "@/lib/mock-data"
-import { ServiceRequest, Expense, TechnicianIntervention, InterventionType, ServiceStatus, UnitOfMeasure, Advance, ExpenseCategory, CostSheetItem, TicketCostLine } from "@/lib/types"
+import { ServiceRequest, ScheduledVisit, Expense, TechnicianIntervention, InterventionType, ServiceStatus, UnitOfMeasure, Advance, ExpenseCategory, CostSheetItem, TicketCostLine } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -317,13 +317,69 @@ export default function RequestDetailPage() {
     
     const updatedInterventions = localStateRequest.interventions.map(i => {
       if (i.id === interventionId) {
-        return { ...i, isReadyForPayroll: !i.isReadyForPayroll }
+        const isReadyForPayroll = !i.isReadyForPayroll
+        return {
+          ...i,
+          isReadyForPayroll,
+          ...(isReadyForPayroll ? { requiresCostValidation: false } : {})
+        }
       }
       return i
     })
 
     updateDoc(requestRef, { interventions: updatedInterventions, updatedAt: new Date().toISOString() })
       .then(() => toast({ title: "Estado Nómina Actualizado" }))
+  }
+
+  const handleMarkVisitArrived = async (visit: ScheduledVisit) => {
+    if (!db || !requestRef || !localStateRequest) return
+    if (!visit.technicianId?.trim()) {
+      toast({ variant: "destructive", title: "Asigna un técnico a la cita antes de marcar en sitio" })
+      return
+    }
+    const nowIso = new Date().toISOString()
+    const scheduledVisits = (localStateRequest.scheduledVisits || (localStateRequest.scheduledVisit ? [localStateRequest.scheduledVisit] : [])).map(v =>
+      v.id === visit.id ? { ...v, arrivedAt: nowIso } : v
+    )
+    const latestScheduled = scheduledVisits.find(v => v.id === localStateRequest.scheduledVisit?.id)
+    const hasIntervention = (localStateRequest.interventions || []).some(item => item.scheduledVisitId === visit.id)
+    const visitIntervention: TechnicianIntervention | null = !hasIntervention
+      ? {
+          id: `VISITA-${visit.id}`,
+          title: `Visita ${visit.subservice || localStateRequest.category}`,
+          technicianId: visit.technicianId.toUpperCase().trim(),
+          type: "Visita Programada",
+          subservice: visit.subservice || localStateRequest.serviceSubservice || "",
+          scheduledVisitId: visit.id,
+          date: nowIso,
+          notes: "Visita marcada en sitio. Tarifa base de visita registrada para nómina.",
+          reportedValue: 0,
+          laborCost: 0,
+          usedRotomartillo: false,
+          usedGeofono: false,
+          usedPlanchaTermofusion: false,
+          detailedExpenses: [],
+          costLines: [],
+          authorName: `${profile?.firstName || ""} ${profile?.lastName || ""}`.trim() || "SISTEMA",
+          payrollStatus: "pending",
+          isReadyForPayroll: true,
+          isPayrollExcluded: false,
+          isSimpleVisit: true
+        }
+      : null
+
+    try {
+      await updateDoc(requestRef, omitUndefinedFields({
+        scheduledVisits,
+        ...(latestScheduled ? { scheduledVisit: latestScheduled } : {}),
+        ...(visitIntervention ? { interventions: [...(localStateRequest.interventions || []), visitIntervention] } : {}),
+        updatedAt: nowIso
+      }))
+      toast({ title: "Visita marcada en sitio", description: "Se registró la tarifa base de $20.000 para liquidación en nómina." })
+    } catch (error) {
+      console.error("Marking visit arrived failed:", error)
+      toast({ variant: "destructive", title: "No se pudo registrar la visita en sitio" })
+    }
   }
 
   const [costAssistanceFilter, setCostAssistanceFilter] = useState("request")
@@ -480,6 +536,7 @@ export default function RequestDetailPage() {
       detailedExpenses: newIntervention.detailedExpenses || [],
       authorName: `${profile.firstName} ${profile.lastName}`,
       payrollStatus: 'pending',
+      isReadyForPayroll: !!newIntervention.isSimpleVisit || !!newIntervention.isReadyForPayroll,
       authorizedByAdvisor: newIntervention.authorizedByAdvisor?.toUpperCase() || ''
     }
     const activatesBulkReportForPayroll = !!editingBulkReference &&
@@ -495,7 +552,8 @@ export default function RequestDetailPage() {
           id: editingInterventionId,
           payrollStatus: item.payrollStatus,
           payrollId: item.payrollId,
-          isReadyForPayroll: item.isReadyForPayroll
+          isReadyForPayroll: item.isReadyForPayroll ?? (newIntervention.isSimpleVisit ? true : false),
+          requiresCostValidation: item.requiresCostValidation
         } : item)
       : [...(localStateRequest.interventions || []), intervention]
     const scheduledVisits = (localStateRequest.scheduledVisits || (localStateRequest.scheduledVisit ? [localStateRequest.scheduledVisit] : [])).map(visit =>
@@ -759,6 +817,9 @@ export default function RequestDetailPage() {
             )}
             {scheduledVisits.length ? scheduledVisits.slice().sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map(visit => {
               const visitHasReport = interventions.some(item => item.scheduledVisitId === visit.id)
+              const pendingVisitEntry = interventions.find(item =>
+                item.scheduledVisitId === visit.id && item.id === `VISITA-${visit.id}` && item.payrollStatus !== "processed"
+              )
               const technician = techList.find(item => (item.username || item.id) === visit.technicianId)
               return (
                 <div key={visit.id} className={cn("flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3", !visitHasReport && "border-destructive/40 bg-destructive/5")}>
@@ -767,13 +828,28 @@ export default function RequestDetailPage() {
                     <p className="text-xs text-muted-foreground">{visit.subservice || localStateRequest.serviceSubservice || "Subservicio pendiente"}</p>
                     <p className="text-xs text-muted-foreground">Técnico: {technician ? `${technician.firstName} ${technician.lastName || ''}`.trim() : visit.technicianId || "Sin asignar"}</p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {visit.arrivedAt ? (
+                      <Badge className="bg-emerald-600 text-white text-[10px]">En sitio: {new Date(visit.arrivedAt).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</Badge>
+                    ) : (
+                      canEdit && visit.technicianId && (
+                        <Button variant="secondary" size="sm" className="font-bold text-xs" onClick={() => void handleMarkVisitArrived(visit)}>
+                          <MapPin className="mr-1.5 h-3.5 w-3.5 text-orange-600" />En sitio
+                        </Button>
+                      )
+                    )}
                     <Badge variant={visitHasReport ? "secondary" : "destructive"}>{visitHasReport ? "Con reporte" : "Falta reporte"}</Badge>
                     <Button variant="outline" size="sm" onClick={() => copyTicket(undefined, visit)}><FileText className="mr-2 h-4 w-4" />Copiar ticket</Button>
                     {canEdit && <Button size="sm" onClick={() => {
-                      setNewIntervention(previous => ({ ...previous, technicianId: visit.technicianId || '', subservice: visit.subservice || localStateRequest.serviceSubservice || '', scheduledVisitId: visit.id, notes: '' }))
+                      if (pendingVisitEntry) {
+                        setEditingInterventionId(pendingVisitEntry.id)
+                        setNewIntervention({ ...pendingVisitEntry })
+                      } else {
+                        setEditingInterventionId(null)
+                        setNewIntervention(previous => ({ ...previous, technicianId: visit.technicianId || '', subservice: visit.subservice || localStateRequest.serviceSubservice || '', scheduledVisitId: visit.id, notes: '' }))
+                      }
                       setShowAddEntry(true)
-                    }}><Plus className="mr-2 h-4 w-4" />{visitHasReport ? "Agregar reporte" : "Hacer reporte"}</Button>}
+                    }}><Plus className="mr-2 h-4 w-4" />{pendingVisitEntry ? "Completar reporte" : visitHasReport ? "Agregar reporte" : "Hacer reporte"}</Button>}
                   </div>
                 </div>
               )
@@ -1174,6 +1250,7 @@ export default function RequestDetailPage() {
                           <span className="text-[10px] font-black uppercase text-slate-400">{new Date(item.date).toLocaleString()}</span>
                         )}
                         {item.isSimpleVisit && <Badge className="bg-orange-500 text-[8px] font-black">Visita $20k</Badge>}
+                        {item.requiresCostValidation && <Badge variant="destructive" className="text-[8px] font-black">VALIDAR COSTOS</Badge>}
                         {item.payrollStatus === 'processed' && <Badge className="bg-green-600 text-white text-[8px]">PAGADO</Badge>}
                       </div>
                       <div className="flex items-center gap-2">

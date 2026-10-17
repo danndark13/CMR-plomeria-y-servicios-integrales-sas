@@ -183,6 +183,7 @@ export default function LoginPage() {
       
       setDoc(profileRef, profileData, { merge: true })
         .then(() => {
+          window.sessionStorage.setItem("rys-login-session", crypto.randomUUID())
           toast({
             title: "Bienvenido a RYS SAS",
             description: `Sesión iniciada como ${profileData.firstName} (${profileData.roleId}).`,

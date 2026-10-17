@@ -13,6 +13,7 @@ import { ArrowLeft, Menu as HamburgerIcon } from 'lucide-react';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { PWAInstallPrompt } from '@/components/pwa-install-prompt';
 import { ChatWidget } from '@/components/chat/ChatWidget';
+import { CompanyAnnouncements } from '@/components/company-announcements';
 import { AuthGuard } from '@/components/auth-guard';
 
 export default function RootLayout({
@@ -100,6 +101,7 @@ export default function RootLayout({
                   </SidebarInset>
                 </div>
                 <ChatWidget />
+                <CompanyAnnouncements />
               </SidebarProvider>
             )}
           </AuthGuard>

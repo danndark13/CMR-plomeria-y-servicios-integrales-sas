@@ -54,6 +54,15 @@ export default function AccountingHubPage() {
       show: isAccounting
     },
     {
+      title: "Gastos de la empresa",
+      description: "Registra servicios de internet, mantenimiento y otros egresos operativos para el Balance.",
+      icon: Receipt,
+      href: "/accounting/expenses",
+      color: "text-destructive",
+      bgColor: "bg-destructive/10",
+      show: isAccounting
+    },
+    {
       title: "Cotizaciones",
       description: "Genera propuestas comerciales para clientes nuevos o existentes con referencias únicas.",
       icon: Calculator,

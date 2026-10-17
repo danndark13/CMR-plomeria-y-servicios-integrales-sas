@@ -44,15 +44,16 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase'
-import { collection, doc, addDoc, setDoc, updateDoc } from 'firebase/firestore'
+import { collection, doc, addDoc, setDoc, updateDoc, runTransaction } from 'firebase/firestore'
 import { toast } from "@/hooks/use-toast"
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { cn } from "@/lib/utils"
-import { ScheduledVisit, ServiceRequest } from "@/lib/types"
+import { ScheduledVisit, ServiceRequest, TechnicianIntervention } from "@/lib/types"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type AppointmentRow = { request: ServiceRequest; visit: ScheduledVisit }
+const VISIT_FEE = 20000
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -196,24 +197,43 @@ export default function DashboardPage() {
   const getTechnicianName = (id?: string) => technicians.find(person => person.id === id?.toUpperCase().trim())?.name || id || "Sin asignar"
   const getAssistanceName = (request: ServiceRequest) => allCompanies.find(company => company.id === request.companyId)?.name || request.companyId || "Sin asistencia"
 
-  const updateVisit = async (row: AppointmentRow, updates: Partial<ScheduledVisit>): Promise<boolean> => {
+  const updateVisit = async (
+    row: AppointmentRow,
+    updates: Partial<ScheduledVisit>,
+    intervention?: TechnicianIntervention
+  ): Promise<boolean> => {
     if (!db || !firestoreRequests?.some(request => request.id === row.request.id)) {
       toast({ variant: "destructive", title: "No se pudo guardar el cambio de la cita" })
       return false
     }
     const requestRef = doc(db, "service_requests", row.request.id)
-    const visits = (row.request.scheduledVisits || [row.request.scheduledVisit].filter((visit): visit is ScheduledVisit => !!visit))
-      .map(visit => visit.id === row.visit.id ? { ...visit, ...updates } : visit)
-    const latest = visits.find(visit => visit.id === row.request.scheduledVisit?.id)
     try {
-      await updateDoc(requestRef, {
-        scheduledVisits: visits,
-        ...(latest ? { scheduledVisit: latest } : {}),
-        updatedAt: new Date().toISOString()
+      await runTransaction(db, async transaction => {
+        const snapshot = await transaction.get(requestRef)
+        if (!snapshot.exists()) throw new Error("El expediente ya no existe.")
+        const currentRequest = { ...snapshot.data(), id: snapshot.id } as ServiceRequest
+        const visits = (currentRequest.scheduledVisits || [currentRequest.scheduledVisit].filter((visit): visit is ScheduledVisit => !!visit))
+        if (!visits.some(visit => visit.id === row.visit.id)) throw new Error("La visita ya no existe en el expediente.")
+        const updatedVisits = visits.map(visit => visit.id === row.visit.id
+          ? { ...visit, ...updates, ...(visit.arrivedAt ? { arrivedAt: visit.arrivedAt } : {}) }
+          : visit)
+        const latest = updatedVisits.find(visit => visit.id === currentRequest.scheduledVisit?.id)
+        const hasIntervention = (currentRequest.interventions || []).some(item => item.scheduledVisitId === row.visit.id)
+        transaction.update(requestRef, {
+          scheduledVisits: updatedVisits,
+          ...(latest ? { scheduledVisit: latest } : {}),
+          ...(intervention && !hasIntervention ? { interventions: [...(currentRequest.interventions || []), intervention] } : {}),
+          updatedAt: new Date().toISOString()
+        })
       })
       return true
-    } catch {
-      toast({ variant: "destructive", title: "No se pudo actualizar la cita" })
+    } catch (error) {
+      console.error("Updating scheduled visit failed:", error)
+      toast({
+        variant: "destructive",
+        title: "No se pudo actualizar la cita",
+        description: error instanceof Error ? error.message : "Verifica los permisos y la conexión con Firestore."
+      })
       return false
     }
   }
@@ -221,15 +241,43 @@ export default function DashboardPage() {
   const handleReminderAction = async (arrived: boolean) => {
     if (!activeReminder) return
     const nowIso = new Date().toISOString()
+    const visitIntervention: TechnicianIntervention | undefined = arrived && activeReminder.visit.technicianId &&
+      !hasVisitReport(activeReminder.request, activeReminder.visit)
+      ? {
+          id: `VISITA-${activeReminder.visit.id}`,
+          title: `Visita ${activeReminder.visit.subservice || activeReminder.request.category}`,
+          technicianId: activeReminder.visit.technicianId,
+          type: "Visita Programada",
+          subservice: activeReminder.visit.subservice || activeReminder.request.serviceSubservice || "",
+          scheduledVisitId: activeReminder.visit.id,
+          date: nowIso,
+          notes: "Visita marcada en sitio. Tarifa base de visita registrada para nómina.",
+          reportedValue: 0,
+          laborCost: 0,
+          usedRotomartillo: false,
+          usedGeofono: false,
+          usedPlanchaTermofusion: false,
+          detailedExpenses: [],
+          costLines: [],
+          authorName: profile?.firstName || "SISTEMA",
+          payrollStatus: "pending",
+          isReadyForPayroll: true,
+          isPayrollExcluded: false,
+          isSimpleVisit: true
+        }
+      : undefined
     const saved = await updateVisit(activeReminder, arrived
       ? { arrivedAt: nowIso }
-      : { snoozedUntil: new Date(Date.now() + 15 * 60 * 1000).toISOString() })
+      : { snoozedUntil: new Date(Date.now() + 15 * 60 * 1000).toISOString() }, visitIntervention)
     if (saved) {
       const audio = reminderAudioRef.current
       audio?.pause()
       if (audio) audio.currentTime = 0
       setIsReminderAudioBlocked(false)
       setActiveReminder(null)
+      if (visitIntervention) {
+        toast({ title: "Visita registrada para nómina", description: `Se agregó la tarifa base de $${VISIT_FEE.toLocaleString("es-CO")} al expediente.` })
+      }
     }
   }
 
@@ -517,7 +565,52 @@ export default function DashboardPage() {
                           <div className="flex flex-col"><span className="truncate font-medium">{getAssistanceName(row.request)}</span><span className="truncate text-xs text-muted-foreground">{row.request.accountName}</span></div>
                         </TableCell>
                         <TableCell onClick={event => event.stopPropagation()}>
-                          <Button variant="outline" size="sm" onClick={() => void copyDashboardTicket(row)}>Copiar ticket</Button>
+                          <div className="flex items-center gap-1.5">
+                            <Button variant="outline" size="sm" onClick={() => void copyDashboardTicket(row)}>Copiar ticket</Button>
+                            {!row.visit.arrivedAt && row.visit.technicianId && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                className="font-bold text-xs"
+                                onClick={async () => {
+                                  const techId = row.visit.technicianId
+                                  if (!techId) return
+                                  const nowIso = new Date().toISOString()
+                                  const visitIntervention: TechnicianIntervention | undefined = !hasVisitReport(row.request, row.visit)
+                                    ? {
+                                        id: `VISITA-${row.visit.id}`,
+                                        title: `Visita ${row.visit.subservice || row.request.category}`,
+                                        technicianId: techId,
+                                        type: "Visita Programada",
+                                        subservice: row.visit.subservice || row.request.serviceSubservice || "",
+                                        scheduledVisitId: row.visit.id,
+                                        date: nowIso,
+                                        notes: "Visita marcada en sitio. Tarifa base de visita registrada para nómina.",
+                                        reportedValue: 0,
+                                        laborCost: 0,
+                                        usedRotomartillo: false,
+                                        usedGeofono: false,
+                                        usedPlanchaTermofusion: false,
+                                        detailedExpenses: [],
+                                        costLines: [],
+                                        authorName: profile?.firstName || "SISTEMA",
+                                        payrollStatus: "pending",
+                                        isReadyForPayroll: true,
+                                        isPayrollExcluded: false,
+                                        isSimpleVisit: true
+                                      }
+                                    : undefined
+                                  const saved = await updateVisit(row, { arrivedAt: nowIso }, visitIntervention)
+                                  if (saved) {
+                                    toast({ title: "Visita marcada en sitio", description: "Se registró para nómina con tarifa base de $20.000." })
+                                  }
+                                }}
+                              >
+                                En sitio
+                              </Button>
+                            )}
+                          </div>
+                          {row.visit.arrivedAt && <span className="block mt-1 text-[9px] font-bold text-emerald-600">En sitio: {new Date(row.visit.arrivedAt).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span>}
                           {status !== "PR" && <p className="mt-1 text-[10px] font-semibold text-destructive">{overdue ? "Falta reporte · más de 30 min" : "Falta reporte"}</p>}
                         </TableCell>
                       </TableRow>

@@ -118,6 +118,7 @@ export interface TechnicianIntervention {
   payrollStatus?: 'pending' | 'processed';
   payrollId?: string;
   isReadyForPayroll?: boolean; 
+  requiresCostValidation?: boolean;
   isPayrollExcluded?: boolean;
   isSimpleVisit?: boolean; // Identificar visitas de $20.000
   authorizedByAdvisor?: string; // Nombre del asesor de cabina que autorizó
@@ -167,6 +168,7 @@ export interface PayrollRecord {
     service: string;
     subservice: string;
     visitType?: VisitType;
+    isSimpleVisit?: boolean;
     grossValue: number;
     technicianAmount: number;
     materialsAmount?: number;
@@ -176,7 +178,7 @@ export interface PayrollRecord {
   }[];
   deductions?: {
     advanceId: string;
-    date: string;
+    date?: string;
     claimNumber: string;
     description: string;
     amount: number;
@@ -193,6 +195,33 @@ export interface PayrollRecord {
   outstandingDeductionBalance?: number;
   carriedToPayrollId?: string;
   carriedPayments?: { payrollId: string; amount: number }[];
+  returnedToValidationAt?: string;
+  returnedToValidationBy?: string;
+  returnToValidationReason?: string;
+}
+
+export interface CompanyExpense {
+  id: string;
+  date: string;
+  category: string;
+  description: string;
+  amount: number;
+  vendor?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
+export interface CompanyAnnouncement {
+  id: string;
+  title: string;
+  message: string;
+  imageDataUrl?: string;
+  expiresAt?: string;
+  createdAt: string;
+  createdBy: string;
+  createdByName: string;
 }
 
 export interface PayrollDeductionTicket {

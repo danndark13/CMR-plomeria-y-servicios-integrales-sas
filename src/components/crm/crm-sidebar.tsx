@@ -22,7 +22,8 @@ import {
   Info,
   Wallet,
   Wrench,
-  TicketPercent
+  TicketPercent,
+  Megaphone
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -61,6 +62,10 @@ export function CRMSidebar() {
 
   const handleLogout = () => {
     if (!auth) return
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem("rys-login-session")
+      window.sessionStorage.removeItem("rys-announcements-shown-session")
+    }
     signOut(auth).then(() => {
       toast({
         title: "Sesión cerrada",
@@ -85,6 +90,7 @@ export function CRMSidebar() {
     { title: "Panel Principal", icon: LayoutDashboard, href: "/", show: true },
     { title: "Contabilidad", icon: Calculator, href: "/accounting", show: isAccounting },
     { title: "Crear ticket descuento", icon: TicketPercent, href: "/accounting/payroll-tickets", show: isAdmin },
+    { title: "Noticias emergentes", icon: Megaphone, href: "/announcements", show: role === "Gerente" || isDev },
     { title: "Mis Liquidaciones", icon: Wallet, href: "/technician/settlements", show: isTech },
     { title: "Bitácora", icon: ClipboardList, href: "/requests", show: true },
     { title: "Calendario", icon: CalendarDays, href: "/calendar", show: true },

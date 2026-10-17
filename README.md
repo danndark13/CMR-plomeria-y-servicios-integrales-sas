@@ -11,6 +11,15 @@ Antigravity is our next-generation, agent-first IDE designed for high-velocity, 
 - **Firestore rules**: Deploying App Hosting does not publish Firestore Security Rules. After signing in with Firebase CLI, publish the rules separately with `firebase deploy --only firestore:rules --project studio-4236454254-aba86`.
 - **Cleanup**: Cleanup unused artifacts with the @cleanup workflow.
 
+## Operación de nómina y contabilidad
+
+- Marcar una cita como **En sitio** registra la visita base de $20.000 en el expediente para su liquidación.
+- Desarrollo puede devolver una nómina de técnico desde el historial a validación de costos. La liquidación original permanece en el historial; la nueva revisión no suma el registro devuelto al Balance.
+- Gerencia y Desarrollo publican noticias desde **Noticias emergentes**. Se muestran al iniciar sesión hasta su vencimiento o eliminación; cerrar la ventana no elimina la noticia.
+- Los gastos operativos se registran desde **Contabilidad > Gastos de la empresa**. El Balance suma los expedientes validados o pagados que tengan número de factura y presenta las cuentas de cobro de nómina como soporte, sin duplicar el egreso.
+- Los documentos PDF de nómina y cuenta de cobro usan márgenes de 2 cm. La cuenta de cobro incluye el total de servicios y la firma/cédula del técnico.
+- Las colecciones `announcements` y `company_expenses` requieren publicar las reglas actualizadas con el comando de Firestore indicado arriba.
+
 Enjoy the next era of AI-driven development!
 
 File any bugs at https://github.com/firebase/firebase-tools/issues

@@ -27,6 +27,12 @@ service cloud.firestore {
       return isSignedIn() && profile != null && profile.isActive == true && profile.roleId == 'Desarrollador';
     }
 
+    function canManageAnnouncements() {
+      let profile = getProfile();
+      return isSignedIn() && profile != null && profile.isActive == true &&
+        (profile.roleId == 'Gerente' || profile.roleId == 'Desarrollador');
+    }
+
     function isAdmin() {
       let profile = getProfile();
       return isSignedIn() && profile != null && profile.isActive == true && (profile.roleId == 'Administrador' || profile.roleId == 'Gerente' || profile.roleId == 'Desarrollador');
@@ -113,6 +119,18 @@ service cloud.firestore {
       allow get, list, update: if isAccounting();
       allow create: if isAdmin();
       allow delete: if isDev();
+    }
+
+    match /company_expenses/{expenseId} {
+      allow get, list: if isAccounting();
+      allow create, update: if isAccounting();
+      allow delete: if isDev();
+    }
+
+    match /announcements/{announcementId} {
+      allow get, list: if isSignedIn();
+      allow create, delete: if canManageAnnouncements();
+      allow update: if false;
     }
 
     match /chats/{chatId} {
