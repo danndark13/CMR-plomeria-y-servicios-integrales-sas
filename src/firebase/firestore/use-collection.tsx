@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Query,
   onSnapshot,
@@ -60,31 +60,49 @@ export function useCollection<T = any>(
   const [data, setData] = useState<StateDataType>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<FirestoreError | Error | null>(null);
+  const [activeTarget, setActiveTarget] = useState<typeof memoizedTargetRefOrQuery>(null);
+  const documentsById = useRef(new Map<string, ResultItemType>());
 
   useEffect(() => {
     if (!memoizedTargetRefOrQuery) {
+      setActiveTarget(null);
+      documentsById.current.clear();
       setData(null);
       setIsLoading(false);
       setError(null);
       return;
     }
 
+    documentsById.current.clear();
+    setActiveTarget(memoizedTargetRefOrQuery);
+    setData(null);
     setIsLoading(true);
     setError(null);
 
-    // Direct use of memoizedTargetRefOrQuery as the source of truth
+    let isActive = true;
     const unsubscribe = onSnapshot(
       memoizedTargetRefOrQuery,
       (snapshot: QuerySnapshot<DocumentData>) => {
-        const results: ResultItemType[] = [];
-        for (const doc of snapshot.docs) {
-          results.push({ ...(doc.data() as T), id: doc.id });
-        }
+        if (!isActive) return;
+        snapshot.docChanges().forEach(change => {
+          if (change.type === 'removed') {
+            documentsById.current.delete(change.doc.id);
+          } else {
+            documentsById.current.set(change.doc.id, {
+              ...(change.doc.data() as T),
+              id: change.doc.id,
+            });
+          }
+        });
+        const results = snapshot.docs
+          .map(document => documentsById.current.get(document.id))
+          .filter((document): document is ResultItemType => document !== undefined);
         setData(results);
         setError(null);
         setIsLoading(false);
       },
       (err: FirestoreError) => {
+        if (!isActive) return;
         // Only propagate permission-denied errors to the global listener
         if (err.code === 'permission-denied') {
           let path = 'Unknown'
@@ -116,6 +134,7 @@ export function useCollection<T = any>(
     );
 
     return () => {
+      isActive = false;
       try {
         unsubscribe();
       } catch (e) {
@@ -129,5 +148,10 @@ export function useCollection<T = any>(
   if(memoizedTargetRefOrQuery && !memoizedTargetRefOrQuery.__memo) {
     throw new Error(memoizedTargetRefOrQuery + ' was not properly memoized using useMemoFirebase');
   }
-  return { data, isLoading, error };
+  const isCurrentTarget = !!memoizedTargetRefOrQuery && activeTarget === memoizedTargetRefOrQuery;
+  return {
+    data: isCurrentTarget ? data : null,
+    isLoading: !!memoizedTargetRefOrQuery && (!isCurrentTarget || isLoading),
+    error: isCurrentTarget ? error : null,
+  };
 }

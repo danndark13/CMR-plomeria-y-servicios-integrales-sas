@@ -9,8 +9,8 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { ShieldCheck, Lock, User, Loader2, Globe, Mail, Smartphone, Download, Share, PlusSquare, HelpCircle, RefreshCw, AlertCircle, Trash2 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
-import { signInAnonymously } from "firebase/auth"
-import { doc, setDoc, getDocs, query, collection, where, deleteDoc } from "firebase/firestore"
+import { signInAnonymously, signOut } from "firebase/auth"
+import { doc, setDoc, getDocs, query, collection, where } from "firebase/firestore"
 import { useFirebase } from "@/firebase"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { errorEmitter } from '@/firebase/error-emitter'
@@ -153,17 +153,13 @@ export default function LoginPage() {
       const q = query(collection(firestore, "user_profiles"), where("username", "==", inputId))
       const querySnapshot = await getDocs(q)
       
-      let existingData: any = {}
-      if (!querySnapshot.empty) {
-        // We found an existing profile for this ID. We copy it to preserve manual updates.
-        const oldDoc = querySnapshot.docs[0]
-        existingData = oldDoc.data()
-        
-        // If it's a different UID (which happens on every logout/login), delete the old reference
-        if (oldDoc.id !== user.uid) {
-          deleteDoc(doc(firestore, "user_profiles", oldDoc.id)).catch(() => {})
-        }
-      }
+      const existingData: any = querySnapshot.docs
+        .map(profileDoc => ({ id: profileDoc.id, data: profileDoc.data() }))
+        .sort((left, right) =>
+          Number(right.id === user.uid) - Number(left.id === user.uid) ||
+          String(right.data.lastLogin || "").localeCompare(String(left.data.lastLogin || "")) ||
+          left.id.localeCompare(right.id)
+        )[0]?.data || {}
 
       // 4. Create or update profile with the current UID
       const profileRef = doc(firestore, "user_profiles", user.uid)
@@ -181,30 +177,36 @@ export default function LoginPage() {
         lastLogin: new Date().toISOString()
       }
       
-      setDoc(profileRef, profileData, { merge: true })
-        .then(() => {
-          window.sessionStorage.setItem("rys-login-session", crypto.randomUUID())
-          toast({
-            title: "Bienvenido a RYS SAS",
-            description: `Sesión iniciada como ${profileData.firstName} (${profileData.roleId}).`,
-          })
-          router.push("/")
+      try {
+        await setDoc(profileRef, profileData, { merge: true })
+      } catch (error) {
+        const permissionError = new FirestorePermissionError({
+          path: profileRef.path,
+          operation: "write",
+          requestResourceData: profileData,
         })
-        .catch(async (error) => {
-          const permissionError = new FirestorePermissionError({
-            path: profileRef.path,
-            operation: "write",
-            requestResourceData: profileData,
-          })
-          errorEmitter.emit("permission-error", permissionError)
-          setIsLoading(false)
-        })
+        errorEmitter.emit("permission-error", permissionError)
+        throw error
+      }
+
+      window.sessionStorage.setItem("rys-login-session", crypto.randomUUID())
+      toast({
+        title: "Bienvenido a RYS SAS",
+        description: `Sesión iniciada como ${profileData.firstName} (${profileData.roleId}).`,
+      })
+      router.replace("/")
 
     } catch (error: any) {
+      console.error("Login failed:", error)
+      try {
+        await signOut(auth)
+      } catch (signOutError) {
+        console.error("Could not clear the incomplete login session:", signOutError)
+      }
       toast({
         variant: "destructive",
         title: "Error de Sistema",
-        description: "No se pudo validar el perfil en la base de datos.",
+        description: error instanceof Error ? error.message : "No se pudo validar el perfil en la base de datos.",
       })
       setIsLoading(false)
     }

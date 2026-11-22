@@ -46,21 +46,27 @@ export function useDoc<T = any>(
   const [data, setData] = useState<StateDataType>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<FirestoreError | Error | null>(null);
+  const [activePath, setActivePath] = useState<string | null>(null);
 
   useEffect(() => {
     if (!memoizedDocRef) {
+      setActivePath(null);
       setData(null);
       setIsLoading(false);
       setError(null);
       return;
     }
 
+    setActivePath(memoizedDocRef.path);
+    setData(null);
     setIsLoading(true);
     setError(null);
 
+    let isActive = true;
     const unsubscribe = onSnapshot(
       memoizedDocRef,
       (snapshot: DocumentSnapshot<DocumentData>) => {
+        if (!isActive) return;
         if (snapshot.exists()) {
           setData({ ...(snapshot.data() as T), id: snapshot.id });
         } else {
@@ -71,6 +77,7 @@ export function useDoc<T = any>(
         setIsLoading(false);
       },
       (err: FirestoreError) => {
+        if (!isActive) return;
         // Only propagate permission-denied errors to the global listener
         if (err.code === 'permission-denied') {
           const contextualError = new FirestorePermissionError({
@@ -93,6 +100,7 @@ export function useDoc<T = any>(
     );
 
     return () => {
+      isActive = false;
       try {
         unsubscribe();
       } catch (e) {
@@ -103,5 +111,10 @@ export function useDoc<T = any>(
     };
   }, [memoizedDocRef]); // Re-run if the memoizedDocRef changes.
 
-  return { data, isLoading, error };
+  const isCurrentReference = !!memoizedDocRef && activePath === memoizedDocRef.path;
+  return {
+    data: isCurrentReference ? data : null,
+    isLoading: !!memoizedDocRef && (!isCurrentReference || isLoading),
+    error: isCurrentReference ? error : null,
+  };
 }

@@ -71,7 +71,10 @@ export function CRMSidebar() {
         title: "Sesión cerrada",
         description: "Has salido del sistema exitosamente."
       })
-      router.push("/login")
+      router.replace("/login")
+    }).catch(error => {
+      console.error("Could not close the session:", error)
+      toast({ variant: "destructive", title: "No se pudo cerrar la sesión" })
     })
   }
 

@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -26,6 +26,7 @@ export default function AdminUsersPage() {
   const [editingUser, setEditingUser] = useState<any>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
+  const [showDuplicateProfiles, setShowDuplicateProfiles] = useState(false)
   const [selectedMergeIds, setSelectedMergeIds] = useState<string[]>([])
   const [mergeKeepId, setMergeKeepId] = useState("")
   const [mergeProfile, setMergeProfile] = useState({ username: "", firstName: "", lastName: "", email: "", phoneNumber: "", cedula: "" })
@@ -37,6 +38,7 @@ export default function AdminUsersPage() {
   const { data: myProfile } = useDoc(profileRef)
   const isDev = myProfile?.roleId === 'Desarrollador'
   const canMergeUsers = ["Administrador", "Gerente", "Desarrollador"].includes(myProfile?.roleId || "")
+  const shouldLoadMergeData = canMergeUsers && selectedMergeIds.length >= 2
 
   const usersQuery = useMemoFirebase(() => {
     if (!db || !currentUser) return null
@@ -44,15 +46,19 @@ export default function AdminUsersPage() {
   }, [db, currentUser])
 
   const { data: users, isLoading } = useCollection(usersQuery)
-  const requestsQuery = useMemoFirebase(() => db && currentUser ? collection(db, "service_requests") : null, [db, currentUser])
+  const requestsQuery = useMemoFirebase(() => shouldLoadMergeData ? collection(db, "service_requests") : null, [db, shouldLoadMergeData])
   const { data: serviceRequests, isLoading: isRequestsLoading } = useCollection(requestsQuery)
-  const payrollQuery = useMemoFirebase(() => db && currentUser ? collection(db, "payroll_history") : null, [db, currentUser])
+  const payrollQuery = useMemoFirebase(() => shouldLoadMergeData ? collection(db, "payroll_history") : null, [db, shouldLoadMergeData])
   const { data: payrollRecords, isLoading: isPayrollLoading } = useCollection(payrollQuery)
-  const deductionTicketsQuery = useMemoFirebase(() => db && currentUser ? collection(db, "payroll_deduction_tickets") : null, [db, currentUser])
+  const deductionTicketsQuery = useMemoFirebase(() => shouldLoadMergeData ? collection(db, "payroll_deduction_tickets") : null, [db, shouldLoadMergeData])
   const { data: deductionTickets, isLoading: isTicketsLoading } = useCollection(deductionTicketsQuery)
-  const payrollSettingsQuery = useMemoFirebase(() => db && currentUser ? collection(db, "technician_payroll_settings") : null, [db, currentUser])
+  const payrollSettingsQuery = useMemoFirebase(() => shouldLoadMergeData ? collection(db, "technician_payroll_settings") : null, [db, shouldLoadMergeData])
   const { data: payrollSettings, isLoading: isSettingsLoading } = useCollection(payrollSettingsQuery)
 
+  const normalizedReference = useCallback(
+    (value?: string) => (value || "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase(),
+    []
+  )
   const filteredUsers = useMemo(() => {
     if (!users) return []
     return users
@@ -68,9 +74,29 @@ export default function AdminUsersPage() {
       .sort((a, b) => (a.username || "").localeCompare(b.username || "") || a.id.localeCompare(b.id))
   }, [users, searchTerm])
 
+  const groupedUsers = useMemo(() => {
+    const groups = new Map<string, typeof filteredUsers>()
+    for (const person of filteredUsers) {
+      const key = normalizedReference(person.username) || `UID:${person.id}`
+      const group = groups.get(key) || []
+      group.push(person)
+      groups.set(key, group)
+    }
+
+    return Array.from(groups.values()).map(group => {
+      const preferredProfile = [...group].sort((left, right) =>
+        Number(right.id === currentUser?.uid) - Number(left.id === currentUser?.uid) ||
+        String(right.lastLogin || "").localeCompare(String(left.lastLogin || "")) ||
+        left.id.localeCompare(right.id)
+      )[0]
+      return { ...preferredProfile, profileCount: group.length }
+    })
+  }, [filteredUsers, currentUser?.uid, normalizedReference])
+  const duplicateProfileCount = filteredUsers.length - groupedUsers.length
+  const displayedUsers = showDuplicateProfiles ? filteredUsers : groupedUsers
+
   const selectedMergeUsers = (users || []).filter(person => selectedMergeIds.includes(person.id))
   const mergeTarget = selectedMergeUsers.find(person => person.id === mergeKeepId)
-  const normalizedReference = (value?: string) => (value || "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase()
   const mergeAliases = new Set(selectedMergeUsers.flatMap(person => [person.id, person.username].map(normalizedReference)).filter(Boolean))
   const mergeImpact = {
     requests: (serviceRequests || []).filter((request: any) =>
@@ -91,7 +117,7 @@ export default function AdminUsersPage() {
     const formData = new FormData(e.currentTarget)
     const username = (formData.get("username") as string || "").toUpperCase().trim()
     
-    if (!editingUser && filteredUsers.some(u => u.username === username)) {
+    if (!editingUser && filteredUsers.some(u => normalizedReference(u.username) === normalizedReference(username))) {
       toast({
         variant: "destructive",
         title: "ID Duplicado",
@@ -497,7 +523,9 @@ export default function AdminUsersPage() {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <CardTitle className="text-lg">Personal Registrado</CardTitle>
-              <CardDescription>Se muestran todos los perfiles, incluidos los que comparten nombre de usuario.</CardDescription>
+              <CardDescription>
+                Se muestra un perfil por usuario; los registros originales se conservan. Puedes consultar y unificar perfiles duplicados.
+              </CardDescription>
             </div>
             <div className="relative w-full md:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -509,6 +537,19 @@ export default function AdminUsersPage() {
               />
             </div>
           </div>
+          {duplicateProfileCount > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-4"
+              onClick={() => setShowDuplicateProfiles(current => !current)}
+            >
+              {showDuplicateProfiles
+                ? "Ocultar perfiles repetidos"
+                : `Ver ${duplicateProfileCount} perfiles repetidos`}
+            </Button>
+          )}
         </CardHeader>
         {canMergeUsers && selectedMergeUsers.length > 0 && (
           <CardContent className="border-b bg-blue-50/50 p-5">
@@ -623,7 +664,7 @@ export default function AdminUsersPage() {
                       <p className="mt-2 text-xs font-bold text-muted-foreground tracking-tighter uppercase">Conectando con Firestore...</p>
                     </TableCell>
                   </TableRow>
-                ) : filteredUsers?.length === 0 ? (
+                ) : displayedUsers.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={canMergeUsers ? 6 : 5} className="h-60 text-center">
                       <div className="flex flex-col items-center justify-center space-y-4">
@@ -639,7 +680,7 @@ export default function AdminUsersPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : filteredUsers?.map((u) => (
+                ) : displayedUsers.map((u) => (
                   <TableRow key={u.id} className="hover:bg-muted/20 group">
                     {canMergeUsers && (
                       <TableCell>
@@ -661,6 +702,11 @@ export default function AdminUsersPage() {
                         <Badge variant="outline" className="font-mono font-black text-primary text-[10px] bg-primary/5 py-0.5 px-2 border-primary/20 w-fit">
                           {u.username}
                         </Badge>
+                        {!showDuplicateProfiles && u.profileCount > 1 && (
+                          <Badge variant="secondary" className="w-fit text-[9px]">
+                            {u.profileCount} perfiles vinculados
+                          </Badge>
+                        )}
                         <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1">
                           <CreditCard className="h-2.5 w-2.5" /> {u.cedula || '---'}
                         </span>

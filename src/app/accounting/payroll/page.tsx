@@ -277,14 +277,32 @@ export default function PayrollHubPage() {
   }, [allUsers, allRequests, canonicalTechnicianId])
 
   const selectedTech = allTechnicians.find(t => t.id === selectedTechId)
-  const officeStaff = (allUsers || [])
-    .filter(person => person.roleId !== "Técnico" && person.isActive !== false)
-    .map(person => ({
-      id: person.id,
-      name: `${person.firstName || ""} ${person.lastName || ""}`.trim() || person.username || person.id,
-      role: person.roleId || "Personal de oficina"
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name))
+  const officeStaff = useMemo(() => {
+    const groups = new Map<string, NonNullable<typeof allUsers>>()
+    for (const person of allUsers || []) {
+      if (person.roleId === "Técnico") continue
+      const key = (person.username || person.id).trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase()
+      const group = groups.get(key) || []
+      group.push(person)
+      groups.set(key, group)
+    }
+
+    return Array.from(groups.values()).flatMap(group => {
+      const activeProfiles = group.filter(person => person.isActive !== false)
+      if (activeProfiles.length === 0) return []
+      const selected = [...activeProfiles].sort((left, right) =>
+        Number(right.id === user?.uid) - Number(left.id === user?.uid) ||
+        String(right.lastLogin || "").localeCompare(String(left.lastLogin || "")) ||
+        left.id.localeCompare(right.id)
+      )[0]
+      return [{
+        id: selected.id,
+        profileIds: group.map(person => person.id),
+        name: `${selected.firstName || ""} ${selected.lastName || ""}`.trim() || selected.username || selected.id,
+        role: selected.roleId || "Personal de oficina"
+      }]
+    }).sort((a, b) => a.name.localeCompare(b.name))
+  }, [allUsers, user?.uid])
   const selectedOfficeStaff = officeStaff.find(person => person.id === selectedOfficeId)
   const getPayrollPersonName = (id: string) =>
     allTechnicians.find(person => canonicalTechnicianId(person.id) === canonicalTechnicianId(id))?.name ||
@@ -307,7 +325,9 @@ export default function PayrollHubPage() {
     return person?.cedula || person?.documentId || person?.identification || ""
   }
   const officeOpenTickets = (deductionTickets || []).filter(ticket =>
-    ticket.personType === "office" && ticket.personId === selectedOfficeId && ticket.remainingAmount > 0
+    ticket.personType === "office" &&
+    (selectedOfficeStaff?.profileIds.includes(ticket.personId) || ticket.personId === selectedOfficeId) &&
+    ticket.remainingAmount > 0
   )
   const officeGross = (Number(officeHours) || 0) * (Number(officeHourlyRate) || 0)
   const officeAppliedTickets = officeOpenTickets.reduce<Array<{ ticket: PayrollDeductionTicket; amount: number }>>((items, ticket) => {
@@ -323,7 +343,7 @@ export default function PayrollHubPage() {
   const officeTotalDeductions = officeAppliedTickets.reduce((sum, item) => sum + item.amount, 0)
   const officeCurrentBalance = Math.max(0, officeGross - officeTotalDeductions)
   const previousOfficeBalance = (officePayrollHistory || [])
-    .filter(record => record.technicianId === selectedOfficeId)
+    .filter(record => selectedOfficeStaff?.profileIds.includes(record.technicianId) || record.technicianId === selectedOfficeId)
     .reduce((sum, record) => sum + Math.max(0, record.pendingPaymentAmount || 0), 0)
   const officeTotalDue = officeCurrentBalance + previousOfficeBalance
   const canPayIntervention = useCallback((request: ServiceRequest, intervention: TechnicianIntervention) =>

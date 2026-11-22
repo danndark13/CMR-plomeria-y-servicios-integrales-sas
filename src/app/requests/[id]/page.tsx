@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { MOCK_REQUESTS, MOCK_TECHNICIANS } from "@/lib/mock-data"
-import { ServiceRequest, ScheduledVisit, Expense, TechnicianIntervention, InterventionType, ServiceStatus, UnitOfMeasure, Advance, ExpenseCategory, CostSheetItem, TicketCostLine } from "@/lib/types"
+import { ServiceRequest, ScheduledVisit, Expense, TechnicianIntervention, InterventionType, ServiceStatus, UnitOfMeasure, Advance, ExpenseCategory, CostSheetItem, TicketCostLine, PayrollRecord } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -66,7 +66,7 @@ import { CategoryIcon } from "@/components/crm/category-icon"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "@/hooks/use-toast"
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase'
-import { doc, updateDoc, collection, deleteDoc, setDoc } from 'firebase/firestore'
+import { doc, updateDoc, collection, deleteDoc, setDoc, getDoc } from 'firebase/firestore'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { cn } from "@/lib/utils"
@@ -187,6 +187,64 @@ export default function RequestDetailPage() {
       if (found) setLocalStateRequest(found as any)
     }
   }, [firestoreRequest, id, isRequestLoading])
+
+  const payrollIdsKey = useMemo(
+    () => Array.from(new Set((localStateRequest?.interventions || [])
+      .map(intervention => intervention.payrollId)
+      .filter((payrollId): payrollId is string => !!payrollId)))
+      .join("|"),
+    [localStateRequest?.interventions]
+  )
+  const [interventionPayrolls, setInterventionPayrolls] = useState<Record<string, PayrollRecord>>({})
+  const [isLoadingInterventionPayrolls, setIsLoadingInterventionPayrolls] = useState(false)
+
+  useEffect(() => {
+    if (!db || !payrollIdsKey) {
+      setInterventionPayrolls({})
+      setIsLoadingInterventionPayrolls(false)
+      return
+    }
+
+    let isCancelled = false
+    setIsLoadingInterventionPayrolls(true)
+    const payrollIds = payrollIdsKey.split("|")
+    Promise.all(payrollIds.map(async payrollId => {
+      try {
+        const snapshot = await getDoc(doc(db, "payroll_history", payrollId))
+        return {
+          payrollId,
+          record: snapshot.exists() ? { ...snapshot.data(), id: snapshot.id } as PayrollRecord : null,
+          error: null,
+        }
+      } catch (error) {
+        return { payrollId, record: null, error }
+      }
+    }))
+      .then(results => {
+        if (isCancelled) return
+        const records: Record<string, PayrollRecord> = {}
+        const failures = results.filter(result => result.error)
+        results.forEach(result => {
+          if (result.record) records[result.payrollId] = result.record
+        })
+        setInterventionPayrolls(records)
+        if (failures.length > 0) {
+          console.error("Could not load some payroll records for this request:", failures)
+          toast({
+            variant: "destructive",
+            title: "Detalle de nómina incompleto",
+            description: "Algunas referencias no están disponibles para este usuario."
+          })
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) setIsLoadingInterventionPayrolls(false)
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [db, payrollIdsKey])
 
   const isDev = profile?.roleId === 'Desarrollador'
   const isGerente = profile?.roleId === 'Gerente'
@@ -1251,7 +1309,11 @@ export default function RequestDetailPage() {
                         )}
                         {item.isSimpleVisit && <Badge className="bg-orange-500 text-[8px] font-black">Visita $20k</Badge>}
                         {item.requiresCostValidation && <Badge variant="destructive" className="text-[8px] font-black">VALIDAR COSTOS</Badge>}
-                        {item.payrollStatus === 'processed' && <Badge className="bg-green-600 text-white text-[8px]">PAGADO</Badge>}
+                        {item.payrollStatus === 'processed' && (
+                          <Badge className={interventionPayrolls[item.payrollId || ""]?.isPaid ? "bg-green-600 text-white text-[8px]" : "bg-amber-500 text-white text-[8px]"}>
+                            {interventionPayrolls[item.payrollId || ""]?.isPaid ? "NÓMINA PAGADA" : "EN NÓMINA"}
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge className="bg-primary/10 text-primary text-[9px] font-black">{item.type}</Badge>
@@ -1308,6 +1370,53 @@ export default function RequestDetailPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="pt-4 space-y-4">
+                    {item.payrollId && (
+                      <div className="grid gap-3 rounded-lg border border-green-200 bg-green-50/60 p-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
+                        <div>
+                          <p className="text-[9px] font-black uppercase text-slate-500">Referencia de nómina</p>
+                          <p className="break-all font-mono font-bold text-slate-800">{item.payrollId}</p>
+                        </div>
+                        {(() => {
+                          const payroll = interventionPayrolls[item.payrollId]
+                          const payrollItem = payroll?.processedItems?.find(processedItem => processedItem.interventionId === item.id)
+                          const paidDate = payroll?.paidAt ? new Date(payroll.paidAt) : null
+                          return (
+                            <>
+                              <div>
+                                <p className="text-[9px] font-black uppercase text-slate-500">Base aplicada al servicio</p>
+                                <p className="font-mono font-bold text-slate-800">
+                                  {typeof payrollItem?.splitBase === "number" ? `$${payrollItem.splitBase.toLocaleString("es-CO")}` : "No disponible en este registro"}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-[9px] font-black uppercase text-slate-500">Neto asignado a la intervención</p>
+                                <p className="font-mono font-bold text-slate-800">
+                                  {typeof payrollItem?.technicianAmount === "number" ? `$${payrollItem.technicianAmount.toLocaleString("es-CO")}` : "No disponible en este registro"}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-[9px] font-black uppercase text-slate-500">Estado y fecha del pago</p>
+                                <p className="font-bold text-slate-800">
+                                  {!payroll
+                                    ? isLoadingInterventionPayrolls ? "Consultando nómina..." : "Detalle de nómina no disponible"
+                                    : payroll.isPaid
+                                      ? `Pagada ${paidDate && !Number.isNaN(paidDate.getTime()) ? `el ${paidDate.toLocaleDateString("es-CO")}` : ""}`
+                                      : `Pendiente de pago · nómina ${new Date(payroll.date).toLocaleDateString("es-CO")}`}
+                                </p>
+                              </div>
+                              {payroll && (
+                                <div>
+                                  <p className="text-[9px] font-black uppercase text-slate-500">Neto total de la nómina</p>
+                                  <p className="font-mono font-bold text-slate-800">
+                                    {typeof payroll.netPaid === "number" ? `$${payroll.netPaid.toLocaleString("es-CO")}` : "No disponible en este registro"}
+                                  </p>
+                                </div>
+                              )}
+                            </>
+                          )
+                        })()}
+                      </div>
+                    )}
                     <p className="text-sm font-medium italic border-l-4 border-primary/20 pl-4">"{item.notes}"</p>
                     {(item.costLines || []).length > 0 && (
                       <div className="grid gap-3 md:grid-cols-2">
